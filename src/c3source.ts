@@ -1,0 +1,536 @@
+import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
+/**
+ * Normalize line endings to LF (\n) for consistent output across platforms.
+ * C3 JSON files may contain \r\n in expressions/comments.
+ */
+export function normalizeLineEndings(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+export interface Effect {
+  [key: string]: unknown;
+}
+
+export interface Instance {
+  [key: string]: unknown;
+  type: string;
+  properties: {
+    [x: string]: unknown;
+    text?: string;
+  };
+  uid: number;
+  instanceVariables?: Record<string, unknown>;
+  effects?: Record<string, Effect>;
+}
+
+export interface Layer {
+  [key: string]: unknown;
+  name: string;
+  global?: boolean;
+  subLayers?: Layer[];
+  instances?: Instance[];
+}
+
+export interface Layout {
+  [key: string]: unknown;
+  name: string;
+  layers: Layer[];
+  "nonworld-instances"?: Instance[];
+}
+
+export interface ObjectType {
+  [x: string]: unknown;
+  name: string;
+  "plugin-id": string;
+}
+
+export function find_all_layouts_path(layout_dir: string): string[] {
+  const layouts: string[] = [];
+  const files = readdirSync(layout_dir).sort();
+  files.forEach((file) => {
+    const filepath = path.join(layout_dir, file);
+    const stats = statSync(filepath);
+    if (stats.isDirectory()) {
+      layouts.push(...find_all_layouts_path(filepath));
+    } else if (stats.isFile() && !filepath.endsWith(".uistate.json")) {
+      layouts.push(filepath);
+    }
+  });
+  return layouts;
+}
+
+export function find_all_objectTypes_path(objectTypesDir: string) {
+  const objectTypePaths: string[] = [];
+  const files = readdirSync(objectTypesDir).sort();
+  files.forEach((file) => {
+    const filepath = path.join(objectTypesDir, file);
+    const stats = statSync(filepath);
+    if (stats.isDirectory()) {
+      objectTypePaths.push(...find_all_layouts_path(filepath));
+    } else if (stats.isFile() && !filepath.endsWith(".uistate.json")) {
+      objectTypePaths.push(filepath);
+    }
+  });
+  return objectTypePaths;
+}
+
+// Return true if layout must be saved.
+export type InstanceVisitor = (instance: Instance, index: number, layer: Layer, fullLayerName: string) => boolean;
+export type LayerVisitor = (layer: Layer, fullLayerName: string) => number;
+
+function visit_layer(layer: Layer, prefix: string, visitor: LayerVisitor): number {
+  if (layer.global) {
+    prefix = "global";
+  }
+  const fullLayerName = `${prefix}.${layer.name}`;
+  const changed =
+    layer.subLayers?.reduce(
+      (changed, sublayer) => {
+        const fullname = `${sublayer.global ? "global" : fullLayerName}.${sublayer.name}`;
+        return visitor(sublayer, fullname) + changed;
+      },
+      0,
+    ) || 0;
+  return visitor(layer, fullLayerName) + changed;
+}
+
+function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): number {
+  const content = readFileSync(layout_path, "utf-8");
+  const layout = JSON.parse(content);
+  const changed = layout.layers?.reduce(
+    (changed: number, layer: Layer) => visit_layer(layer, layout.name, visitor) + changed, 0); 
+  if (changed > 0) {
+    writeFileSync(layout_path, JSON.stringify(layout, undefined, "\t"));
+  }
+  return changed;
+}
+
+export function visit_layers_in_layouts(layouts_path: string, visitor: LayerVisitor): number {
+  const layouts = find_all_layouts_path(layouts_path);
+  return layouts.reduce(
+    (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, visitor) + changed,
+    0
+  );
+}
+
+
+function makeLayerVisitorFromInstanceVisitor(visitor: InstanceVisitor): LayerVisitor {
+  return (layer: Layer, fullLayerName): number => {
+    return (
+      layer.instances?.reduce(
+        (changed, instance, index) => (visitor(instance, index, layer, fullLayerName) ? changed + 1 : changed),
+        0,
+      ) || 0
+    );
+  }
+}
+
+export function visit_instances_in_layouts(layouts_path: string, visitor: InstanceVisitor): number {
+  const layouts = find_all_layouts_path(layouts_path);
+  const layerVisitor = makeLayerVisitorFromInstanceVisitor(visitor);
+  return layouts.reduce(
+    (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, layerVisitor) + changed,
+    0
+  );
+}
+
+export function get_all_global_layers(layouts_path: string): Set<string> {
+  const globals = new Set<string>();
+  visit_layers_in_layouts(layouts_path, (layer, ) => {
+    if (layer.global) {
+      globals.add(layer.name);
+    }
+    return 0;
+  });
+  return globals;
+}
+
+// --- EventSheet Types ---
+
+export interface EventSheetVariable {
+  eventType: "variable";
+  name: string;
+  type: "string" | "number" | "boolean";
+  initialValue: string;
+  comment?: string;
+  isStatic: boolean;
+  isConstant: boolean;
+  sid: number;
+}
+
+export interface ScriptAction {
+  type: "script";
+  language: "typescript";
+  script: string[];
+}
+
+export interface Condition {
+  id: string;
+  objectClass: string;
+  sid: number;
+  parameters?: Record<string, unknown>;
+  isInverted?: boolean;
+  behaviorType?: string;
+}
+
+export interface FunctionParameter {
+  name: string;
+  type: "string" | "number" | "boolean";
+  initialValue: string;
+  comment?: string;
+  sid: number;
+}
+
+export interface BlockEvent {
+  eventType: "block";
+  conditions: Condition[];
+  actions: (ScriptAction | Record<string, unknown>)[];
+  sid: number;
+  children?: EventSheetEvent[];
+}
+
+/** Shared fields for function-block and custom-ace-block event types. */
+interface FunctionLikeEvent {
+  functionDescription?: string;
+  functionCategory?: string;
+  functionReturnType: string;
+  functionCopyPicked: boolean;
+  functionIsAsync: boolean;
+  functionParameters: FunctionParameter[];
+  conditions: Condition[];
+  actions: (ScriptAction | Record<string, unknown>)[];
+  sid: number;
+  children?: EventSheetEvent[];
+}
+
+export interface FunctionBlockEvent extends FunctionLikeEvent {
+  eventType: "function-block";
+  functionName: string;
+}
+
+export interface CustomAceBlockEvent extends FunctionLikeEvent {
+  eventType: "custom-ace-block";
+  aceType: string;
+  aceName: string;
+  objectClass: string;
+}
+
+export interface GroupEvent {
+  eventType: "group";
+  disabled: boolean;
+  title: string;
+  description?: string;
+  isActiveOnStart: boolean;
+  children: EventSheetEvent[];
+  sid: number;
+}
+
+export interface IncludeEvent {
+  eventType: "include";
+  includeSheet: string;
+}
+
+export interface CommentEvent {
+  eventType: "comment";
+  text: string;
+}
+
+export type EventSheetEvent =
+  | EventSheetVariable
+  | BlockEvent
+  | FunctionBlockEvent
+  | CustomAceBlockEvent
+  | GroupEvent
+  | IncludeEvent
+  | CommentEvent;
+
+export interface EventSheet {
+  name: string;
+  events: EventSheetEvent[];
+  sid: number;
+}
+
+/** A named scope level contributing variables to a function's localVars type. */
+export interface ScopeSegment {
+  /** Immediate scope identifier: "root", 'group "Title"', 'fn funcName params', 'fn funcName' */
+  label: string;
+  /** Full scope path for deduplication: "root", 'root > group "Title"', etc. */
+  scopeKey: string;
+  /** Variables declared at this scope level. */
+  vars: Array<{ name: string; type: string }>;
+}
+
+/** Info about a script block extracted during traversal. */
+export interface ExtractedScript {
+  /** Human-readable path: "GroupTitle > SubGroup > functionName > block" */
+  humanPath: string;
+  /** EventSheet name */
+  sheetName: string;
+  /** 1-indexed event number (depth-first traversal) */
+  eventIndex: number;
+  /** 1-indexed action number within the block */
+  actionIndex: number;
+  /** Script lines */
+  lines: string[];
+  /** Conditions from the enclosing block (for context comments) */
+  conditions: Condition[];
+  /** Flat list of all in-scope variables (derived from scopeSegments). */
+  scopeVars: Array<{ name: string; type: string }>;
+  /** Hierarchical scope segments for typed localVars composition. */
+  scopeSegments: ScopeSegment[];
+}
+
+/**
+ * Find all eventSheet JSON files (excluding .uistate.json) in a directory tree.
+ */
+export function find_all_eventsheets_path(eventSheetsDir: string): string[] {
+  const sheets: string[] = [];
+  const files = readdirSync(eventSheetsDir).sort();
+  files.forEach((file) => {
+    const filepath = path.join(eventSheetsDir, file);
+    const stats = statSync(filepath);
+    if (stats.isDirectory()) {
+      sheets.push(...find_all_eventsheets_path(filepath));
+    } else if (stats.isFile() && filepath.endsWith(".json") && !filepath.endsWith(".uistate.json")) {
+      sheets.push(filepath);
+    }
+  });
+  return sheets;
+}
+
+function isScriptAction(action: ScriptAction | Record<string, unknown>): action is ScriptAction {
+  return (action as ScriptAction).type === "script" && (action as ScriptAction).language === "typescript";
+}
+
+export function formatCondition(cond: Condition): string {
+  const inverted = cond.isInverted ? "NOT " : "";
+  const params = cond.parameters
+    ? Object.entries(cond.parameters)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ")
+    : "";
+  return `${inverted}${cond.objectClass}.${cond.id}(${params})`;
+}
+
+/**
+ * Format an action object into a single-line (or multi-line for scripts) DSL string.
+ *
+ * Action shapes:
+ * - Standard: `ObjectClass.actionId(param=value, ...)`
+ * - Standard + behavior: `ObjectClass[BehaviorType].actionId(param=value, ...)`
+ * - Script (single-line): `script { code }`
+ * - Script (multi-line): `script { // → FuncName\n  line1\n  line2\n}`
+ * - Function call: `call functionName(arg1, arg2)`
+ * - Custom ACE: `ace ObjectClass.customActionName(param=value, ...)`
+ * - Comment: `// commentText`
+ * - Disabled: prefix with `[DISABLED] `
+ * - Unknown: `[unknown action: {JSON keys}]`
+ */
+export function formatAction(
+  action: ScriptAction | Record<string, unknown>,
+  sheetName: string,
+  eventIndex: number,
+  actionIndex: number,
+): string {
+  const disabled = "disabled" in action && action.disabled === true;
+  const result = formatActionInner(action, sheetName, eventIndex, actionIndex);
+  return disabled ? `[DISABLED] ${result}` : result;
+}
+
+function formatRecordParams(parameters: Record<string, unknown> | undefined): string {
+  if (!parameters) return "";
+  return Object.entries(parameters)
+    .map(([k, v]) => `${k}=${normalizeLineEndings(String(v))}`)
+    .join(", ");
+}
+
+function formatActionInner(
+  action: ScriptAction | Record<string, unknown>,
+  sheetName: string,
+  eventIndex: number,
+  actionIndex: number,
+): string {
+  // Comment action — same format as event-level comments
+  if ("type" in action && action.type === "comment") {
+    const text = (action as Record<string, unknown>).text as string;
+    return normalizeLineEndings(text)
+      .split("\n")
+      .map((line) => `// ${line}`)
+      .join("\n");
+  }
+
+  // Script action
+  if (isScriptAction(action)) {
+    const lines = action.script.map(normalizeLineEndings);
+    if (lines.length === 1) {
+      return `script { ${lines[0]} }`;
+    }
+    const funcName = generateFunctionName(sheetName, eventIndex, actionIndex);
+    const indented = lines.map((line) => `  ${line}`).join("\n");
+    return `script { // \u2192 ${funcName}\n${indented}\n}`;
+  }
+
+  // Function call action
+  if ("callFunction" in action) {
+    const name = action.callFunction as string;
+    const params = action.parameters as string[] | undefined;
+    const paramStr = params && params.length > 0 ? params.map((p) => normalizeLineEndings(String(p))).join(", ") : "";
+    return `call ${name}(${paramStr})`;
+  }
+
+  // Custom action — prefixed with `ace` to distinguish from plugin actions
+  if ("customAction" in action) {
+    const objectClass = action.objectClass as string;
+    const customAction = action.customAction as string;
+    const params = formatRecordParams(action.parameters as Record<string, unknown> | undefined);
+    return `ace ${objectClass}.${customAction}(${params})`;
+  }
+
+  // Standard action (has id + objectClass)
+  if ("id" in action && "objectClass" in action) {
+    const objectClass = action.objectClass as string;
+    const id = action.id as string;
+    const behaviorType = action.behaviorType as string | undefined;
+    const params = formatRecordParams(action.parameters as Record<string, unknown> | undefined);
+    const prefix = behaviorType ? `${objectClass}[${behaviorType}]` : objectClass;
+    return `${prefix}.${id}(${params})`;
+  }
+
+  // Unknown action
+  const keys = Object.keys(action).join(", ");
+  return `[unknown action: ${keys}]`;
+}
+
+/**
+ * Traverse an eventSheet and extract all script blocks with C3 coordinates and scope info.
+ */
+export function extractScriptsFromSheet(sheet: EventSheet): ExtractedScript[] {
+  const results: ExtractedScript[] = [];
+  let eventCounter = 0;
+
+  function traverse(
+    events: EventSheetEvent[],
+    pathParts: string[],
+    parentSegments: ScopeSegment[],
+    scopeLabel: string,
+    parentScopeKey: string,
+  ): void {
+    // In C3, all variables declared at a level are in scope for all blocks at that level,
+    // regardless of declaration order. Pre-collect them all before traversing.
+    const levelVars = events
+      .filter((e): e is EventSheetEvent & { eventType: "variable" } => e.eventType === "variable")
+      .map((e) => ({ name: e.name, type: e.type }));
+
+    const currentScopeKey = parentScopeKey ? `${parentScopeKey} > ${scopeLabel}` : scopeLabel;
+
+    // Add a segment for this level's vars (if any)
+    const segments =
+      levelVars.length > 0
+        ? [...parentSegments, { label: scopeLabel, scopeKey: currentScopeKey, vars: levelVars }]
+        : parentSegments;
+
+    for (const event of events) {
+      if (event.eventType === "variable") {
+        continue;
+      }
+
+      if (event.eventType === "comment" || event.eventType === "include") {
+        continue;
+      }
+
+      if (event.eventType === "group") {
+        // Groups count as events in C3's depth-first numbering
+        eventCounter++;
+        const groupLabel = `group "${event.title}"`;
+        traverse(event.children ?? [], [...pathParts, event.title], segments, groupLabel, currentScopeKey);
+        continue;
+      }
+
+      // block, function-block, custom-ace-block all count as events
+      eventCounter++;
+      const currentEventIndex = eventCounter;
+
+      let blockLabel: string;
+      let blockSegments = segments;
+
+      if (event.eventType === "function-block") {
+        blockLabel = `fn ${event.functionName}`;
+        const params = event.functionParameters.map((p) => ({ name: p.name, type: p.type }));
+        if (params.length > 0) {
+          const paramsLabel = `fn ${event.functionName} params`;
+          const paramsScopeKey = `${currentScopeKey} > ${paramsLabel}`;
+          blockSegments = [...segments, { label: paramsLabel, scopeKey: paramsScopeKey, vars: params }];
+        }
+      } else if (event.eventType === "custom-ace-block") {
+        blockLabel = `${event.objectClass}.${event.aceName}`;
+        const params = event.functionParameters.map((p) => ({ name: p.name, type: p.type }));
+        if (params.length > 0) {
+          const paramsLabel = `${event.objectClass}.${event.aceName} params`;
+          const paramsScopeKey = `${currentScopeKey} > ${paramsLabel}`;
+          blockSegments = [...segments, { label: paramsLabel, scopeKey: paramsScopeKey, vars: params }];
+        }
+      } else {
+        blockLabel = "block";
+      }
+
+      const currentPath = [...pathParts, blockLabel];
+      const scopeVars = blockSegments.flatMap((s) => s.vars);
+
+      // Extract script actions
+      for (let i = 0; i < event.actions.length; i++) {
+        const action = event.actions[i];
+        if (isScriptAction(action)) {
+          results.push({
+            humanPath: currentPath.join(" > "),
+            sheetName: sheet.name,
+            eventIndex: currentEventIndex,
+            actionIndex: i + 1, // 1-indexed
+            lines: action.script.map(normalizeLineEndings),
+            conditions: event.conditions,
+            scopeVars,
+            scopeSegments: blockSegments,
+          });
+        }
+      }
+
+      // Recurse into children
+      if (event.children) {
+        const childScopeLabel =
+          event.eventType === "function-block"
+            ? `fn ${event.functionName}`
+            : event.eventType === "custom-ace-block"
+              ? `${event.objectClass}.${event.aceName}`
+              : "block";
+        // For regular blocks, include event counter in parent key to disambiguate
+        // sibling blocks that would otherwise share the same scope key.
+        // Functions/ACEs use their unique names so don't need this.
+        const childParentKey =
+          event.eventType === "function-block" || event.eventType === "custom-ace-block"
+            ? currentScopeKey
+            : `${currentScopeKey}#${currentEventIndex}`;
+        traverse(event.children, currentPath, blockSegments, childScopeLabel, childParentKey);
+      }
+    }
+  }
+
+  traverse(sheet.events, [], [], "root", "");
+  return results;
+}
+
+/**
+ * Generate a function name for an extracted script block.
+ * Format: SheetName_EventN_ActN (sanitized for valid JS identifiers).
+ */
+export function generateFunctionName(sheetName: string, eventIndex: number, actionIndex: number): string {
+  let sanitized = sheetName
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+  if (!sanitized || /^\d/.test(sanitized)) {
+    sanitized = sanitized ? `_${sanitized}` : "Sheet";
+  }
+  return `${sanitized}_Event${eventIndex}_Act${actionIndex}`;
+}
+
