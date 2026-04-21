@@ -1,120 +1,31 @@
+# Use the latest 2.1 version of CircleCI pipeline process engine.
+# See: https://circleci.com/docs/reference/configuration-reference
 version: 2.1
 
-orbs:
-  azure-cli: circleci/azure-cli@1.2.2
-  node: circleci/node@6.3.0
-  onepassword: onepassword/secrets@1.0.0
-
-commands:
-  onepassword-setup:
-    description: Install 1Password CLI and setup environment
-    parameters:
-      onepassword-env:
-        type: string
-        default: "/tmp/op.env"
-    steps:
-      - onepassword/install-cli:
-          shell: /bin/bash -eo pipefail
-          version: 2.29.0
-      - run:
-          name: Setup Environment Variables
-          shell: /bin/bash -eo pipefail
-          command:
-            op read "op://${BURBANK_ENV_FILE}" -o << parameters.onepassword-env >>
-
-  az-login-with-sp:
-    description: Login to Azure with service principal
-    steps:
-      - run:
-          name: Login to Azure
-          command: |
-            az login \
-              --service-principal \
-              --username=${AZURE_SP_APPID} \
-              --tenant=${AZURE_SP_TENANT} \
-              --password=${AZURE_SP_PASSWORD}
-
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
 jobs:
-  build-and-test:
+  say-hello:
+    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
+    # See: https://circleci.com/docs/guides/execution-managed/executor-intro/ & https://circleci.com/docs/reference/configuration-reference/#executor-job
     docker:
-      - image: cimg/node:22.13
-    shell: op run --env-file="/tmp/op.env" -- /bin/bash -eo pipefail
+      # Specify the version you desire here
+      # See: https://circleci.com/developer/images/image/cimg/base
+      - image: cimg/base:current
+
+    # Add steps to the job
+    # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#steps-overview & https://circleci.com/docs/reference/configuration-reference/#steps
     steps:
-      - onepassword-setup
+      # Checkout the code as the first step.
       - checkout
       - run:
-          name: Install dependencies
-          command: pnpm install --no-frozen-lockfile
-      - run:
-          name: Lint
-          command: pnpm run lint
-      - run:
-          name: Typecheck
-          command: pnpm run typecheck
-      - run:
-          name: Test
-          command: pnpm run test
-      - run:
-          name: Build
-          command: pnpm run build
-      - run:
-          name: Pack
-          command: pnpm pack
-      - run:
-          name: Move artifact
-          command: mkdir -p /tmp/artifacts && cp *.tgz /tmp/artifacts/
-      - store_artifacts:
-          path: /tmp/artifacts
-      - persist_to_workspace:
-          root: .
-          paths:
-            - "*.tgz"
+          name: "Say hello"
+          command: "echo Hello, World!"
 
-  publish:
-    docker:
-      - image: cimg/node:22.13
-    shell: op run --env-file="/tmp/op.env" -- /bin/bash -eo pipefail
-    steps:
-      - onepassword-setup
-      - checkout
-      - attach_workspace:
-          at: .
-      - azure-cli/install
-      - az-login-with-sp
-      - run:
-          name: Upload to Azure Blob Storage
-          command: |
-            TAG=<< pipeline.git.tag >>
-            BRANCH=<< pipeline.git.branch >>
-            if [ -z "${TAG}" ]; then
-              export SLUG=branch/${BRANCH}
-            else
-              export SLUG=tags/${TAG}
-            fi
-
-            NAME=$(node -p "require('./package.json').name")
-            for file in *.tgz ; do
-              az storage blob upload \
-                --overwrite \
-                -c cordova \
-                -n "$NAME/${SLUG}/$(basename ${file})" \
-                --file "${file}"
-            done
-
+# Orchestrate jobs using workflows
+# See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
 workflows:
-  build-test-publish:
+  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
+    # Inside the workflow, you define the jobs you want to run.
     jobs:
-      - build-and-test:
-          filters:
-            tags:
-              only: /\d+\..*/
-          context:
-            - burbank-onepassword
-      - publish:
-          filters:
-            tags:
-              only: /\d+\..*/
-          context:
-            - burbank-onepassword
-          requires:
-            - build-and-test
+      - say-hello
