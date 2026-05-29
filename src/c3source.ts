@@ -472,7 +472,16 @@ export function visitEvents(events: EventSheetEvent[], visitor: EventVisitor): v
  */
 export function extractScriptsFromSheet(sheet: EventSheet): ExtractedScript[] {
   const results: ExtractedScript[] = [];
-  let eventCounter = 0;
+  // Single source of truth for C3 event numbering: visitEvents assigns the
+  // canonical 1-based number to every counting event. We read each block's
+  // number from this map rather than maintaining a parallel counter, so this
+  // function and visitEvents/generateFunctionName can never drift.
+  const eventNumbers = new Map<EventSheetEvent, number>();
+  visitEvents(sheet.events, (event, ctx) => {
+    if (ctx.eventNumber !== null) {
+      eventNumbers.set(event, ctx.eventNumber);
+    }
+  });
 
   function traverse(
     events: EventSheetEvent[],
@@ -505,16 +514,14 @@ export function extractScriptsFromSheet(sheet: EventSheet): ExtractedScript[] {
       }
 
       if (event.eventType === "group") {
-        // Groups count as events in C3's depth-first numbering
-        eventCounter++;
+        // Groups count as events in C3's depth-first numbering (number tracked by visitEvents)
         const groupLabel = `group "${event.title}"`;
         traverse(event.children ?? [], [...pathParts, event.title], segments, groupLabel, currentScopeKey);
         continue;
       }
 
       // block, function-block, custom-ace-block all count as events
-      eventCounter++;
-      const currentEventIndex = eventCounter;
+      const currentEventIndex = eventNumbers.get(event)!;
 
       let blockLabel: string;
       let blockSegments = segments;
