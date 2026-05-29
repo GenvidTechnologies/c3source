@@ -412,6 +412,61 @@ function formatActionInner(
   return `[unknown action: ${keys}]`;
 }
 
+/** Returns true if a child-bearing event currently holds a children array. */
+export function hasChildren(event: EventSheetEvent): event is EventSheetEvent & { children: EventSheetEvent[] } {
+  return Array.isArray((event as { children?: unknown }).children);
+}
+
+/**
+ * Event types that increment C3's depth-first event counter (the 1-based
+ * number C3 shows in its editor and that `generateFunctionName` consumes).
+ * variable / comment / include do NOT count.
+ */
+function isCountingEvent(event: EventSheetEvent): boolean {
+  return (
+    event.eventType === "group" ||
+    event.eventType === "block" ||
+    event.eventType === "function-block" ||
+    event.eventType === "custom-ace-block"
+  );
+}
+
+export interface EventVisitContext {
+  /** The array this event lives in (for in-place mutation). */
+  parent: EventSheetEvent[];
+  /** Index of this event within `parent`. */
+  index: number;
+  /** Locator, e.g. "events[1].children[2]". */
+  jsonPath: string;
+  /** C3's 1-based event number; null for non-counting events (variable/comment/include). */
+  eventNumber: number | null;
+  /** Nesting depth, 0 at the top level. */
+  depth: number;
+}
+
+/** Returning `false` stops descent into THIS event's children; siblings and the rest of the tree continue. */
+export type EventVisitor = (event: EventSheetEvent, ctx: EventVisitContext) => void | boolean;
+
+/**
+ * Depth-first, pre-order walk of an event tree that assigns each counting
+ * event the same 1-based `eventNumber` that `extractScriptsFromSheet` /
+ * `generateFunctionName` use — the single canonical C3 coordinate counter.
+ */
+export function visitEvents(events: EventSheetEvent[], visitor: EventVisitor): void {
+  const counter = { value: 0 };
+  function recurse(list: EventSheetEvent[], parentPath: string, depth: number): void {
+    list.forEach((event, index) => {
+      const jsonPath = `${parentPath}[${index}]`;
+      const eventNumber = isCountingEvent(event) ? ++counter.value : null;
+      const descend = visitor(event, { parent: list, index, jsonPath, eventNumber, depth });
+      if (descend !== false && hasChildren(event)) {
+        recurse(event.children, `${jsonPath}.children`, depth + 1);
+      }
+    });
+  }
+  recurse(events, "events", 0);
+}
+
 /**
  * Traverse an eventSheet and extract all script blocks with C3 coordinates and scope info.
  */
