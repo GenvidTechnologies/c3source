@@ -13,6 +13,24 @@ export interface Effect {
   [key: string]: unknown;
 }
 
+/** A node's place in a layout scene graph. `parent-uid` is -1 for a root. */
+export interface SceneGraphData {
+  uid: number;
+  "parent-uid": number;
+  children?: Array<{ uid: number }>;
+}
+
+/** A C3 instance-folder entry; its `sid` mirrors the owning instance's sid. */
+export interface InstanceFolderItem {
+  [key: string]: unknown;
+  sid: number;
+}
+
+/** The layout's scene-graph root folder: registers the sids of root instances. */
+export interface SceneGraphFolderRoot {
+  items: Array<{ sid: number }>;
+}
+
 export interface Instance {
   [key: string]: unknown;
   type: string;
@@ -21,6 +39,9 @@ export interface Instance {
     text?: string;
   };
   uid: number;
+  sid?: number;
+  sceneGraphData?: SceneGraphData;
+  instanceFolderItem?: InstanceFolderItem;
   instanceVariables?: Record<string, unknown>;
   effects?: Record<string, Effect>;
 }
@@ -40,6 +61,7 @@ export interface Layout {
   name: string;
   layers: Layer[];
   "nonworld-instances"?: Instance[];
+  "scene-graphs-folder-root"?: SceneGraphFolderRoot;
   eventSheet?: string;
   width?: number;
   height?: number;
@@ -154,6 +176,32 @@ export function visitLayout(layout: Layout, visitor: LayerVisitor): number {
 /** Walk every instance of every layer in a layout. Returns the count the InstanceVisitor reported changed. */
 export function visitInstances(layout: Layout, visitor: InstanceVisitor): number {
   return visitLayout(layout, makeLayerVisitorFromInstanceVisitor(visitor));
+}
+
+/**
+ * Register a root instance's sid in the layout's scene-graph root folder,
+ * creating the folder if absent. Root instances must appear here.
+ */
+export function addSceneGraphRoot(layout: Layout, sid: number): void {
+  let folder = layout["scene-graphs-folder-root"];
+  if (!folder) {
+    folder = { items: [] };
+    layout["scene-graphs-folder-root"] = folder;
+  }
+  folder.items.push({ sid });
+}
+
+/**
+ * Remove a root instance's sid from the layout's scene-graph root folder.
+ * Returns true if an entry was removed.
+ */
+export function removeSceneGraphRoot(layout: Layout, sid: number): boolean {
+  const items = layout["scene-graphs-folder-root"]?.items;
+  if (!items) return false;
+  const index = items.findIndex((item) => item.sid === sid);
+  if (index === -1) return false;
+  items.splice(index, 1);
+  return true;
 }
 
 export function get_all_global_layers(layouts_path: string): Set<string> {
