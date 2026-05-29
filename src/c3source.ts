@@ -141,6 +141,36 @@ export function visit_instances_in_layouts(layouts_path: string, visitor: Instan
   );
 }
 
+/**
+ * In-memory depth-first walk of a layer tree: calls `visitor` for each layer
+ * and recursively each subLayer, building the dotted full layer name. A layer
+ * flagged `global` resets the qualifier to "global". Returns the summed
+ * mutation count (the LayerVisitor count contract). `prefix` seeds the
+ * qualifier — pass "" (default) for bare layer names, or use visitLayout to
+ * seed it with the layout name (matching the path-based walkers).
+ */
+export function visitLayers(layers: Layer[], visitor: LayerVisitor, prefix = ""): number {
+  return layers.reduce((changed, layer) => {
+    const base = layer.global ? "global" : prefix;
+    const fullLayerName = base ? `${base}.${layer.name}` : layer.name;
+    let layerChanged = visitor(layer, fullLayerName);
+    if (layer.subLayers) {
+      layerChanged += visitLayers(layer.subLayers, visitor, fullLayerName);
+    }
+    return changed + layerChanged;
+  }, 0);
+}
+
+/** Walk all layers of a layout in memory, seeding the dotted name with the layout name. */
+export function visitLayout(layout: Layout, visitor: LayerVisitor): number {
+  return visitLayers(layout.layers, visitor, layout.name);
+}
+
+/** Walk every instance of every layer in a layout. Returns the count the InstanceVisitor reported changed. */
+export function visitInstances(layout: Layout, visitor: InstanceVisitor): number {
+  return visitLayout(layout, makeLayerVisitorFromInstanceVisitor(visitor));
+}
+
 export function get_all_global_layers(layouts_path: string): Set<string> {
   const globals = new Set<string>();
   visit_layers_in_layouts(layouts_path, (layer, ) => {
