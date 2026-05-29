@@ -85,27 +85,12 @@ export function find_all_objectTypes_path(objectTypesDir: string) {
 export type InstanceVisitor = (instance: Instance, index: number, layer: Layer, fullLayerName: string) => boolean;
 export type LayerVisitor = (layer: Layer, fullLayerName: string) => number;
 
-function visit_layer(layer: Layer, prefix: string, visitor: LayerVisitor): number {
-  if (layer.global) {
-    prefix = "global";
-  }
-  const fullLayerName = `${prefix}.${layer.name}`;
-  const changed =
-    layer.subLayers?.reduce(
-      (changed, sublayer) => {
-        const fullname = `${sublayer.global ? "global" : fullLayerName}.${sublayer.name}`;
-        return visitor(sublayer, fullname) + changed;
-      },
-      0,
-    ) || 0;
-  return visitor(layer, fullLayerName) + changed;
-}
-
 function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): number {
   const content = readFileSync(layout_path, "utf-8");
-  const layout = JSON.parse(content);
-  const changed = layout.layers?.reduce(
-    (changed: number, layer: Layer) => visit_layer(layer, layout.name, visitor) + changed, 0); 
+  const layout = JSON.parse(content) as Layout;
+  // The in-memory visitLayout owns the one traversal; the file wrapper only
+  // adds read/parse and the write-when-changed rule (tab indent to match C3).
+  const changed = layout.layers ? visitLayout(layout, visitor) : 0;
   if (changed > 0) {
     writeFileSync(layout_path, JSON.stringify(layout, undefined, "\t"));
   }
