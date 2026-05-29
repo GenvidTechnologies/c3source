@@ -204,6 +204,35 @@ export function removeSceneGraphRoot(layout: Layout, sid: number): boolean {
   return true;
 }
 
+/**
+ * Remap an instance's ids in place using uid/sid translation maps. Encodes the
+ * C3 rules: `uid`, `sceneGraphData.uid`, `sceneGraphData.parent-uid` (unless -1)
+ * and each `sceneGraphData.children[].uid` are uids; the instance `sid` and its
+ * mirrored `instanceFolderItem.sid` are sids. Unmapped ids pass through.
+ */
+export function remapInstanceIds(inst: Instance, uidMap: Map<number, number>, sidMap: Map<number, number>): void {
+  inst.uid = uidMap.get(inst.uid) ?? inst.uid;
+
+  if (typeof inst.sid === "number") {
+    const newSid = sidMap.get(inst.sid) ?? inst.sid;
+    inst.sid = newSid;
+    if (inst.instanceFolderItem) {
+      inst.instanceFolderItem.sid = newSid; // mirrors the instance sid
+    }
+  }
+
+  const sgd = inst.sceneGraphData;
+  if (sgd) {
+    sgd.uid = uidMap.get(sgd.uid) ?? sgd.uid;
+    if (sgd["parent-uid"] !== -1) {
+      sgd["parent-uid"] = uidMap.get(sgd["parent-uid"]) ?? sgd["parent-uid"];
+    }
+    sgd.children?.forEach((child) => {
+      child.uid = uidMap.get(child.uid) ?? child.uid;
+    });
+  }
+}
+
 export function get_all_global_layers(layouts_path: string): Set<string> {
   const globals = new Set<string>();
   visit_layers_in_layouts(layouts_path, (layer, ) => {
