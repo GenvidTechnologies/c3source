@@ -328,14 +328,21 @@ function isScriptAction(action: ScriptAction | Record<string, unknown>): action 
   return (action as ScriptAction).type === "script" && (action as ScriptAction).language === "typescript";
 }
 
+/**
+ * Format a condition into the single-line DSL: `ObjectClass.id(param=value, ...)`.
+ * - Inverted: prefix with `NOT `
+ * - Disabled: prefix with `[DISABLED] ` (mirrors formatAction so consumers
+ *   need not wrap this call). Output changes for disabled conditions.
+ */
 export function formatCondition(cond: Condition): string {
+  const disabled = cond.disabled ? "[DISABLED] " : "";
   const inverted = cond.isInverted ? "NOT " : "";
   const params = cond.parameters
     ? Object.entries(cond.parameters)
         .map(([k, v]) => `${k}=${v}`)
         .join(", ")
     : "";
-  return `${inverted}${cond.objectClass}.${cond.id}(${params})`;
+  return `${disabled}${inverted}${cond.objectClass}.${cond.id}(${params})`;
 }
 
 /**

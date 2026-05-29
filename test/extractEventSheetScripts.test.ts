@@ -627,4 +627,25 @@ describe("formatCondition", () => {
     });
     assert.equal(result, "NOT Sprite.is-visible()");
   });
+
+  it("prefixes a disabled condition with [DISABLED]", () => {
+    const result = formatCondition({
+      id: "on-start-of-layout",
+      objectClass: "System",
+      sid: 4,
+      disabled: true,
+    });
+    assert.equal(result, "[DISABLED] System.on-start-of-layout()");
+  });
+
+  it("combines [DISABLED] and NOT prefixes", () => {
+    const result = formatCondition({
+      id: "is-visible",
+      objectClass: "Sprite",
+      sid: 5,
+      disabled: true,
+      isInverted: true,
+    });
+    assert.equal(result, "[DISABLED] NOT Sprite.is-visible()");
+  });
 });
