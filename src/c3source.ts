@@ -233,6 +233,39 @@ export function remapInstanceIds(inst: Instance, uidMap: Map<number, number>, si
   }
 }
 
+/**
+ * Build a fresh C3 layer with all default fields, matching what the editor
+ * writes for a new layer (field values sourced from a real C3 export). `sid`
+ * is 0 — the caller assigns a real sid. `name` is the only required argument.
+ */
+export function makeDefaultLayer(name: string): Layer {
+  return {
+    name,
+    overriden: 0,
+    subLayers: [],
+    instances: [],
+    sid: 0,
+    effectTypes: [],
+    isInitiallyVisible: true,
+    isInitiallyInteractive: true,
+    isHTMLElementsLayer: false,
+    color: [1, 1, 1, 1],
+    backgroundColor: [1, 1, 1, 1],
+    isTransparent: false,
+    sampling: "auto",
+    parallaxX: 1,
+    parallaxY: 1,
+    scaleRate: 1,
+    forceOwnTexture: false,
+    renderingMode: "3d",
+    drawOrder: "z-order",
+    useRenderCells: false,
+    blendMode: "normal",
+    zElevation: 0,
+    global: false,
+  };
+}
+
 export function get_all_global_layers(layouts_path: string): Set<string> {
   const globals = new Set<string>();
   visit_layers_in_layouts(layouts_path, (layer, ) => {
