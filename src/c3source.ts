@@ -324,7 +324,7 @@ export function find_all_eventsheets_path(eventSheetsDir: string): string[] {
   return sheets;
 }
 
-function isScriptAction(action: ScriptAction | Record<string, unknown>): action is ScriptAction {
+export function isScriptAction(action: ScriptAction | Record<string, unknown>): action is ScriptAction {
   return (action as ScriptAction).type === "script" && (action as ScriptAction).language === "typescript";
 }
 
@@ -439,6 +439,20 @@ export function hasChildren(event: EventSheetEvent): event is EventSheetEvent & 
   return Array.isArray((event as { children?: unknown }).children);
 }
 
+/** Event types that carry an `actions` array (block / function-block / custom-ace-block). */
+export function hasActions(event: EventSheetEvent): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent {
+  return (
+    event.eventType === "block" || event.eventType === "function-block" || event.eventType === "custom-ace-block"
+  );
+}
+
+/** Event types that carry a `conditions` array (block / function-block / custom-ace-block). */
+export function hasConditions(event: EventSheetEvent): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent {
+  return (
+    event.eventType === "block" || event.eventType === "function-block" || event.eventType === "custom-ace-block"
+  );
+}
+
 /**
  * Event types that increment C3's depth-first event counter (the 1-based
  * number C3 shows in its editor and that `generateFunctionName` consumes).
@@ -487,6 +501,25 @@ export function visitEvents(events: EventSheetEvent[], visitor: EventVisitor): v
     });
   }
   recurse(events, "events", 0);
+}
+
+/**
+ * Collect every typescript script action in a sheet, in canonical event order.
+ * Sibling of extractScriptsFromSheet for callers that only need the actions
+ * (not the coordinates/scope). Reuses the visitEvents traversal.
+ */
+export function walkScriptActions(sheet: EventSheet): ScriptAction[] {
+  const scripts: ScriptAction[] = [];
+  visitEvents(sheet.events, (event) => {
+    if (hasActions(event)) {
+      for (const action of event.actions) {
+        if (isScriptAction(action)) {
+          scripts.push(action);
+        }
+      }
+    }
+  });
+  return scripts;
 }
 
 /**
