@@ -660,6 +660,27 @@ export function generateFunctionName(sheetName: string, eventIndex: number, acti
   return `${sanitized}_Event${eventIndex}_Act${actionIndex}`;
 }
 
+/** A function or custom-ACE definition declared in an event sheet. */
+export interface ExtractedFunction {
+  kind: "function" | "custom-ace";
+  name: string;
+  /** Owning object class (custom-ACEs only). */
+  objectClass?: string;
+}
+
+/** List the functions and custom-ACEs a sheet defines, in canonical event order. */
+export function extractFunctions(sheet: EventSheet): ExtractedFunction[] {
+  const functions: ExtractedFunction[] = [];
+  visitEvents(sheet.events, (event) => {
+    if (event.eventType === "function-block") {
+      functions.push({ kind: "function", name: event.functionName });
+    } else if (event.eventType === "custom-ace-block") {
+      functions.push({ kind: "custom-ace", name: event.aceName, objectClass: event.objectClass });
+    }
+  });
+  return functions;
+}
+
 /** Recursively visit every object carrying a numeric `sid`, with its dotted/indexed path. */
 function walkSids(node: unknown, path: string, emit: (sid: number, path: string) => void): void {
   if (Array.isArray(node)) {
