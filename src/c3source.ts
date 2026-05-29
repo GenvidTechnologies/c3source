@@ -660,3 +660,62 @@ export function generateFunctionName(sheetName: string, eventIndex: number, acti
   return `${sanitized}_Event${eventIndex}_Act${actionIndex}`;
 }
 
+/** Recursively visit every object carrying a numeric `sid`, with its dotted/indexed path. */
+function walkSids(node: unknown, path: string, emit: (sid: number, path: string) => void): void {
+  if (Array.isArray(node)) {
+    node.forEach((item, i) => walkSids(item, `${path}[${i}]`, emit));
+    return;
+  }
+  if (node && typeof node === "object") {
+    const obj = node as Record<string, unknown>;
+    if (typeof obj.sid === "number") {
+      emit(obj.sid, path);
+    }
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === "sid") continue;
+      walkSids(value, path ? `${path}.${key}` : key, emit);
+    }
+  }
+}
+
+/** Collect every `sid` in an arbitrary C3 JSON subtree. */
+export function collectSids(node: unknown): Set<number> {
+  const sids = new Set<number>();
+  walkSids(node, "", (sid) => sids.add(sid));
+  return sids;
+}
+
+/** Collect every `sid` in an arbitrary C3 JSON subtree, paired with the path to its owning object. */
+export function collectSidsWithPaths(node: unknown): Array<{ sid: number; path: string }> {
+  const out: Array<{ sid: number; path: string }> = [];
+  walkSids(node, "", (sid, path) => out.push({ sid, path }));
+  return out;
+}
+
+/** Which C3 schema slot a sid was found in. */
+export type SidSlot = "event" | "condition" | "action" | "function-parameter";
+
+/**
+ * Locate a sid within an event sheet, returning the enclosing event and which
+ * slot carried it. Encodes the schema knowledge of which slots hold sids.
+ */
+export function findSid(sheet: EventSheet, sid: number): { node: EventSheetEvent; slot: SidSlot } | null {
+  let result: { node: EventSheetEvent; slot: SidSlot } | null = null;
+  visitEvents(sheet.events, (event) => {
+    if (result) return;
+    if ((event as { sid?: number }).sid === sid) {
+      result = { node: event, slot: "event" };
+    } else if (hasConditions(event) && event.conditions.some((c) => c.sid === sid)) {
+      result = { node: event, slot: "condition" };
+    } else if (hasActions(event) && event.actions.some((a) => (a as { sid?: number }).sid === sid)) {
+      result = { node: event, slot: "action" };
+    } else if (
+      (event.eventType === "function-block" || event.eventType === "custom-ace-block") &&
+      event.functionParameters.some((p) => p.sid === sid)
+    ) {
+      result = { node: event, slot: "function-parameter" };
+    }
+  });
+  return result;
+}
+
