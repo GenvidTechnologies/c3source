@@ -31,6 +31,8 @@ export interface Layer {
   global?: boolean;
   subLayers?: Layer[];
   instances?: Instance[];
+  /** C3's global-layer-override marker (single-r spelling matches C3's on-disk key). */
+  overriden?: 0 | 1;
 }
 
 export interface Layout {
@@ -38,6 +40,9 @@ export interface Layout {
   name: string;
   layers: Layer[];
   "nonworld-instances"?: Instance[];
+  eventSheet?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface ObjectType {
@@ -173,6 +178,7 @@ export interface Condition {
   parameters?: Record<string, unknown>;
   isInverted?: boolean;
   behaviorType?: string;
+  disabled?: boolean;
 }
 
 export interface FunctionParameter {
@@ -189,6 +195,8 @@ export interface BlockEvent {
   actions: (ScriptAction | Record<string, unknown>)[];
   sid: number;
   children?: EventSheetEvent[];
+  disabled?: boolean;
+  isOrBlock?: boolean;
 }
 
 /** Shared fields for function-block and custom-ace-block event types. */
@@ -203,6 +211,7 @@ interface FunctionLikeEvent {
   actions: (ScriptAction | Record<string, unknown>)[];
   sid: number;
   children?: EventSheetEvent[];
+  disabled?: boolean;
 }
 
 export interface FunctionBlockEvent extends FunctionLikeEvent {
