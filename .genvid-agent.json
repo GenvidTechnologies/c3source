@@ -1,0 +1,19 @@
+{
+  "project": {
+    "name": "c3source",
+    "description": "Typed interfaces and traversal/formatting utilities for reading and mutating Construct 3 project source files (layouts, layers, instances, event sheets) on disk.",
+    "languages": ["typescript"]
+  },
+  "commands": {
+    "test": "pnpm run test",
+    "lint": "pnpm run lint",
+    "build": "pnpm run build",
+    "validate": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
+  },
+  "repo": {
+    "host": "github",
+    "default_branch": "main"
+  },
+  "features": {},
+  "paths": {}
+}
