@@ -39,9 +39,16 @@ log freely.
 Nearly all logic lives in a single module, `src/c3source.ts`; `src/index.ts`
 just re-exports it (`export * from "./c3source.js"`). The `.js` extension in the
 import is required — the project is ESM (`"type": "module"`, `NodeNext`
-resolution). The package `main`/`types` point at `src/*.ts` for local
-workspace consumers, but `publishConfig` redirects them to `dist/*.js` and
-`dist/*.d.ts` for published installs.
+resolution). The package `main`/`types`/`exports` point at the built
+`dist/*.js` and `dist/*.d.ts` — the same artifacts the `files` allowlist
+ships — so a consumer resolves exactly what gets published. (`prepack` builds
+`dist/` before any `npm pack`/`npm publish`.) Do **not** reintroduce the old
+pnpm-style trick of pointing entry points at `src/*.ts` and rewriting them via
+`publishConfig.{main,types,exports}`: npm — unlike pnpm/yarn — ignores those
+manifest-field overrides, so the `src/` paths leak into the tarball and break
+every consumer (this was issue #8, fixed in 0.3.1). `scripts/verify-package.mjs`
+runs in `prepack` and fails the pack if any entry point is missing or falls
+outside `files`.
 
 Two functional areas:
 
