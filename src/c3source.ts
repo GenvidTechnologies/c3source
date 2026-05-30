@@ -544,9 +544,37 @@ function formatActionInner(
   return `[unknown action: ${keys}]`;
 }
 
-/** Returns true if a child-bearing event currently holds a children array. */
+/**
+ * Presence check: true when the event currently holds a `children` array that
+ * can be iterated right now. This is the *traversal* predicate — `visitEvents`
+ * relies on it so it never recurses into a childless node. It is deliberately
+ * NOT type-based: a child-capable event whose `children` key has not been
+ * created yet returns `false` here. For the *capability* question ("is this an
+ * event kind allowed to hold children?"), use {@link canHaveChildren}.
+ */
 export function hasChildren(event: EventSheetEvent): event is EventSheetEvent & { children: EventSheetEvent[] } {
   return Array.isArray((event as { children?: unknown }).children);
+}
+
+/**
+ * Capability check: true for event kinds that are allowed to hold children
+ * (block / function-block / custom-ace-block / group), whether or not a
+ * `children` array currently exists. This is the *mutation* predicate — a
+ * consumer that inserts a child uses it to tell "this kind can't have children
+ * at all" (comment / variable / include) apart from "this kind can have
+ * children but the array hasn't been created yet", then creates the array
+ * before inserting. Type-based and distinct from {@link hasChildren}, which is
+ * presence-based and used for traversal.
+ */
+export function canHaveChildren(
+  event: EventSheetEvent,
+): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent | GroupEvent {
+  return (
+    event.eventType === "block" ||
+    event.eventType === "function-block" ||
+    event.eventType === "custom-ace-block" ||
+    event.eventType === "group"
+  );
 }
 
 /** The event types that carry both `conditions` and `actions` arrays. */

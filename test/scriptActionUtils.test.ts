@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import {
+  canHaveChildren,
   hasActions,
   hasChildren,
   hasConditions,
@@ -18,6 +19,35 @@ const block: EventSheetEvent = {
 };
 const comment: EventSheetEvent = { eventType: "comment", text: "x" };
 
+// A block with no `children` key at all — the disambiguating case between the
+// presence predicate (false) and the capability predicate (true).
+const childlessBlock: EventSheetEvent = {
+  eventType: "block",
+  conditions: [],
+  actions: [],
+  sid: 2,
+};
+// A group whose `children` key has not been created. The GroupEvent type
+// requires `children`, so the cast models the on-disk/in-flight shape a mutator
+// must cope with before it populates the array.
+const childlessGroup = {
+  eventType: "group",
+  disabled: false,
+  title: "G",
+  isActiveOnStart: true,
+  sid: 3,
+} as unknown as EventSheetEvent;
+const variable: EventSheetEvent = {
+  eventType: "variable",
+  name: "v",
+  type: "number",
+  initialValue: "0",
+  isStatic: false,
+  isConstant: false,
+  sid: 4,
+};
+const include: EventSheetEvent = { eventType: "include", includeSheet: "Other" };
+
 describe("§4a predicates", () => {
   it("isScriptAction distinguishes typescript script actions", () => {
     expect(isScriptAction({ type: "script", language: "typescript", script: [] })).to.equal(true);
@@ -35,6 +65,21 @@ describe("§4a predicates", () => {
     expect(hasConditions(block)).to.equal(true);
     expect(hasActions(comment)).to.equal(false);
     expect(hasConditions(comment)).to.equal(false);
+  });
+
+  it("canHaveChildren is type-based: true for a childless block/group, unlike hasChildren", () => {
+    // Disambiguating case: child-capable kinds with no populated children array.
+    expect(canHaveChildren(childlessBlock)).to.equal(true);
+    expect(hasChildren(childlessBlock)).to.equal(false);
+    expect(canHaveChildren(childlessGroup)).to.equal(true);
+    expect(hasChildren(childlessGroup)).to.equal(false);
+  });
+
+  it("canHaveChildren and hasChildren both reject non-child-bearing kinds", () => {
+    for (const event of [comment, variable, include]) {
+      expect(canHaveChildren(event)).to.equal(false);
+      expect(hasChildren(event)).to.equal(false);
+    }
   });
 });
 
