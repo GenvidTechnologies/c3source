@@ -6,6 +6,13 @@ Utilities for reading and traversing Construct 3 project source files: layouts, 
 
 `c3source` provides typed interfaces and traversal functions for working with C3 JSON source files on disk. It is used by build tools, code generators, and analyzers that need to inspect or mutate project files outside the C3 editor.
 
+## Compatibility & caveats
+
+> [!IMPORTANT]
+> - **Folder-based projects only.** This library reads and writes the JSON files of a C3 project saved as a **folder** (the "Save as project folder" layout, with separate `layouts/`, `eventSheets/`, `objectTypes/` files). It does **not** handle the single-file `.c3p`/`.c3proj` archive export.
+> - **Pinned to a specific C3 version.** The types and traversal logic were derived from Construct 3 **r487** (`savedWithRelease: 48700`, `projectFormatVersion: 1`; see `test/fixtures/sample-project/project.c3proj`). Other releases may serialize differently.
+> - **Built on undocumented internals.** Construct 3's on-disk format is **not a documented or stable public interface**. These interfaces were reverse-engineered from project output, so a future C3 release can change the shape without notice and **break this library**. Pin your C3 version, and re-validate the fixtures against any new C3 release before upgrading.
+
 ## Exported Types
 
 ### Layout types
