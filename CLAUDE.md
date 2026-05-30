@@ -52,12 +52,21 @@ Two functional areas:
    the layout file only when the total is > 0**. So visitors that mutate
    in-place must report it via the return value or the change is silently
    dropped. Full layer names are `LayoutName.LayerName`; layers flagged
-   `global` reset the prefix to `global`.
+   `global` reset the prefix to `global`. The in-memory siblings
+   `visitLayers`/`visitLayout`/`visitInstances` hold the single recursive
+   traversal; the file-based `visit_*_in_layouts` are thin wrappers over them
+   (read → parse → visit → write-if-count>0). The walk is **fully recursive**
+   through `subLayers` (an earlier version descended only one level), so
+   consumers see nested layers a shallow walk previously skipped.
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,
    function-blocks, and custom-ace-blocks each increment the counter;
-   variables, comments, and includes do not). It composes lexical scope as a
+   variables, comments, and includes do not). The canonical counter lives in
+   `visitEvents` (which exposes each event's `eventNumber` via
+   `EventVisitContext`); `extractScriptsFromSheet` reads its event numbers from
+   that one walk, so `eventNumber`, `eventIndex`, and `generateFunctionName`
+   cannot drift. It composes lexical scope as a
    stack of `ScopeSegment`s: all `variable` events at a level are in scope for
    every block at that level regardless of declaration order, so they are
    pre-collected before traversal. Regular sibling blocks disambiguate their
