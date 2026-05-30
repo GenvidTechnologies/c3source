@@ -1,5 +1,5 @@
 {
-	"name": "c3source",
+	"name": "@genvid/c3source",
 	"version": "0.3.0",
 	"description": "Typed interfaces and traversal/formatting utilities for reading and mutating Construct 3 project source files (layouts, layers, instances, event sheets) on disk.",
 	"license": "MIT-0",
