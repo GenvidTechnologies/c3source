@@ -12,21 +12,21 @@ the C3 editor. There is no runtime application; it ships as a library.
 
 ## Commands
 
-Package manager is **pnpm** (Node >= 22). All checks below run in CI and must pass.
+Package manager is **npm** (Node >= 22). All checks below run in CI and must pass.
 
 ```sh
-pnpm install
-pnpm run lint        # eslint, --max-warnings 0 over src/ and test/
-pnpm run typecheck   # tsc against tsconfig.test.json (src + test), --noEmit
-pnpm run test        # mocha + tsx, runs test/**/*.test.ts
-pnpm run build       # tsc -> dist/ (the published artifact)
+npm install
+npm run lint        # eslint, --max-warnings 0 over src/ and test/
+npm run typecheck   # tsc against tsconfig.test.json (src + test), --noEmit
+npm run test        # mocha + tsx, runs test/**/*.test.ts
+npm run build       # tsc -> dist/ (the published artifact)
 ```
 
 Run a single test file or filter by name:
 
 ```sh
-pnpm exec mocha --timeout 5000 --import=tsx --require ./test/setup.ts test/extractEventSheetScripts.test.ts --exit
-pnpm exec mocha --timeout 5000 --import=tsx --require ./test/setup.ts 'test/**/*.test.ts' --grep "scope" --exit
+npx mocha --timeout 5000 --import=tsx --require ./test/setup.ts test/extractEventSheetScripts.test.ts --exit
+npx mocha --timeout 5000 --import=tsx --require ./test/setup.ts 'test/**/*.test.ts' --grep "scope" --exit
 ```
 
 Tests use **mocha + chai** with `tsx` for on-the-fly TS execution (no build
@@ -86,11 +86,21 @@ disables `no-unused-vars` and `no-explicit-any`.
 
 ## CI & Publishing
 
-CircleCI (`.circleci/config.yml`) runs lint -> typecheck -> test -> build ->
-`pnpm pack` on the `cimg/node:22.13` image. The full pipeline (build-and-test,
-then publish) only triggers on **git tags matching `/\d+\..*/`** (e.g.
-`0.1.0`). Publishing does **not** push to npm — it uploads the `.tgz` to an
-**Azure Blob Storage** container (`cordova`) under
-`<pkgName>/tags/<tag>` or `<pkgName>/branch/<branch>`. Secrets are injected at
-runtime via the 1Password CLI (`op run`), so jobs require the
-`burbank-onepassword` context.
+CI runs on **GitHub Actions** (Node 22). `.github/workflows/ci.yml` runs on pull
+requests and pushes to `main`; it calls the shared reusable workflow
+`genvid-holdings/genvid-public-ci/.github/workflows/node-gate.yml@main`, which
+runs lint -> typecheck -> test -> build (plus a non-failing `npm publish
+--dry-run`). It requires no secrets, so it is safe on fork PRs.
+
+Publishing is to the **public npm registry** as the scoped package
+`@genvid/c3source`. `.github/workflows/publish.yml` triggers on **git tags
+matching `v*.*.*`** (e.g. `v0.3.0`): it re-runs the gate, verifies the tag
+matches `package.json` `version`, then runs `npm publish --provenance --access
+public`. Authentication uses **npm OIDC trusted publishing** — short-lived
+credentials minted per run from the GitHub OIDC token (`id-token: write`), so
+**no long-lived npm token is stored** anywhere; provenance is automatic. The
+package's trusted publisher is registered against this repo
+(`genvid-holdings/c3source`) and the `publish.yml` workflow. The first publish
+of the name was bootstrapped with a one-time token (since npm's OIDC flow
+excludes first-publish), which was revoked once the trusted publisher was
+configured.
