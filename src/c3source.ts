@@ -549,18 +549,21 @@ export function hasChildren(event: EventSheetEvent): event is EventSheetEvent & 
   return Array.isArray((event as { children?: unknown }).children);
 }
 
-/** Event types that carry an `actions` array (block / function-block / custom-ace-block). */
-export function hasActions(event: EventSheetEvent): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent {
+/** The event types that carry both `conditions` and `actions` arrays. */
+function isBlockLikeEvent(event: EventSheetEvent): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent {
   return (
     event.eventType === "block" || event.eventType === "function-block" || event.eventType === "custom-ace-block"
   );
 }
 
+/** Event types that carry an `actions` array (block / function-block / custom-ace-block). */
+export function hasActions(event: EventSheetEvent): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent {
+  return isBlockLikeEvent(event);
+}
+
 /** Event types that carry a `conditions` array (block / function-block / custom-ace-block). */
 export function hasConditions(event: EventSheetEvent): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent {
-  return (
-    event.eventType === "block" || event.eventType === "function-block" || event.eventType === "custom-ace-block"
-  );
+  return isBlockLikeEvent(event);
 }
 
 /**

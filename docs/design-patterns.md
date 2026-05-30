@@ -34,6 +34,15 @@ because the numbering rule (`isCountingEvent` + pre-order descent) lives in one
 place. When adding a new walk that needs C3 coordinates, build it on
 `visitEvents`; never re-implement the counter.
 
+**Regression guard.** The invariant is pinned by two test sets that any counter
+refactor must keep green: the `visitEvents` ↔ `extractScriptsFromSheet`
+agreement test in `test/eventCounter.test.ts` (asserts `eventNumber` equals
+`eventIndex` for every counting event on a multi-group/nested fixture, plus the
+absolute values `Outer=1, Inner=2, …`), and the original extraction tests in
+`test/extractEventSheetScripts.test.ts`, which fix the exact event/scope
+coordinates. If you touch the numbering or the traversal order, those tests are
+the proof it still matches C3 — do not weaken them.
+
 ## One traversal, file walkers are thin wrappers
 
 The layer walk has a single recursive implementation: `visitLayers` /
