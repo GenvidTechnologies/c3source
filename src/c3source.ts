@@ -80,6 +80,10 @@ export function find_all_layouts_path(layout_dir: string): string[] {
     const filepath = path.join(layout_dir, file);
     const stats = statSync(filepath);
     if (stats.isDirectory()) {
+      // C3 r487+ writes editor UI state into `uistate/` subfolders next to the
+      // real files; their non-layout .json contents crash the parsers, so never
+      // descend into them (mirrors the existing `.uistate.json` file skip).
+      if (file === "uistate") return;
       layouts.push(...find_all_layouts_path(filepath));
     } else if (stats.isFile() && !filepath.endsWith(".uistate.json")) {
       layouts.push(filepath);
@@ -95,6 +99,7 @@ export function find_all_objectTypes_path(objectTypesDir: string) {
     const filepath = path.join(objectTypesDir, file);
     const stats = statSync(filepath);
     if (stats.isDirectory()) {
+      if (file === "uistate") return; // skip C3 r487+ uistate/ subfolders (see find_all_layouts_path)
       objectTypePaths.push(...find_all_layouts_path(filepath));
     } else if (stats.isFile() && !filepath.endsWith(".uistate.json")) {
       objectTypePaths.push(filepath);
@@ -510,6 +515,7 @@ export function find_all_eventsheets_path(eventSheetsDir: string): string[] {
     const filepath = path.join(eventSheetsDir, file);
     const stats = statSync(filepath);
     if (stats.isDirectory()) {
+      if (file === "uistate") return; // skip C3 r487+ uistate/ subfolders (see find_all_layouts_path)
       sheets.push(...find_all_eventsheets_path(filepath));
     } else if (stats.isFile() && filepath.endsWith(".json") && !filepath.endsWith(".uistate.json")) {
       sheets.push(filepath);

@@ -63,7 +63,9 @@ outside `files`.
 Two functional areas:
 
 1. **Layout traversal** — recursive `find_all_*_path` collectors (skip
-   `.uistate.json`) plus visitor walkers. The key pattern: a `LayerVisitor`
+   `.uistate.json` files and never descend into `uistate/` subfolders, which
+   C3 r487+ writes alongside layouts/object-types/event-sheets) plus visitor
+   walkers. The key pattern: a `LayerVisitor`
    returns a *mutation count* (number) and an `InstanceVisitor` returns a
    *changed* boolean; `visit_layers_in_layout` sums the counts and **rewrites
    the layout file only when the total is > 0**. So visitors that mutate
