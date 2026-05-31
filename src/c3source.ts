@@ -226,6 +226,26 @@ export function visitInstances(layout: Layout, visitor: InstanceVisitor): number
 }
 
 /**
+ * Depth-first search of a layer tree (same order as {@link visitLayers}) that
+ * STOPS at the first layer for which `predicate` returns true, returning that
+ * layer's {@link LayerEntry} (with `ancestors`, `parent`, and `index`) — or
+ * `undefined` if none match. `prefix` mirrors `visitLayers`: default `""`
+ * yields bare-name-rooted `fullName`s; pass a layout name (or use
+ * {@link findLayerEntryInLayout}) to seed the dotted qualifier.
+ */
+export function findLayerEntry(layers: Layer[], predicate: LayerPredicate, prefix = ""): LayerEntry | undefined {
+  for (const entry of walkLayerEntries(layers, prefix, [])) {
+    if (predicate(entry)) return entry;
+  }
+  return undefined;
+}
+
+/** {@link findLayerEntry} convenience returning just the matched layer (or `undefined`). */
+export function findLayer(layers: Layer[], predicate: LayerPredicate, prefix = ""): Layer | undefined {
+  return findLayerEntry(layers, predicate, prefix)?.layer;
+}
+
+/**
  * Register a root instance's sid in the layout's scene-graph root folder,
  * creating the folder if absent. Root instances must appear here.
  */
