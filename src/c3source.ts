@@ -73,39 +73,38 @@ export interface ObjectType {
   "plugin-id": string;
 }
 
-export function find_all_layouts_path(layout_dir: string): string[] {
-  const layouts: string[] = [];
-  const files = readdirSync(layout_dir).sort();
-  files.forEach((file) => {
-    const filepath = path.join(layout_dir, file);
-    const stats = statSync(filepath);
-    if (stats.isDirectory()) {
-      // C3 r487+ writes editor UI state into `uistate/` subfolders next to the
-      // real files; their non-layout .json contents crash the parsers, so never
-      // descend into them (mirrors the existing `.uistate.json` file skip).
-      if (file === "uistate") return;
-      layouts.push(...find_all_layouts_path(filepath));
-    } else if (stats.isFile() && !filepath.endsWith(".uistate.json")) {
-      layouts.push(filepath);
-    }
-  });
-  return layouts;
+/**
+ * The single recursive file walk behind every `find_all_*_path` collector:
+ * collect file paths under `dir` for which `predicate(filename)` is true. Never
+ * descends into `uistate/` subfolders — C3 r487+ writes editor UI state into
+ * them next to the real files, and their non-source `.json` contents crash the
+ * parsers (mirrors the per-file `.uistate.json` skip the predicates apply). The
+ * public collectors differ only in their predicate, so they are thin wrappers
+ * over this; never re-implement the recursion or the `uistate/` skip.
+ */
+function find_all_files_path(dir: string, predicate: (filename: string) => boolean): string[] {
+  const result: string[] = [];
+  readdirSync(dir)
+    .sort()
+    .forEach((file) => {
+      const filepath = path.join(dir, file);
+      const stats = statSync(filepath);
+      if (stats.isDirectory()) {
+        if (file === "uistate") return; // C3 r487+ uistate/ subfolders are not C3 source
+        result.push(...find_all_files_path(filepath, predicate));
+      } else if (stats.isFile() && predicate(file)) {
+        result.push(filepath);
+      }
+    });
+  return result;
 }
 
-export function find_all_objectTypes_path(objectTypesDir: string) {
-  const objectTypePaths: string[] = [];
-  const files = readdirSync(objectTypesDir).sort();
-  files.forEach((file) => {
-    const filepath = path.join(objectTypesDir, file);
-    const stats = statSync(filepath);
-    if (stats.isDirectory()) {
-      if (file === "uistate") return; // skip C3 r487+ uistate/ subfolders (see find_all_layouts_path)
-      objectTypePaths.push(...find_all_layouts_path(filepath));
-    } else if (stats.isFile() && !filepath.endsWith(".uistate.json")) {
-      objectTypePaths.push(filepath);
-    }
-  });
-  return objectTypePaths;
+export function find_all_layouts_path(layout_dir: string): string[] {
+  return find_all_files_path(layout_dir, (file) => !file.endsWith(".uistate.json"));
+}
+
+export function find_all_objectTypes_path(objectTypesDir: string): string[] {
+  return find_all_files_path(objectTypesDir, (file) => !file.endsWith(".uistate.json"));
 }
 
 // Return true if layout must be saved.
@@ -158,10 +157,9 @@ export function visit_layers_in_layouts(layouts_path: string, visitor: LayerVisi
   const layouts = find_all_layouts_path(layouts_path);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, visitor) + changed,
-    0
+    0,
   );
 }
-
 
 function makeLayerVisitorFromInstanceVisitor(visitor: InstanceVisitor): LayerVisitor {
   return (layer: Layer, fullLayerName): number => {
@@ -171,7 +169,7 @@ function makeLayerVisitorFromInstanceVisitor(visitor: InstanceVisitor): LayerVis
         0,
       ) || 0
     );
-  }
+  };
 }
 
 export function visit_instances_in_layouts(layouts_path: string, visitor: InstanceVisitor): number {
@@ -179,7 +177,7 @@ export function visit_instances_in_layouts(layouts_path: string, visitor: Instan
   const layerVisitor = makeLayerVisitorFromInstanceVisitor(visitor);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, layerVisitor) + changed,
-    0
+    0,
   );
 }
 
@@ -357,7 +355,7 @@ export function makeDefaultLayer(name: string): Layer {
 
 export function get_all_global_layers(layouts_path: string): Set<string> {
   const globals = new Set<string>();
-  visit_layers_in_layouts(layouts_path, (layer, ) => {
+  visit_layers_in_layouts(layouts_path, (layer) => {
     if (layer.global) {
       globals.add(layer.name);
     }
@@ -509,19 +507,7 @@ export interface ExtractedScript {
  * Find all eventSheet JSON files (excluding .uistate.json) in a directory tree.
  */
 export function find_all_eventsheets_path(eventSheetsDir: string): string[] {
-  const sheets: string[] = [];
-  const files = readdirSync(eventSheetsDir).sort();
-  files.forEach((file) => {
-    const filepath = path.join(eventSheetsDir, file);
-    const stats = statSync(filepath);
-    if (stats.isDirectory()) {
-      if (file === "uistate") return; // skip C3 r487+ uistate/ subfolders (see find_all_layouts_path)
-      sheets.push(...find_all_eventsheets_path(filepath));
-    } else if (stats.isFile() && filepath.endsWith(".json") && !filepath.endsWith(".uistate.json")) {
-      sheets.push(filepath);
-    }
-  });
-  return sheets;
+  return find_all_files_path(eventSheetsDir, (file) => file.endsWith(".json") && !file.endsWith(".uistate.json"));
 }
 
 export function isScriptAction(action: ScriptAction | Record<string, unknown>): action is ScriptAction {
@@ -669,9 +655,7 @@ export function canHaveChildren(
 
 /** The event types that carry both `conditions` and `actions` arrays. */
 function isBlockLikeEvent(event: EventSheetEvent): event is BlockEvent | FunctionBlockEvent | CustomAceBlockEvent {
-  return (
-    event.eventType === "block" || event.eventType === "function-block" || event.eventType === "custom-ace-block"
-  );
+  return event.eventType === "block" || event.eventType === "function-block" || event.eventType === "custom-ace-block";
 }
 
 /** Event types that carry an `actions` array (block / function-block / custom-ace-block). */
@@ -970,4 +954,3 @@ export function findSid(sheet: EventSheet, sid: number): { node: EventSheetEvent
   });
   return result;
 }
-
