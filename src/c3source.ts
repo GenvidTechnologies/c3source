@@ -107,6 +107,36 @@ export function find_all_objectTypes_path(objectTypesDir: string) {
 export type InstanceVisitor = (instance: Instance, index: number, layer: Layer, fullLayerName: string) => boolean;
 export type LayerVisitor = (layer: Layer, fullLayerName: string) => number;
 
+/**
+ * A single layer surfaced by the layer traversal, with everything a consumer
+ * needs to match, name, or mutate it:
+ *
+ * - `layer`     — the layer object itself.
+ * - `name`      — the bare `layer.name` (the natural match target; independent of `prefix`).
+ * - `fullName`  — the dotted, global-resetting name (`L.A.B`, or `global.G` for a layer
+ *                 flagged `global`). This is the one name policy the traversal hardcodes,
+ *                 because `visitLayers` already builds it and existing visitors rely on it.
+ * - `ancestors` — the parent layers, root-first, EXCLUDING `layer` itself (`[]` at top level).
+ *                 Use this to build any other name shape the traversal does not hardcode,
+ *                 e.g. a `>`-separated, NON-resetting display name:
+ *                   [...entry.ancestors, entry.layer].map((l) => l.name).join(" > ")
+ *                 (`depth` is intentionally not a field — it is `ancestors.length`.)
+ * - `parent`    — the sibling array `layer` lives in; enables in-place removal via
+ *                 `entry.parent.splice(entry.index, 1)`.
+ * - `index`     — `layer`'s index within `parent`.
+ */
+export type LayerEntry = {
+  layer: Layer;
+  name: string;
+  fullName: string;
+  ancestors: Layer[];
+  parent: Layer[];
+  index: number;
+};
+
+/** Predicate over a {@link LayerEntry}; return true to select the layer. */
+export type LayerPredicate = (entry: LayerEntry) => boolean;
+
 function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): number {
   const content = readFileSync(layout_path, "utf-8");
   const layout = JSON.parse(content) as Layout;
@@ -149,6 +179,27 @@ export function visit_instances_in_layouts(layouts_path: string, visitor: Instan
 }
 
 /**
+ * The single depth-first traversal of a layer tree, shared by every layer
+ * walker/finder. Yields each layer parent-before-children, fully recursive
+ * through `subLayers`, building the dotted/global-resetting `fullName` exactly
+ * as `visitLayers` historically did (a layer flagged `global` resets the
+ * qualifier to "global"). Internal: consumers go through `visitLayers` or the
+ * `find*` functions. Because it is a generator, a consumer that stops iterating
+ * (the `find*` functions, on first match) halts the walk immediately.
+ */
+function* walkLayerEntries(layers: Layer[], prefix: string, ancestors: Layer[]): Generator<LayerEntry> {
+  for (let index = 0; index < layers.length; index++) {
+    const layer = layers[index];
+    const base = layer.global ? "global" : prefix;
+    const fullName = base ? `${base}.${layer.name}` : layer.name;
+    yield { layer, name: layer.name, fullName, ancestors, parent: layers, index };
+    if (layer.subLayers) {
+      yield* walkLayerEntries(layer.subLayers, fullName, [...ancestors, layer]);
+    }
+  }
+}
+
+/**
  * In-memory depth-first walk of a layer tree: calls `visitor` for each layer
  * and recursively each subLayer, building the dotted full layer name. A layer
  * flagged `global` resets the qualifier to "global". Returns the summed
@@ -157,15 +208,11 @@ export function visit_instances_in_layouts(layouts_path: string, visitor: Instan
  * seed it with the layout name (matching the path-based walkers).
  */
 export function visitLayers(layers: Layer[], visitor: LayerVisitor, prefix = ""): number {
-  return layers.reduce((changed, layer) => {
-    const base = layer.global ? "global" : prefix;
-    const fullLayerName = base ? `${base}.${layer.name}` : layer.name;
-    let layerChanged = visitor(layer, fullLayerName);
-    if (layer.subLayers) {
-      layerChanged += visitLayers(layer.subLayers, visitor, fullLayerName);
-    }
-    return changed + layerChanged;
-  }, 0);
+  let changed = 0;
+  for (const entry of walkLayerEntries(layers, prefix, [])) {
+    changed += visitor(entry.layer, entry.fullName);
+  }
+  return changed;
 }
 
 /** Walk all layers of a layout in memory, seeding the dotted name with the layout name. */
@@ -176,6 +223,43 @@ export function visitLayout(layout: Layout, visitor: LayerVisitor): number {
 /** Walk every instance of every layer in a layout. Returns the count the InstanceVisitor reported changed. */
 export function visitInstances(layout: Layout, visitor: InstanceVisitor): number {
   return visitLayout(layout, makeLayerVisitorFromInstanceVisitor(visitor));
+}
+
+/**
+ * Depth-first search of a layer tree (same order as {@link visitLayers}) that
+ * STOPS at the first layer for which `predicate` returns true, returning that
+ * layer's {@link LayerEntry} (with `ancestors`, `parent`, and `index`) — or
+ * `undefined` if none match. `prefix` mirrors `visitLayers`: default `""`
+ * yields bare-name-rooted `fullName`s; pass a layout name (or use
+ * {@link findLayerEntryInLayout}) to seed the dotted qualifier.
+ */
+export function findLayerEntry(layers: Layer[], predicate: LayerPredicate, prefix = ""): LayerEntry | undefined {
+  for (const entry of walkLayerEntries(layers, prefix, [])) {
+    if (predicate(entry)) return entry;
+  }
+  return undefined;
+}
+
+/** {@link findLayerEntry} convenience returning just the matched layer (or `undefined`). */
+export function findLayer(layers: Layer[], predicate: LayerPredicate, prefix = ""): Layer | undefined {
+  return findLayerEntry(layers, predicate, prefix)?.layer;
+}
+
+/**
+ * {@link findLayer} convenience for the dominant case — matching the bare
+ * `layer.name`. Equivalent to `findLayer(layers, (e) => e.name === name, prefix)`.
+ */
+export function findLayerByName(layers: Layer[], name: string, prefix = ""): Layer | undefined {
+  return findLayer(layers, (entry) => entry.name === name, prefix);
+}
+
+/**
+ * {@link findLayerEntry} seeded with the layout name (parity with
+ * {@link visitLayout}), so the dotted `fullName` matches the file-based walkers
+ * (e.g. `"Layout 1.Layer 0"`).
+ */
+export function findLayerEntryInLayout(layout: Layout, predicate: LayerPredicate): LayerEntry | undefined {
+  return findLayerEntry(layout.layers, predicate, layout.name);
 }
 
 /**

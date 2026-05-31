@@ -10,6 +10,16 @@ layers, instances, object types, and event sheets. It is consumed by build
 tools, code generators, and analyzers that inspect or mutate C3 JSON outside
 the C3 editor. There is no runtime application; it ships as a library.
 
+## Design records & branches
+
+Feature branches are squashed on merge, and work documents under
+`docs/superpowers/` (specs, plans) are routinely cleaned up — treat them as
+ephemeral scaffolding, not durable records. The durable record of a design or
+decision is the **GitHub issue or PR** (post the spec as an issue comment or in
+the PR body, where it survives the squash). Never cite an unpushed local branch
+or commit hash in external communication (issue/PR comments) — link to
+something the reader can actually open, or push first.
+
 ## Commands
 
 Package manager is **npm** (Node >= 22). All checks below run in CI and must pass.
@@ -59,9 +69,14 @@ Two functional areas:
    the layout file only when the total is > 0**. So visitors that mutate
    in-place must report it via the return value or the change is silently
    dropped. Full layer names are `LayoutName.LayerName`; layers flagged
-   `global` reset the prefix to `global`. The in-memory siblings
-   `visitLayers`/`visitLayout`/`visitInstances` hold the single recursive
-   traversal; the file-based `visit_*_in_layouts` are thin wrappers over them
+   `global` reset the prefix to `global`. The single recursive traversal lives
+   in one internal generator, `walkLayerEntries` (it yields a `LayerEntry` per
+   layer: bare `name`, dotted/global-resetting `fullName`, root-first
+   `ancestors` chain, `parent` sibling array, `index`). The in-memory
+   `visitLayers`/`visitLayout`/`visitInstances` and the early-exit finder family
+   `findLayer`/`findLayerEntry`/`findLayerByName`/`findLayerEntryInLayout` are
+   all thin consumers of that one generator (the finders stop on the first
+   predicate hit); the file-based `visit_*_in_layouts` wrap the visitors
    (read → parse → visit → write-if-count>0). The walk is **fully recursive**
    through `subLayers` (an earlier version descended only one level), so
    consumers see nested layers a shallow walk previously skipped.

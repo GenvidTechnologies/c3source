@@ -43,20 +43,34 @@ absolute values `Outer=1, Inner=2, …`), and the original extraction tests in
 coordinates. If you touch the numbering or the traversal order, those tests are
 the proof it still matches C3 — do not weaken them.
 
-## One traversal, file walkers are thin wrappers
+## One traversal, everything else is a thin consumer
 
-The layer walk has a single recursive implementation: `visitLayers` /
-`visitLayout` / `visitInstances` (in memory). The file-based `visit_*_in_layouts`
-are thin wrappers — read → parse → call the in-memory visitor →
-**write only when the summed mutation count is > 0** (tab-indented, to match
-C3). The "write-if-changed" rule stays in the file wrapper, never in the
-in-memory visitor. Add new traversal behavior to the in-memory functions so
-both the in-memory and on-disk paths inherit it.
+The layer walk has a single recursive implementation: the internal
+`walkLayerEntries` generator. It yields a `LayerEntry` per layer — bare `name`,
+the dotted/global-resetting `fullName`, the root-first `ancestors` chain
+(excludes the layer itself), the `parent` sibling array, and the `index`. Every
+public walker/finder is a thin consumer of that one generator:
 
-`visitLayers` is **fully recursive** through `subLayers` (an earlier version
-descended only one level). `visitLayout` seeds the dotted prefix with the
-layout name (`LayoutName.LayerName`); a layer flagged `global` resets the
-prefix to `global`.
+- `visitLayers` / `visitLayout` / `visitInstances` iterate it and **sum the
+  `LayerVisitor` mutation count** (no early-exit — they walk the whole tree).
+- `findLayerEntry` / `findLayer` / `findLayerByName` / `findLayerEntryInLayout`
+  iterate it and **stop on the first predicate hit** (the generator halts when
+  the consumer `return`s). `findLayerEntry` is the core; the others are
+  conveniences (layer-only, bare-name match, layout-name-seeded). Callers build
+  any name shape the generator does not hardcode — e.g. a `>`-separated,
+  non-resetting display name — from the `ancestors` chain.
+
+The file-based `visit_*_in_layouts` wrap the visitors — read → parse → call the
+in-memory visitor → **write only when the summed mutation count is > 0**
+(tab-indented, to match C3). The "write-if-changed" rule stays in the file
+wrapper, never in the in-memory visitor. Add new traversal behavior to
+`walkLayerEntries` (or a new thin consumer of it) so every path inherits it;
+never re-implement the recursion.
+
+The walk is **fully recursive** through `subLayers` (an earlier version
+descended only one level). `visitLayout`/`findLayerEntryInLayout` seed the
+dotted prefix with the layout name (`LayoutName.LayerName`); a layer flagged
+`global` resets the prefix to `global`.
 
 ## Testing: real-export ground truth + inline legibility
 
