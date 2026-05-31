@@ -86,3 +86,15 @@ describe("findLayerEntryInLayout", () => {
     expect(entry?.fullName).to.equal("global.G");
   });
 });
+
+describe("findLayerEntry prefix seeding", () => {
+  it("seeds the dotted fullName with an explicit non-default prefix", () => {
+    const entry = findLayerEntry(layout().layers, (e) => e.name === "C", "Seed");
+    expect(entry?.fullName).to.equal("Seed.A.B.C");
+  });
+
+  it("a global layer still resets the qualifier regardless of the prefix", () => {
+    const entry = findLayerEntry(layout().layers, (e) => e.name === "G", "Seed");
+    expect(entry?.fullName).to.equal("global.G");
+  });
+});
