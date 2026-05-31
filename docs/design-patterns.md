@@ -72,6 +72,20 @@ descended only one level). `visitLayout`/`findLayerEntryInLayout` seed the
 dotted prefix with the layout name (`LayoutName.LayerName`); a layer flagged
 `global` resets the prefix to `global`.
 
+## One file-walker, three collectors
+
+The on-disk collectors `find_all_layouts_path`, `find_all_objectTypes_path`,
+and `find_all_eventsheets_path` share one internal recursive walk,
+`find_all_files_path(dir, predicate)`. It owns the recursion and the skip rules
+every collector needs: it never descends into `uistate/` subfolders (C3 r487+
+writes editor UI state there, and its non-source `.json` would crash the
+parsers) and it applies a per-file `predicate`. The public collectors are
+one-line wrappers differing only in that predicate (event sheets additionally
+require a `.json` extension). Add a new collector as another wrapper; never
+re-implement the recursion or the `uistate/` / `.uistate.json` skip —
+duplicating it is exactly how a self-recursion bug once slipped in
+(`find_all_objectTypes_path` recursing via the layouts collector).
+
 ## Testing: real-export ground truth + inline legibility
 
 Schema-fidelity facts ("which fields does C3 actually write?", "what are a
