@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { findLayer, findLayerEntry, type Layout } from "../src/c3source.js";
+import { findLayer, findLayerByName, findLayerEntry, findLayerEntryInLayout, type Layout } from "../src/c3source.js";
 
 // A tree with a NESTED global layer (Gx) so the difference between the dotted
 // global-resetting fullName and an ancestors-built display name is observable.
@@ -55,5 +55,34 @@ describe("findLayerEntry / findLayer", () => {
     expect(findLayerEntry(layout().layers, (e) => e.name === "A")?.ancestors).to.deep.equal([]);
     const c = findLayerEntry(layout().layers, (e) => e.name === "C");
     expect(c?.ancestors.map((l) => l.name)).to.deep.equal(["A", "B"]);
+  });
+});
+
+describe("findLayerByName", () => {
+  it("matches the bare layer name and returns the layer", () => {
+    expect(findLayerByName(layout().layers, "C")?.name).to.equal("C");
+  });
+
+  it("returns undefined when no layer has that name", () => {
+    expect(findLayerByName(layout().layers, "nope")).to.equal(undefined);
+  });
+
+  it("is equivalent to the predicate form", () => {
+    const layers = layout().layers;
+    const byName = findLayerByName(layers, "Gx");
+    const byPred = findLayer(layers, (e) => e.name === "Gx");
+    expect(byName).to.equal(byPred); // same layer object
+  });
+});
+
+describe("findLayerEntryInLayout", () => {
+  it("seeds the dotted fullName with the layout name", () => {
+    const entry = findLayerEntryInLayout(layout(), (e) => e.name === "C");
+    expect(entry?.fullName).to.equal("L.A.B.C");
+  });
+
+  it("still resets the qualifier to 'global' for global layers", () => {
+    const entry = findLayerEntryInLayout(layout(), (e) => e.name === "G");
+    expect(entry?.fullName).to.equal("global.G");
   });
 });

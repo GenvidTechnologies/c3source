@@ -246,6 +246,23 @@ export function findLayer(layers: Layer[], predicate: LayerPredicate, prefix = "
 }
 
 /**
+ * {@link findLayer} convenience for the dominant case — matching the bare
+ * `layer.name`. Equivalent to `findLayer(layers, (e) => e.name === name, prefix)`.
+ */
+export function findLayerByName(layers: Layer[], name: string, prefix = ""): Layer | undefined {
+  return findLayer(layers, (entry) => entry.name === name, prefix);
+}
+
+/**
+ * {@link findLayerEntry} seeded with the layout name (parity with
+ * {@link visitLayout}), so the dotted `fullName` matches the file-based walkers
+ * (e.g. `"Layout 1.Layer 0"`).
+ */
+export function findLayerEntryInLayout(layout: Layout, predicate: LayerPredicate): LayerEntry | undefined {
+  return findLayerEntry(layout.layers, predicate, layout.name);
+}
+
+/**
  * Register a root instance's sid in the layout's scene-graph root folder,
  * creating the folder if absent. Root instances must appear here.
  */
