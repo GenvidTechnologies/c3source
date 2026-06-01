@@ -74,15 +74,26 @@ export interface ObjectType {
 }
 
 /**
- * The single recursive file walk behind every `find_all_*_path` collector:
- * collect file paths under `dir` for which `predicate(filename)` is true. Never
- * descends into `uistate/` subfolders — C3 r487+ writes editor UI state into
- * them next to the real files, and their non-source `.json` contents crash the
- * parsers (mirrors the per-file `.uistate.json` skip the predicates apply). The
- * public collectors differ only in their predicate, so they are thin wrappers
- * over this; never re-implement the recursion or the `uistate/` skip.
+ * The single recursive file walk behind every `find_all_*_path` collector, and
+ * the generic primitive for discovering files c3source has no named collector
+ * for (e.g. generated `.dsl.txt` artifacts): collect file paths under `dir` for
+ * which `predicate(filename)` is true. `predicate` receives the bare basename
+ * (e.g. `"Level1.dsl.txt"`), not the full path.
+ *
+ * This owns the recursion, the directory-skip rules, and the ordering so callers
+ * don't maintain a parallel walker that can drift:
+ * - **Recursion** — fully recursive through subdirectories.
+ * - **Skip rule** — never descends into `uistate/` subfolders. C3 r487+ writes
+ *   editor UI state into them next to the real files, and their non-source
+ *   `.json` contents crash the parsers (mirrors the per-file `.uistate.json`
+ *   skip the source predicates apply).
+ * - **Ordering** — deterministic, per-level `readdirSync().sort()` depth-first.
+ *
+ * The named collectors (`find_all_layouts_path`, `find_all_eventsheets_path`, …)
+ * differ only in their predicate, so they are thin wrappers over this; never
+ * re-implement the recursion or the `uistate/` skip.
  */
-function find_all_files_path(dir: string, predicate: (filename: string) => boolean): string[] {
+export function find_all_files_path(dir: string, predicate: (filename: string) => boolean): string[] {
   const result: string[] = [];
   readdirSync(dir)
     .sort()

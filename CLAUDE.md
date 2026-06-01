@@ -65,7 +65,14 @@ Two functional areas:
 1. **Layout traversal** — recursive `find_all_*_path` collectors (skip
    `.uistate.json` files and never descend into `uistate/` subfolders, which
    C3 r487+ writes alongside layouts/object-types/event-sheets) plus visitor
-   walkers. The key pattern: a `LayerVisitor`
+   walkers. The named collectors are thin wrappers over the exported generic
+   primitive `find_all_files_path(dir, predicate)` — the single recursive walk
+   that owns the recursion, the `uistate/` skip, and the per-level
+   `readdirSync().sort()` ordering. It is exported so downstream can discover
+   non-source artifacts (e.g. generated `.dsl.txt` files) through the same walk
+   instead of maintaining a parallel collector that drifts on the next skip-rule
+   fix (issue #16); its `predicate` receives the bare basename. The key
+   pattern: a `LayerVisitor`
    returns a *mutation count* (number) and an `InstanceVisitor` returns a
    *changed* boolean; `visit_layers_in_layout` sums the counts and **rewrites
    the layout file only when the total is > 0**. So visitors that mutate
