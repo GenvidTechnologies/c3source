@@ -73,6 +73,22 @@ export interface ObjectType {
   "plugin-id": string;
 }
 
+/** The canonical set of C3-editor-local artifacts that are NOT project source. */
+export const EDITOR_LOCAL_EXCLUSIONS: { dirs: readonly string[]; fileSuffixes: readonly string[] } = {
+  dirs: ["uistate"], // C3 r487+ uistate/ subfolders
+  fileSuffixes: [".uistate.json"],
+};
+
+/** True if a bare basename is a C3-editor-local artifact (not project source):
+ *  a dir named like an excluded dir, or a file with an excluded suffix.
+ *  Covers BOTH forms so it replaces every skip site uniformly. */
+export function isEditorLocalPath(name: string): boolean {
+  return (
+    EDITOR_LOCAL_EXCLUSIONS.dirs.includes(name) ||
+    EDITOR_LOCAL_EXCLUSIONS.fileSuffixes.some((suffix) => name.endsWith(suffix))
+  );
+}
+
 /**
  * The single recursive file walk behind every `find_all_*_path` collector, and
  * the generic primitive for discovering files c3source has no named collector
@@ -101,7 +117,7 @@ export function find_all_files_path(dir: string, predicate: (filename: string) =
       const filepath = path.join(dir, file);
       const stats = statSync(filepath);
       if (stats.isDirectory()) {
-        if (file === "uistate") return; // C3 r487+ uistate/ subfolders are not C3 source
+        if (isEditorLocalPath(file)) return; // C3 r487+ uistate/ subfolders are not C3 source
         result.push(...find_all_files_path(filepath, predicate));
       } else if (stats.isFile() && predicate(file)) {
         result.push(filepath);
@@ -111,11 +127,11 @@ export function find_all_files_path(dir: string, predicate: (filename: string) =
 }
 
 export function find_all_layouts_path(layout_dir: string): string[] {
-  return find_all_files_path(layout_dir, (file) => !file.endsWith(".uistate.json"));
+  return find_all_files_path(layout_dir, (file) => !isEditorLocalPath(file));
 }
 
 export function find_all_objectTypes_path(objectTypesDir: string): string[] {
-  return find_all_files_path(objectTypesDir, (file) => !file.endsWith(".uistate.json"));
+  return find_all_files_path(objectTypesDir, (file) => !isEditorLocalPath(file));
 }
 
 // Return true if layout must be saved.
@@ -518,7 +534,7 @@ export interface ExtractedScript {
  * Find all eventSheet JSON files (excluding .uistate.json) in a directory tree.
  */
 export function find_all_eventsheets_path(eventSheetsDir: string): string[] {
-  return find_all_files_path(eventSheetsDir, (file) => file.endsWith(".json") && !file.endsWith(".uistate.json"));
+  return find_all_files_path(eventSheetsDir, (file) => file.endsWith(".json") && !isEditorLocalPath(file));
 }
 
 export function isScriptAction(action: ScriptAction | Record<string, unknown>): action is ScriptAction {
