@@ -31,8 +31,8 @@ Package manager is **npm** (Node >= 22). All checks below run in CI and must pas
 
 ```sh
 npm install
-npm run lint        # eslint, --max-warnings 0 over src/ and test/
-npm run typecheck   # tsc against tsconfig.test.json (src + test), --noEmit
+npm run lint        # eslint, --max-warnings 0 over src/ and test/ (test/fixtures/ excluded)
+npm run typecheck   # tsc against tsconfig.test.json (src + test, excluding test/fixtures/), --noEmit
 npm run test        # mocha + tsx, runs test/**/*.test.ts
 npm run build       # tsc -> dist/ (the published artifact)
 ```
@@ -82,8 +82,8 @@ Two functional areas:
    instead of maintaining a parallel collector that drifts on the next skip-rule
    fix (issue #16); its `predicate` receives the bare basename. The key
    pattern: a `LayerVisitor`
-   returns a *mutation count* (number) and an `InstanceVisitor` returns a
-   *changed* boolean; `visit_layers_in_layout` sums the counts and **rewrites
+   returns a _mutation count_ (number) and an `InstanceVisitor` returns a
+   _changed_ boolean; `visit_layers_in_layout` sums the counts and **rewrites
    the layout file only when the total is > 0**. So visitors that mutate
    in-place must report it via the return value or the change is silently
    dropped. Full layer names are `LayoutName.LayerName`; layers flagged
@@ -102,15 +102,21 @@ Two functional areas:
    format only; not the single-file archive) is modeled by `C3ProjectManifest`
    and parsed strictly by `parseProjectManifest(json)`/`readProjectManifest(path)`.
    Mapping tables `C3_SECTION_FOLDERS` and `C3_ROOT_FILE_FOLDERS` map manifest
-   section keys to on-disk folder names. Flatteners `collectManifestItemNames`
-   (recursive, `C3NameFolder`) and `collectManifestFileNames` (recursive,
-   `C3FileFolder`) enumerate declared names. `detectManifestDrift(projectDir,
-   manifest?)` compares declared membership against on-disk source (editor-local
-   filtered via `isEditorLocalPath`) and returns `ManifestDrift: {sections:
-   SectionDrift[], inSync}` per section with `{missingOnDisk, untracked}`.
-   Name-folder disk walks are recursive (via `find_all_files_path`); file-folder
-   disk walks are deliberately **shallow** (`readdirSync` + `isFile` only) so
-   generated subtrees like `scripts/ts-defs/` are not falsely flagged as untracked.
+   section keys to on-disk folder names. `collectManifestItemNames`/`collectManifestFileNames`
+   are thin consumers of the canonical walks `walkManifestNameTree`/`walkManifestFileTree`
+   (no parallel recursion). `detectManifestDrift(projectDir, manifest?)` compares
+   declared membership against on-disk source (editor-local filtered via `isEditorLocalPath`)
+   and returns `ManifestDrift: {sections: SectionDrift[], inSync}`. Each `SectionDrift`
+   carries `entries: DriftEntry[]` — a structured list where every entry has a `kind`
+   (`missing` | `untracked` | `moved` | `folder-missing` | `folder-untracked` | `dangling-ref`)
+   and path-segment arrays (`manifestPath`, `diskPath`) locating the item within the
+   subfolder nesting without re-walking. Name-section disk walks use `walkDiskNameTree`
+   (recursive, `readdirSync`-based, section-root-relative paths). File-folder disk walks
+   use `walkDiskFileTree` which recurses **manifest-declared subfolders only** (D3) — so
+   undeclared generated subtrees like `scripts/ts-defs/` are never visited. `diffNameMaps`
+   is the diff engine: it builds `name → path` maps per side and emits `missing`/`untracked`/`moved`
+   entries (a same-name/different-path leaf is a move, not a delete+add, exploiting
+   per-category name uniqueness — a C3 invariant).
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,
