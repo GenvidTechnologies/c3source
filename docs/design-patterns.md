@@ -123,27 +123,76 @@ strings, with no leading dot on the first string segment (so the root object's
 keys render as `key`, not `.key`). The empty-segments case (`segments.length ===
 0`) returns `""`, which callers can intercept to substitute a semantic label.
 
-## Shallow vs recursive disk walk in detectManifestDrift
+## Path-bearing drift via name→path map diffing
 
-`detectManifestDrift` uses **two different walk depths** for its two manifest
-section types:
+Manifest drift detection for name-folder sections (layouts, objectTypes,
+eventSheets, families, …) is built on a single canonical walk per side, paired
+with a name→path map diff. The invariant that enables this: **leaf names are
+unique within each section** (a C3 guarantee). No two layouts share a name, no
+two objectTypes share a name, and so on within each category.
 
-- **Name-folder sections** (`layouts`, `eventSheets`, `objectTypes`, …) —
-  recursive via `find_all_files_path`. These are C3 source trees where C3 itself
-  writes files at arbitrary depth, so the full tree must be visited.
-- **File-folder sections** (`rootFileFolders.script`, `.icon`, …) — **shallow**:
-  `readdirSync(folder).filter(isFile)`. Manifest membership for file folders is
-  itself flat (each `C3FileEntry` in the manifest is a top-level entry), and the
-  corresponding on-disk directories can contain generated subdirectories
-  (e.g. `scripts/ts-defs/` written by C3 for TypeScript definitions). A recursive
-  walk would surface every file in `ts-defs/` as an untracked artifact. The
-  shallow walk sidesteps this without needing an explicit exclusion for each
-  generated subtree — a new generated subdir is simply invisible.
+**One walk per side.** `walkManifestNameTree(folder)` and `walkDiskNameTree(dir)`
+each return `Array<{ name: string; path: ManifestPathSegment[] }>`. Every item
+carries the chain of ancestor subfolder names as `path` — e.g. a layout declared
+inside a manifest subfolder named `"cutscenes"` has `path: ["cutscenes"]`; a
+layout at the section root has `path: []`. The disk walk preserves the same
+structure: `path` segments are the subdirectory names relative to the section root.
 
-The invariant: **walk depth must match what the manifest can declare**. If C3
-ever allows file-folder subfolders in the manifest, both the manifest model
-(`C3FileFolder.subfolders`) and the disk walk (`diskFileFolderNames`) would need
-to become recursive together.
+**One diff, three outcomes.** `diffNameMaps(manifestItems, diskItems)` converts
+each list into a `Map<name, path>` and computes:
+
+- name in manifest only → `{ kind: "missing", name, manifestPath }` — the caller
+  knows where in the manifest tree to find the stale entry.
+- name on disk only → `{ kind: "untracked", name, diskPath }` — the caller knows
+  where on disk the orphan lives.
+- name on both sides, paths differ → `{ kind: "moved", name, manifestPath, diskPath }` —
+  same object, different organizational subfolder. A sync tool can apply this as
+  a relocation rather than delete+add, because name uniqueness means there is no
+  ambiguity about which manifest entry matches which disk file.
+
+**Folder-level drift** (subfolders present on only one side) is diffed separately
+via `collectManifestFolderPaths` / `collectDiskFolderPaths` + `diffFolderPaths`,
+producing `folder-missing` and `folder-untracked` entries. These are merged with
+the item-level entries and sorted deterministically by kind then name before the
+`SectionDrift` is emitted.
+
+**Rendering.** `formatManifestPath(segments)` renders a segment array as a
+slash-joined string (`""` for root, `"global/images"` for `["global", "images"]`),
+mirroring `formatSidPath` for manifest paths. Callers can use the raw segment
+arrays for tree mutations or `formatManifestPath` for display. The two are kept
+separate for the same reason `walkSids` / `formatSidPath` are: the traversal
+should not dictate the rendering.
+
+## Declared-subfolder recursion for file-folder walks
+
+`detectManifestDrift` uses **two different walk strategies** for its two manifest
+section types, unified by one invariant: **walk depth must match what the manifest
+can declare**.
+
+- **Name-folder sections** (`layouts`, `eventSheets`, `objectTypes`, `families`,
+  `models3d`, …) — walk recursively through the full disk tree
+  (`walkDiskNameTree`). These are C3 source trees where C3 itself writes
+  `<Name>.json` files at arbitrary subfolder depth. Both the manifest walk
+  (`walkManifestNameTree`) and the disk walk descend fully, so no item is missed.
+
+- **File-folder sections** (`rootFileFolders.script`, `.icon`, …) — recurse
+  **only into subdirectories whose name matches a declared subfolder** in the
+  manifest (`walkDiskFileTree(dir, folder.subfolders)`). Undeclared
+  subdirectories are never entered. This makes generated trees like
+  `scripts/ts-defs/` — which C3 writes for TypeScript projects but never
+  declares in `rootFileFolders.script` — permanently invisible to drift
+  detection without requiring an explicit exclusion entry for each one.
+
+The practical effect: adding a new C3-generated subtree under `scripts/` (or
+`icons/`, etc.) never breaks drift detection. The walk simply does not descend
+there because the subtree has no matching declaration in the manifest.
+
+The invariant is preserved symmetrically: `walkManifestFileTree` recurses into
+declared subfolders; `walkDiskFileTree` recurses into the same declared
+subfolders on disk. If C3 were to introduce file-folder nesting in a future
+release, updating `C3FileFolder.subfolders` in the manifest model (and ensuring
+the manifest file carries the `name` field) is sufficient — both walk functions
+already handle the recursive case.
 
 ## Testing: real-export ground truth + inline legibility
 
