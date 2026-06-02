@@ -66,6 +66,16 @@ describe("parseProjectManifest / readProjectManifest", () => {
     expect(Object.prototype.hasOwnProperty.call(m, "firstLayout")).to.equal(true);
     expect(Array.isArray(m.usedAddons)).to.equal(true);
   });
+
+  it("R-C16: populated subfolders carry a name; degenerate empty subfolder has none", () => {
+    expect(m.objectTypes.subfolders.map((sf) => sf.name)).to.deep.equal(["global", "images", "tiles"]);
+    // the empty timelines subfolder C3 serialized without a name must parse cleanly
+    expect(m.timelines.subfolders[0].name).to.equal(undefined);
+  });
+
+  it("R-C17: containers are typed with a string[] members list", () => {
+    expect(m.containers[0].members).to.deep.equal(["Sprite2", "Text2"]);
+  });
 });
 
 describe("parseProjectManifest — strict throws", () => {
@@ -98,6 +108,18 @@ describe("parseProjectManifest — strict throws", () => {
     const raw = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
     delete raw.layouts;
     expect(() => parseProjectManifest(raw)).to.not.throw();
+  });
+
+  it("R-C18: throws when a subfolder name is present but not a string", () => {
+    const bad = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+    bad.objectTypes.subfolders[0].name = 123;
+    expect(() => parseProjectManifest(bad)).to.throw(/name must be a string when present/);
+  });
+
+  it("R-C19: throws when a container's members are not all strings", () => {
+    const bad = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+    bad.containers[0].members = ["ok", 7];
+    expect(() => parseProjectManifest(bad)).to.throw(/containers\[0\]\.members must be string\[\]/);
   });
 });
 

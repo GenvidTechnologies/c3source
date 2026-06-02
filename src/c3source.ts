@@ -981,6 +981,9 @@ export function collectSidsWithPaths(node: unknown): Array<{ sid: number; path: 
 export interface C3NameFolder {
   items: string[];
   subfolders: C3NameFolder[];
+  /** Organizational subfolder name (matches the on-disk subdirectory). Absent on the
+   *  section root and on degenerate empty subfolders C3 serializes without a name. */
+  name?: string;
 }
 
 /** A single file entry in a rootFileFolders category. */
@@ -995,6 +998,15 @@ export interface C3FileEntry {
 export interface C3FileFolder {
   items: C3FileEntry[];
   subfolders: C3FileFolder[];
+  /** Organizational subfolder name (matches the on-disk subdirectory). Absent on the
+   *  category root and on degenerate empty subfolders C3 serializes without a name. */
+  name?: string;
+}
+
+/** A container declaration: a set of object-type names that travel together. */
+export interface C3Container {
+  members: string[];
+  [key: string]: unknown;
 }
 
 /** All seven rootFileFolders categories. */
@@ -1021,7 +1033,7 @@ export interface C3ProjectManifest {
   flowcharts: C3NameFolder;
   families: C3NameFolder;
   models3d: C3NameFolder;
-  containers: unknown[];
+  containers: C3Container[];
   rootFileFolders: C3RootFileFolders;
   properties: Record<string, unknown>;
   [key: string]: unknown; // forward-compat: usedAddons, viewportWidth, firstLayout, …
@@ -1055,10 +1067,15 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+function assertOptionalName(v: Record<string, unknown>, where: string): void {
+  assert(v.name === undefined || typeof v.name === "string", `${where}.name must be a string when present`);
+}
+
 function assertNameFolder(v: unknown, where: string): asserts v is C3NameFolder {
   assert(isRecord(v), `${where} must be an object`);
   assert(Array.isArray(v.items) && v.items.every((i) => typeof i === "string"), `${where}.items must be string[]`);
   assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
+  assertOptionalName(v, where);
   v.subfolders.forEach((sf, i) => assertNameFolder(sf, `${where}.subfolders[${i}]`));
 }
 
@@ -1072,7 +1089,16 @@ function assertFileFolder(v: unknown, where: string): asserts v is C3FileFolder 
     assert(typeof it.sid === "number", `${where}.items[${i}].sid must be a number`);
   });
   assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
+  assertOptionalName(v, where);
   v.subfolders.forEach((sf, i) => assertFileFolder(sf, `${where}.subfolders[${i}]`));
+}
+
+function assertContainer(v: unknown, where: string): asserts v is C3Container {
+  assert(isRecord(v), `${where} must be an object`);
+  assert(
+    Array.isArray(v.members) && v.members.every((mem) => typeof mem === "string"),
+    `${where}.members must be string[]`,
+  );
 }
 
 const NAME_SECTIONS = [
@@ -1136,6 +1162,10 @@ export function parseProjectManifest(json: unknown): C3ProjectManifest {
     assert(isRecord(rff), "rootFileFolders must be an object");
     for (const cat of Object.keys(C3_ROOT_FILE_FOLDERS))
       if (cat in rff) assertFileFolder(rff[cat], `rootFileFolders.${cat}`);
+  }
+  if ("containers" in json) {
+    assert(Array.isArray(json.containers), "containers must be an array");
+    json.containers.forEach((c, i) => assertContainer(c, `containers[${i}]`));
   }
   return json as unknown as C3ProjectManifest;
 }
