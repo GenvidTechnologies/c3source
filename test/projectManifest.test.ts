@@ -147,7 +147,7 @@ describe("detectManifestDrift", () => {
     expect(drift.sections).to.deep.equal([]);
   });
 
-  it("R-C13: phantom manifest entry produces missingOnDisk", () => {
+  it("R-C13: phantom manifest entry produces a missing DriftEntry", () => {
     const base = readProjectManifest(MANIFEST_PATH);
     const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
     clone.layouts.items.push("Phantom Layout");
@@ -155,10 +155,13 @@ describe("detectManifestDrift", () => {
     expect(drift.inSync).to.equal(false);
     const layoutsDrift = drift.sections.find((s: SectionDrift) => s.section === "layouts");
     expect(layoutsDrift).to.not.be.undefined;
-    expect(layoutsDrift!.missingOnDisk).to.deep.equal(["Phantom Layout"]);
+    const missing = layoutsDrift!.entries.filter((e) => e.kind === "missing");
+    expect(missing.length).to.equal(1);
+    expect(missing[0].name).to.equal("Phantom Layout");
+    expect(missing[0].manifestPath).to.deep.equal([]);
   });
 
-  it("R-C14: clearing layouts.items surfaces real file as untracked; no editor-local entries", () => {
+  it("R-C14: clearing layouts.items surfaces real files as untracked DriftEntries; no editor-local entries", () => {
     const base = readProjectManifest(MANIFEST_PATH);
     const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
     clone.layouts.items = [];
@@ -166,13 +169,17 @@ describe("detectManifestDrift", () => {
     expect(drift.inSync).to.equal(false);
     const layoutsDrift = drift.sections.find((s: SectionDrift) => s.section === "layouts");
     expect(layoutsDrift).to.not.be.undefined;
-    expect(layoutsDrift!.untracked).to.deep.equal(["Main Layout", "Second Layout", "Templates Layout"]);
-    // editor-local artifacts must not appear
-    const allUntracked = drift.sections.flatMap((s: SectionDrift) => s.untracked);
-    expect(allUntracked.some((u: string) => u.includes("instancesBar") || u === "uistate")).to.equal(false);
+    const untracked = layoutsDrift!.entries.filter((e) => e.kind === "untracked");
+    expect(untracked.length).to.equal(3);
+    const names = untracked.map((e) => e.name).sort();
+    expect(names).to.deep.equal(["Main Layout", "Second Layout", "Templates Layout"]);
+    expect(untracked.every((e) => Array.isArray(e.diskPath))).to.equal(true);
+    // editor-local artifacts must not appear in any section's entries
+    const allEntryNames = drift.sections.flatMap((s: SectionDrift) => s.entries.map((e) => e.name));
+    expect(allEntryNames.some((n: string) => n.includes("instancesBar") || n === "uistate")).to.equal(false);
   });
 
-  it("R-C15: clearing script items surfaces js files as untracked; ts-defs/ not flagged", () => {
+  it("R-C15: clearing script items surfaces ts files as untracked DriftEntries; ts-defs/ and tsconfig.json not flagged", () => {
     const base = readProjectManifest(MANIFEST_PATH);
     const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
     clone.rootFileFolders.script.items = [];
@@ -180,10 +187,13 @@ describe("detectManifestDrift", () => {
     expect(drift.inSync).to.equal(false);
     const scriptDrift = drift.sections.find((s: SectionDrift) => s.section === "rootFileFolders.script");
     expect(scriptDrift).to.not.be.undefined;
-    expect(scriptDrift!.untracked.sort()).to.deep.equal(["importsForEvents.ts", "main.ts"]);
-    // ts-defs/ (dir) and tsconfig.json (generated) are editor-local and must not appear
-    expect(scriptDrift!.untracked.some((u: string) => u.includes("ts-defs"))).to.equal(false);
-    expect(scriptDrift!.untracked.includes("tsconfig.json")).to.equal(false);
+    const untracked = scriptDrift!.entries.filter((e) => e.kind === "untracked");
+    expect(untracked.length).to.equal(2);
+    const names = untracked.map((e) => e.name).sort();
+    expect(names).to.deep.equal(["importsForEvents.ts", "main.ts"]);
+    // ts-defs/ (undeclared dir) and tsconfig.json (editor-local) must not appear
+    expect(untracked.some((e) => e.name.includes("ts-defs"))).to.equal(false);
+    expect(untracked.some((e) => e.name === "tsconfig.json")).to.equal(false);
   });
 });
 

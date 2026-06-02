@@ -1045,10 +1045,13 @@ export interface SectionDrift {
   section: string;
   /** Resolved on-disk folder name, e.g. "layouts", "scripts". */
   folder: string;
-  /** Names declared in the manifest but no file found on disk. */
-  missingOnDisk: string[];
-  /** Files on disk that the manifest doesn't declare. */
-  untracked: string[];
+  /**
+   * Structured drift entries for this section. Each entry carries a `kind`
+   * (missing | untracked | moved | folder-missing | folder-untracked | dangling-ref)
+   * and the path-segment arrays (`manifestPath`, `diskPath`) needed to locate the
+   * item within the manifest/disk subfolder nesting without re-walking the tree.
+   */
+  entries: DriftEntry[];
 }
 
 /** Result of detectManifestDrift. */
@@ -1180,18 +1183,20 @@ export function readProjectManifest(manifestPath: string): C3ProjectManifest {
 
 // ─── Flatteners ───────────────────────────────────────────────────────────────
 
-/** Collect all item names from a C3NameFolder, recursing into subfolders. */
+/**
+ * Collect all item names from a C3NameFolder, recursing into subfolders.
+ * Thin consumer of `walkManifestNameTree` — delegates to the canonical walk, no parallel recursion.
+ */
 export function collectManifestItemNames(folder: C3NameFolder): string[] {
-  const out = [...folder.items];
-  for (const sub of folder.subfolders) out.push(...collectManifestItemNames(sub));
-  return out;
+  return walkManifestNameTree(folder).map((e) => e.name);
 }
 
-/** Collect all file entry names from a C3FileFolder, recursing into subfolders. */
+/**
+ * Collect all file entry names from a C3FileFolder, recursing into subfolders.
+ * Thin consumer of `walkManifestFileTree` — delegates to the canonical walk, no parallel recursion.
+ */
 export function collectManifestFileNames(folder: C3FileFolder): string[] {
-  const out = folder.items.map((it) => it.name);
-  for (const sub of folder.subfolders) out.push(...collectManifestFileNames(sub));
-  return out;
+  return walkManifestFileTree(folder).map((e) => e.name);
 }
 
 // ─── Path-bearing drift types ─────────────────────────────────────────────────
@@ -1364,36 +1369,6 @@ export function diffNameMaps(
 
 // ─── Drift detector ───────────────────────────────────────────────────────────
 
-/** Recursive walk: collect basename-minus-.json for every .json that is not editor-local. */
-function diskNameFolderItems(folder: string): string[] {
-  if (!existsSync(folder)) return [];
-  return find_all_files_path(folder, (f) => f.endsWith(".json") && !isEditorLocalPath(f)).map((p) =>
-    path.basename(p, ".json"),
-  );
-}
-
-/**
- * Shallow walk: collect basenames of files (not dirs) that are not editor-local.
- * Shallow is intentional — manifest rootFileFolder membership is itself flat, so we
- * must NOT recurse. This sidesteps generated subdirs like ts-defs/ without a new
- * exclusion rule (the construct3-chef#36 mitigation).
- */
-function diskFileFolderNames(folder: string): string[] {
-  if (!existsSync(folder)) return [];
-  return readdirSync(folder)
-    .filter((f) => !isEditorLocalPath(f))
-    .filter((f) => statSync(path.join(folder, f)).isFile());
-}
-
-function diffNames(declared: string[], onDisk: string[]): { missingOnDisk: string[]; untracked: string[] } {
-  const D = new Set(declared);
-  const K = new Set(onDisk);
-  return {
-    missingOnDisk: declared.filter((n) => !K.has(n)).sort(),
-    untracked: onDisk.filter((n) => !D.has(n)).sort(),
-  };
-}
-
 /**
  * Compare manifest-declared membership against on-disk source (editor-local filtered).
  * When `manifest` is omitted, reads `projectDir/project.c3proj`.
@@ -1403,20 +1378,21 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
   const m = manifest ?? readProjectManifest(path.join(projectDir, "project.c3proj"));
   const sections: SectionDrift[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
-    const declared = m[section] ? collectManifestItemNames(m[section] as C3NameFolder) : [];
-    const onDisk = diskNameFolderItems(path.join(projectDir, folderName));
-    const d = diffNames(declared, onDisk);
-    if (d.missingOnDisk.length || d.untracked.length) sections.push({ section, folder: folderName, ...d });
+    const declared = m[section] ? walkManifestNameTree(m[section] as C3NameFolder) : [];
+    const onDisk = walkDiskNameTree(path.join(projectDir, folderName));
+    const entries = diffNameMaps(declared, onDisk);
+    if (entries.length) sections.push({ section, folder: folderName, entries });
   }
   const rff = m.rootFileFolders;
   if (rff)
     for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
       const folder = rff[cat as keyof C3RootFileFolders];
-      const declared = folder ? collectManifestFileNames(folder) : [];
-      const onDisk = diskFileFolderNames(path.join(projectDir, folderName));
-      const d = diffNames(declared, onDisk);
-      if (d.missingOnDisk.length || d.untracked.length)
-        sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, ...d });
+      const declared = folder ? walkManifestFileTree(folder) : [];
+      const onDisk = folder
+        ? walkDiskFileTree(path.join(projectDir, folderName), folder.subfolders)
+        : walkDiskFileTree(path.join(projectDir, folderName), []);
+      const entries = diffNameMaps(declared, onDisk);
+      if (entries.length) sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, entries });
     }
   return { sections, inSync: sections.length === 0 };
 }
