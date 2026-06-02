@@ -93,6 +93,12 @@ describe("parseProjectManifest — strict throws", () => {
     const parsed = parseProjectManifest(raw);
     expect((parsed as Record<string, unknown>).__extra__).to.equal("hello");
   });
+
+  it("tolerates a fully absent modeled section (does not throw)", () => {
+    const raw = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+    delete raw.layouts;
+    expect(() => parseProjectManifest(raw)).to.not.throw();
+  });
 });
 
 describe("collectManifestFileNames", () => {
