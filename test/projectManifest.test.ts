@@ -54,6 +54,8 @@ describe("parseProjectManifest / readProjectManifest", () => {
 
   it("R-C6: mapping tables have expected keys and values", () => {
     expect(C3_SECTION_FOLDERS.layouts).to.equal("layouts");
+    expect(C3_SECTION_FOLDERS.families).to.equal("families");
+    expect(C3_SECTION_FOLDERS.models3d).to.equal("models3d");
     const rootKeys = Object.keys(C3_ROOT_FILE_FOLDERS);
     expect(rootKeys.length).to.equal(7);
     expect(C3_ROOT_FILE_FOLDERS.script).to.equal("scripts");

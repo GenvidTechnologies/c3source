@@ -1115,16 +1115,19 @@ const NAME_SECTIONS = [
 
 /**
  * Manifest section key → on-disk folder name for name-folder sections.
- * NOTE: objectTypes assumes flat convention (objectTypes/<name>.json); unconfirmed
- * by the fixture (empty objectTypes). families/models3d/containers intentionally absent.
+ * Every section follows the same shape: flat <Name>.json files arranged in named
+ * organizational subfolders that mirror the manifest's subfolder tree (confirmed by a
+ * real export, incl. objectTypes — there is NO per-objectType directory). `containers`
+ * is intentionally absent (declared inline in the manifest, no on-disk folder).
  */
 export const C3_SECTION_FOLDERS = {
   layouts: "layouts",
   eventSheets: "eventSheets",
-  /** Flat <name>.json convention assumed; unconfirmed by the empty fixture — mark for richer fixture. */
   objectTypes: "objectTypes",
   timelines: "timelines",
   flowcharts: "flowcharts",
+  families: "families",
+  models3d: "models3d",
 } as const;
 
 /**
