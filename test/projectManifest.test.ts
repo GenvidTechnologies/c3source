@@ -31,12 +31,12 @@ describe("parseProjectManifest / readProjectManifest", () => {
   });
 
   it("R-C2: name-folder typing — layouts.items and eventSheets.items", () => {
-    expect(m.layouts.items).to.deep.equal(["Layout 1"]);
-    expect(m.eventSheets.items).to.deep.equal(["Event sheet 1"]);
+    expect(m.layouts.items).to.deep.equal(["Main Layout", "Second Layout", "Templates Layout"]);
+    expect(m.eventSheets.items).to.deep.equal(["Event sheet 1", "Event sheet 2"]);
   });
 
   it("R-C3: file-folder typing — script items and icon count", () => {
-    expect(m.rootFileFolders.script.items[0].name).to.equal("main.js");
+    expect(m.rootFileFolders.script.items[0].name).to.equal("importsForEvents.ts");
     expect(typeof m.rootFileFolders.script.items[0].sid).to.equal("number");
     expect(m.rootFileFolders.icon.items.length).to.equal(7);
   });
@@ -105,8 +105,8 @@ describe("collectManifestFileNames", () => {
   it("flattens file-folder items recursively", () => {
     const m = readProjectManifest(MANIFEST_PATH);
     const names = collectManifestFileNames(m.rootFileFolders.script);
-    expect(names).to.include("main.js");
-    expect(names).to.include("importsForEvents.js");
+    expect(names).to.include("main.ts");
+    expect(names).to.include("importsForEvents.ts");
     expect(names.length).to.equal(2);
   });
 });
@@ -137,7 +137,7 @@ describe("detectManifestDrift", () => {
     expect(drift.inSync).to.equal(false);
     const layoutsDrift = drift.sections.find((s: SectionDrift) => s.section === "layouts");
     expect(layoutsDrift).to.not.be.undefined;
-    expect(layoutsDrift!.untracked).to.deep.equal(["Layout 1"]);
+    expect(layoutsDrift!.untracked).to.deep.equal(["Main Layout", "Second Layout", "Templates Layout"]);
     // editor-local artifacts must not appear
     const allUntracked = drift.sections.flatMap((s: SectionDrift) => s.untracked);
     expect(allUntracked.some((u: string) => u.includes("instancesBar") || u === "uistate")).to.equal(false);

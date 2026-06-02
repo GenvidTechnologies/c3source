@@ -5,28 +5,120 @@
 	"runtime": "c3",
 	"useWorker": "auto",
 	"bundleAddons": false,
-	"usedAddons": [],
+	"usedAddons": [
+		{
+			"type": "plugin",
+			"id": "Json",
+			"name": "JSON",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "NinePatch",
+			"name": "9-patch",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "Sprite",
+			"name": "Sprite",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "Text",
+			"name": "Text",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "TextBox",
+			"name": "Text input",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "TiledBg",
+			"name": "Tiled Background",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "Tilemap",
+			"name": "Tilemap",
+			"author": "Scirra",
+			"bundled": false
+		}
+	],
 	"uniqueId": "je2an0z14z6",
 	"objectTypes": {
-		"items": [],
-		"subfolders": []
+		"items": [
+			"Text",
+			"TextInput",
+			"Text2"
+		],
+		"subfolders": [
+			{
+				"items": [
+					"JSON"
+				],
+				"subfolders": [],
+				"name": "global"
+			},
+			{
+				"items": [
+					"9patch",
+					"Sprite",
+					"Sprite2",
+					"Sprite3"
+				],
+				"subfolders": [],
+				"name": "images"
+			},
+			{
+				"items": [
+					"TiledBackground",
+					"Tilemap"
+				],
+				"subfolders": [],
+				"name": "tiles"
+			}
+		]
 	},
 	"functionsName": "Functions",
 	"autosaveData": null,
-	"containers": [],
+	"containers": [
+		{
+			"members": [
+				"Sprite2",
+				"Text2"
+			]
+		}
+	],
 	"families": {
-		"items": [],
+		"items": [
+			"TextFamily"
+		],
 		"subfolders": []
 	},
 	"layouts": {
 		"items": [
-			"Layout 1"
+			"Main Layout",
+			"Second Layout",
+			"Templates Layout"
 		],
 		"subfolders": []
 	},
 	"eventSheets": {
 		"items": [
-			"Event sheet 1"
+			"Event sheet 1",
+			"Event sheet 2"
 		],
 		"subfolders": []
 	},
@@ -34,19 +126,19 @@
 		"script": {
 			"items": [
 				{
-					"name": "main.js",
-					"type": "application/javascript",
-					"sid": 556719570951547,
+					"name": "importsForEvents.ts",
+					"type": "application/typescript",
+					"sid": 382556966325545,
 					"script-info": {
-						"purpose": "main"
+						"purpose": "imports-for-events"
 					}
 				},
 				{
-					"name": "importsForEvents.js",
-					"type": "application/javascript",
-					"sid": 854030601028940,
+					"name": "main.ts",
+					"type": "application/typescript",
+					"sid": 893316825679838,
 					"script-info": {
-						"purpose": "imports-for-events"
+						"purpose": "main"
 					}
 				}
 			],
