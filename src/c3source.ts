@@ -949,6 +949,29 @@ export function extractFunctions(sheet: EventSheet): ExtractedFunction[] {
   return functions;
 }
 
+/** A single include edge: the sheet pulled in, plus its locator in the tree. */
+export interface IncludeReference {
+  /** Name of the included event sheet (IncludeEvent.includeSheet). */
+  includeSheet: string;
+  /** Locator of the include event, e.g. "events[2]" or "events[0].children[1]". */
+  jsonPath: string;
+}
+
+/**
+ * List the sheets this sheet includes, in canonical event order, each paired
+ * with its `jsonPath` coordinate. Includes are non-counting events (no
+ * eventNumber), so the jsonPath is their canonical locator.
+ */
+export function extractIncludes(sheet: EventSheet): IncludeReference[] {
+  const includes: IncludeReference[] = [];
+  visitEvents(sheet.events, (event, ctx) => {
+    if (event.eventType === "include") {
+      includes.push({ includeSheet: event.includeSheet, jsonPath: ctx.jsonPath });
+    }
+  });
+  return includes;
+}
+
 /** A path segment: object key (string) or array index (number). */
 export type SidPathSegment = string | number;
 
