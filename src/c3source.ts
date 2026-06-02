@@ -1394,7 +1394,27 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
       const entries = diffNameMaps(declared, onDisk);
       if (entries.length) sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, entries });
     }
+  const containerEntries = detectContainerDrift(m);
+  if (containerEntries.length) sections.push({ section: "containers", folder: "", entries: containerEntries });
   return { sections, inSync: sections.length === 0 };
+}
+
+/**
+ * Referential-integrity check for containers: a container member that names an
+ * object type absent from the manifest is a dangling reference. Containers are
+ * declared inline (no on-disk folder), so this is manifest-vs-manifest only.
+ * `manifestPath` carries `#<containerIndex>` to locate which container holds the
+ * dangling member; `name` is the missing object-type name.
+ */
+function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
+  if (!Array.isArray(m.containers) || m.containers.length === 0) return [];
+  const objectTypeNames = new Set(m.objectTypes ? walkManifestNameTree(m.objectTypes).map((e) => e.name) : []);
+  const entries: DriftEntry[] = [];
+  m.containers.forEach((container, i) => {
+    for (const member of container.members)
+      if (!objectTypeNames.has(member)) entries.push({ kind: "dangling-ref", name: member, manifestPath: [`#${i}`] });
+  });
+  return entries;
 }
 
 /** Which C3 schema slot a sid was found in. */

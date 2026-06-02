@@ -195,6 +195,29 @@ describe("detectManifestDrift", () => {
     expect(untracked.some((e) => e.name.includes("ts-defs"))).to.equal(false);
     expect(untracked.some((e) => e.name === "tsconfig.json")).to.equal(false);
   });
+
+  it("R-C20: clean fixture has no container drift (all members are declared object types)", () => {
+    const drift = detectManifestDrift(FIXTURE_DIR);
+    expect(drift.sections.find((s: SectionDrift) => s.section === "containers")).to.be.undefined;
+  });
+
+  it("R-C21: a container member naming a missing object type is a dangling-ref", () => {
+    const base = readProjectManifest(MANIFEST_PATH);
+    const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
+    // remove Sprite2 from the manifest's object types (it is a container member)
+    clone.objectTypes.subfolders = clone.objectTypes.subfolders.map((sf) => ({
+      ...sf,
+      items: sf.items.filter((n) => n !== "Sprite2"),
+    }));
+    const drift = detectManifestDrift(FIXTURE_DIR, clone);
+    expect(drift.inSync).to.equal(false);
+    const containerDrift = drift.sections.find((s: SectionDrift) => s.section === "containers");
+    expect(containerDrift).to.not.be.undefined;
+    const dangling = containerDrift!.entries.filter((e) => e.kind === "dangling-ref");
+    expect(dangling.length).to.equal(1);
+    expect(dangling[0].name).to.equal("Sprite2");
+    expect(dangling[0].manifestPath).to.deep.equal(["#0"]);
+  });
 });
 
 describe("F1: path-walk primitives", () => {
