@@ -129,6 +129,10 @@ const label = formatCondition({ id: "on-start-of-layout", objectClass: "System",
 // "System.on-start-of-layout()"
 ```
 
+## Further reading
+
+For usage reference covering SID traversal, editor-local classification, and project manifest parsing/drift detection, see [docs/api-guide.md](docs/api-guide.md).
+
 ## Notes
 
 - Layer visitor full names use the format `LayoutName.LayerName`; global layers use `global.LayerName`.
