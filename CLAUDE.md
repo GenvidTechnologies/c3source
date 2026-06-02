@@ -14,11 +14,16 @@ the C3 editor. There is no runtime application; it ships as a library.
 
 Feature branches are squashed on merge, and work documents under
 `docs/superpowers/` (specs, plans) are routinely cleaned up — treat them as
-ephemeral scaffolding, not durable records. The durable record of a design or
+ephemeral scaffolding, not durable records. The root `plan.md` produced by the
+`plan-task` workflow is the same: it is committed as a prep commit while the
+branch is in flight, but **removed as part of PR creation** so it never lands on
+`main` (a stale one leaking onto `main` once misled a later session into reading
+the wrong plan). The durable record of a design or
 decision is the **GitHub issue or PR** (post the spec as an issue comment or in
-the PR body, where it survives the squash). Never cite an unpushed local branch
-or commit hash in external communication (issue/PR comments) — link to
-something the reader can actually open, or push first.
+the PR body, where it survives the squash) — and the PR body should be a concise
+summary linking to real docs, not a paste of the design spec. Never cite an
+unpushed local branch or commit hash in external communication (issue/PR
+comments) — link to something the reader can actually open, or push first.
 
 ## Commands
 
