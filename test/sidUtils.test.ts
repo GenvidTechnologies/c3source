@@ -8,7 +8,10 @@ const sheet: EventSheet = {
     {
       eventType: "block",
       conditions: [{ id: "is-visible", objectClass: "Sprite", sid: 200 }],
-      actions: [{ type: "script", language: "typescript", script: ["x()"] }, { id: "do", objectClass: "Sprite", sid: 300 }],
+      actions: [
+        { type: "script", language: "typescript", script: ["x()"] },
+        { id: "do", objectClass: "Sprite", sid: 300 },
+      ],
       sid: 201,
     },
     {
@@ -62,5 +65,37 @@ describe("findSid", () => {
 
   it("returns null for an unknown sid", () => {
     expect(findSid(sheet, 999)).to.equal(null);
+  });
+});
+
+import { walkSids, formatSidPath, type SidPathSegment } from "../src/c3source.js";
+
+describe("walkSids (exported)", () => {
+  it("R-A2: delivers correct segment arrays", () => {
+    const hits: Array<{ sid: number; segments: SidPathSegment[] }> = [];
+    walkSids(sheet, (sid, segments) => hits.push({ sid, segments: [...segments] }));
+    const byId = Object.fromEntries(hits.map((h) => [h.sid, h.segments]));
+    expect(byId[100]).to.deep.equal([]);
+    expect(byId[201]).to.deep.equal(["events", 0]);
+    expect(byId[200]).to.deep.equal(["events", 0, "conditions", 0]);
+  });
+  it("R-A3: index segments are numbers, key segments are strings", () => {
+    const hit: SidPathSegment[] = [];
+    walkSids(sheet, (sid, segs) => {
+      if (sid === 201) hit.push(...segs);
+    });
+    expect(typeof hit[0]).to.equal("string");
+    expect(typeof hit[1]).to.equal("number");
+  });
+  it("R-A4: root delivers empty segments; formatSidPath([]) === ''", () => {
+    let rootSegs: SidPathSegment[] | null = null;
+    walkSids({ sid: 5 }, (_, segs) => {
+      rootSegs = [...segs];
+    });
+    expect(rootSegs).to.deep.equal([]);
+    expect(formatSidPath([])).to.equal("");
+  });
+  it("R-A5: formatSidPath joiner round-trip", () => {
+    expect(formatSidPath(["events", 0, "conditions", 0])).to.equal("events[0].conditions[0]");
   });
 });
