@@ -120,12 +120,12 @@ describe("visit_layers_in_layouts (file walker)", () => {
 
   it("discovers the real fixture layout and qualifies its layer name", function () {
     const layoutsDir = fixturePath("sample-project/layouts");
-    if (!fixtureExists("sample-project/layouts/Layout 1.json")) return this.skip();
+    if (!fixtureExists("sample-project/layouts/Main Layout.json")) return this.skip();
     const found: string[] = [];
     visit_layers_in_layouts(layoutsDir, (layer, fullLayerName) => {
       if (layer.name) found.push(fullLayerName);
       return 0; // read-only: never write to the fixture
     });
-    expect(found).to.include("Layout 1.Layer 0");
+    expect(found).to.include("Main Layout.layer 0");
   });
 });

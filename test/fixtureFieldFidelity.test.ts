@@ -2,7 +2,7 @@ import { expect } from "chai";
 import type { EventSheet, Layout } from "../src/c3source.js";
 import { fixtureExists, loadFixture } from "./fixtureHelpers.js";
 
-const LAYOUT = "sample-project/layouts/Layout 1.json";
+const LAYOUT = "sample-project/layouts/Main Layout.json";
 const SHEET = "sample-project/eventSheets/Event sheet 1.json";
 
 // Ground-truth checks against a real C3 export: confirm the §1 optional
