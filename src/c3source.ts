@@ -74,17 +74,23 @@ export interface ObjectType {
 }
 
 /** The canonical set of C3-editor-local artifacts that are NOT project source. */
-export const EDITOR_LOCAL_EXCLUSIONS: { dirs: readonly string[]; fileSuffixes: readonly string[] } = {
-  dirs: ["uistate"], // C3 r487+ uistate/ subfolders
+export const EDITOR_LOCAL_EXCLUSIONS: {
+  dirs: readonly string[];
+  fileSuffixes: readonly string[];
+  exactNames: readonly string[];
+} = {
+  dirs: ["uistate", "ts-defs"], // C3 r487+ uistate/ subfolders; ts-defs/ is C3-generated TS typings
   fileSuffixes: [".uistate.json"],
+  exactNames: ["tsconfig.json"], // C3-generated for TypeScript projects (overwritten by the editor)
 };
 
 /** True if a bare basename is a C3-editor-local artifact (not project source):
- *  a dir named like an excluded dir, or a file with an excluded suffix.
- *  Covers BOTH forms so it replaces every skip site uniformly. */
+ *  a dir named like an excluded dir, a file with an excluded suffix, or an exact
+ *  generated filename. Covers every form so it replaces all skip sites uniformly. */
 export function isEditorLocalPath(name: string): boolean {
   return (
     EDITOR_LOCAL_EXCLUSIONS.dirs.includes(name) ||
+    EDITOR_LOCAL_EXCLUSIONS.exactNames.includes(name) ||
     EDITOR_LOCAL_EXCLUSIONS.fileSuffixes.some((suffix) => name.endsWith(suffix))
   );
 }

@@ -151,8 +151,9 @@ describe("detectManifestDrift", () => {
     expect(drift.inSync).to.equal(false);
     const scriptDrift = drift.sections.find((s: SectionDrift) => s.section === "rootFileFolders.script");
     expect(scriptDrift).to.not.be.undefined;
-    expect(scriptDrift!.untracked.sort()).to.deep.equal(["importsForEvents.js", "main.js"]);
-    // ts-defs/ is a directory and must not appear
+    expect(scriptDrift!.untracked.sort()).to.deep.equal(["importsForEvents.ts", "main.ts"]);
+    // ts-defs/ (dir) and tsconfig.json (generated) are editor-local and must not appear
     expect(scriptDrift!.untracked.some((u: string) => u.includes("ts-defs"))).to.equal(false);
+    expect(scriptDrift!.untracked.includes("tsconfig.json")).to.equal(false);
   });
 });
