@@ -65,7 +65,11 @@ Two functional areas:
 1. **Layout traversal** — recursive `find_all_*_path` collectors (skip
    `.uistate.json` files and never descend into `uistate/` subfolders, which
    C3 r487+ writes alongside layouts/object-types/event-sheets) plus visitor
-   walkers. The named collectors are thin wrappers over the exported generic
+   walkers. The **one canonical definition** of "editor-local vs C3 source" is
+   `isEditorLocalPath(name): boolean` backed by `EDITOR_LOCAL_EXCLUSIONS: {dirs, fileSuffixes}`;
+   all four former inline skip sites (the `uistate/` directory check in
+   `find_all_files_path` plus the `.uistate.json` suffix checks in the three
+   named collectors) now consume it uniformly (#19). The named collectors are thin wrappers over the exported generic
    primitive `find_all_files_path(dir, predicate)` — the single recursive walk
    that owns the recursion, the `uistate/` skip, and the per-level
    `readdirSync().sort()` ordering. It is exported so downstream can discover
@@ -89,6 +93,19 @@ Two functional areas:
    (read → parse → visit → write-if-count>0). The walk is **fully recursive**
    through `subLayers` (an earlier version descended only one level), so
    consumers see nested layers a shallow walk previously skipped.
+   **Project manifest** — the `project.c3proj` file in the project root (folder
+   format only; not the single-file archive) is modeled by `C3ProjectManifest`
+   and parsed strictly by `parseProjectManifest(json)`/`readProjectManifest(path)`.
+   Mapping tables `C3_SECTION_FOLDERS` and `C3_ROOT_FILE_FOLDERS` map manifest
+   section keys to on-disk folder names. Flatteners `collectManifestItemNames`
+   (recursive, `C3NameFolder`) and `collectManifestFileNames` (recursive,
+   `C3FileFolder`) enumerate declared names. `detectManifestDrift(projectDir,
+   manifest?)` compares declared membership against on-disk source (editor-local
+   filtered via `isEditorLocalPath`) and returns `ManifestDrift: {sections:
+   SectionDrift[], inSync}` per section with `{missingOnDisk, untracked}`.
+   Name-folder disk walks are recursive (via `find_all_files_path`); file-folder
+   disk walks are deliberately **shallow** (`readdirSync` + `isFile` only) so
+   generated subtrees like `scripts/ts-defs/` are not falsely flagged as untracked.
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,
@@ -104,6 +121,15 @@ Two functional areas:
    scope keys with `#<eventIndex>`; functions/ACEs use their unique names.
    `formatAction`/`formatCondition` render events into a single-line DSL (see
    the doc comment on `formatAction` for the full grammar).
+   **SID traversal** — `walkSids(node, visit: (sid, segments) => void)` is the
+   exported primitive that recursively visits every object carrying a numeric
+   `sid`, delivering both the sid value and its structured
+   `SidPathSegment[] = (string | number)[]` path. `formatSidPath(segments)`
+   renders segments into the canonical dotted/indexed string (`""` for root,
+   `[i]` for array positions, `.key` for object keys with no leading dot).
+   `collectSids` and `collectSidsWithPaths` are thin consumers: they call
+   `walkSids` once and accumulate; callers that need a different rendering (e.g.
+   a semantic label when `segments.length === 0`) can drive `walkSids` directly.
 
 All file writes serialize JSON with **tab indentation** to match C3's format,
 and text from expressions/comments is run through `normalizeLineEndings` (CRLF
