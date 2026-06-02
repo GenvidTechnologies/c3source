@@ -914,6 +914,15 @@ export interface ExtractedFunction {
   name: string;
   /** Owning object class (custom-ACEs only). */
   objectClass?: string;
+  /** Declared parameters, in order. Structured so the consumer owns formatting. */
+  params: FunctionParameter[];
+  /** Declared return type (C3's raw string, e.g. "none" | "number" | "string"). */
+  returnType: string;
+}
+
+/** Narrow an event to the two kinds that declare a callable signature. */
+export function isFunctionDefinition(event: EventSheetEvent): event is FunctionBlockEvent | CustomAceBlockEvent {
+  return event.eventType === "function-block" || event.eventType === "custom-ace-block";
 }
 
 /** List the functions and custom-ACEs a sheet defines, in canonical event order. */
@@ -921,9 +930,20 @@ export function extractFunctions(sheet: EventSheet): ExtractedFunction[] {
   const functions: ExtractedFunction[] = [];
   visitEvents(sheet.events, (event) => {
     if (event.eventType === "function-block") {
-      functions.push({ kind: "function", name: event.functionName });
+      functions.push({
+        kind: "function",
+        name: event.functionName,
+        params: event.functionParameters,
+        returnType: event.functionReturnType,
+      });
     } else if (event.eventType === "custom-ace-block") {
-      functions.push({ kind: "custom-ace", name: event.aceName, objectClass: event.objectClass });
+      functions.push({
+        kind: "custom-ace",
+        name: event.aceName,
+        objectClass: event.objectClass,
+        params: event.functionParameters,
+        returnType: event.functionReturnType,
+      });
     }
   });
   return functions;
