@@ -31,8 +31,8 @@ Package manager is **npm** (Node >= 22). All checks below run in CI and must pas
 
 ```sh
 npm install
-npm run lint        # eslint, --max-warnings 0 over src/ and test/
-npm run typecheck   # tsc against tsconfig.test.json (src + test), --noEmit
+npm run lint        # eslint, --max-warnings 0 over src/ and test/ (test/fixtures/ excluded)
+npm run typecheck   # tsc against tsconfig.test.json (src + test, excluding test/fixtures/), --noEmit
 npm run test        # mocha + tsx, runs test/**/*.test.ts
 npm run build       # tsc -> dist/ (the published artifact)
 ```

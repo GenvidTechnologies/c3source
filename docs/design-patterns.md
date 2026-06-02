@@ -199,10 +199,31 @@ already handle the recursive case.
 Schema-fidelity facts ("which fields does C3 actually write?", "what are a
 default layer's keys?") are verified against a **real C3 project export**
 committed under `test/fixtures/` (saved from the C3 editor, not hand-written).
-A C3-emitted `.gitignore` inside the export excludes `*.uistate.json`.
+A C3-emitted `.gitignore` inside the export excludes `*.uistate.json` and
+`ts-defs`.
 Fixture-dependent tests self-skip via `fixtureExists(...)`/`this.skip()` so the
 suite stays green as the export grows and so capabilities not yet present in
 the fixture (e.g. a disabled condition) activate automatically once added.
+
+Three hazards come with this strategy when the export is **enriched** (the
+fixture is a real C3 project, so it carries more than data):
+
+- **Generated code in the fixture breaks the gate.** A real export includes
+  C3-generated TypeScript — `scripts/*.ts`, `tsconfig.json`, and a
+  `ts-defs/**/*.d.ts` tree whose codegen uses `var` and `Function`. ESLint and
+  `tsc` scan `test/`, so they would fail on it. `test/fixtures/` is therefore
+  **excluded from both** (`ignorePatterns` in `.eslintrc.cjs`, `exclude` in
+  `tsconfig.test.json`). Fixtures are test *data*, never linted/typechecked.
+- **The self-skip pattern has an inverse hazard.** Renaming or deleting a
+  fixture file silently re-skips its `fixtureExists`-gated tests — a coverage
+  loss that is invisible unless you watch the **pending count** (mocha reports
+  it). After changing fixture filenames, confirm the pending count did not rise;
+  repoint the gated tests to the new names.
+- **Gitignored fixture content is absent in CI.** `*.uistate.json` and `ts-defs`
+  are gitignored, so a test that needs them present (e.g. to prove the `uistate/`
+  / `ts-defs/` skip is real, not vacuous) must `git add -f` a representative
+  slice. Note the suffix patterns are exact: `*.uistate.json` does **not** match
+  the `uistate/` directory's `*.instancesBar.json` files.
 
 Guard schema drift with a **key-parity test**: assert a generated structure's
 key set equals a real export's (see `makeDefaultLayer.test.ts`). This catches C3
