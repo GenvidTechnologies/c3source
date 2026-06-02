@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -73,6 +73,22 @@ export interface ObjectType {
   "plugin-id": string;
 }
 
+/** The canonical set of C3-editor-local artifacts that are NOT project source. */
+export const EDITOR_LOCAL_EXCLUSIONS: { dirs: readonly string[]; fileSuffixes: readonly string[] } = {
+  dirs: ["uistate"], // C3 r487+ uistate/ subfolders
+  fileSuffixes: [".uistate.json"],
+};
+
+/** True if a bare basename is a C3-editor-local artifact (not project source):
+ *  a dir named like an excluded dir, or a file with an excluded suffix.
+ *  Covers BOTH forms so it replaces every skip site uniformly. */
+export function isEditorLocalPath(name: string): boolean {
+  return (
+    EDITOR_LOCAL_EXCLUSIONS.dirs.includes(name) ||
+    EDITOR_LOCAL_EXCLUSIONS.fileSuffixes.some((suffix) => name.endsWith(suffix))
+  );
+}
+
 /**
  * The single recursive file walk behind every `find_all_*_path` collector, and
  * the generic primitive for discovering files c3source has no named collector
@@ -101,7 +117,7 @@ export function find_all_files_path(dir: string, predicate: (filename: string) =
       const filepath = path.join(dir, file);
       const stats = statSync(filepath);
       if (stats.isDirectory()) {
-        if (file === "uistate") return; // C3 r487+ uistate/ subfolders are not C3 source
+        if (isEditorLocalPath(file)) return; // C3 r487+ uistate/ subfolders are not C3 source
         result.push(...find_all_files_path(filepath, predicate));
       } else if (stats.isFile() && predicate(file)) {
         result.push(filepath);
@@ -111,11 +127,11 @@ export function find_all_files_path(dir: string, predicate: (filename: string) =
 }
 
 export function find_all_layouts_path(layout_dir: string): string[] {
-  return find_all_files_path(layout_dir, (file) => !file.endsWith(".uistate.json"));
+  return find_all_files_path(layout_dir, (file) => !isEditorLocalPath(file));
 }
 
 export function find_all_objectTypes_path(objectTypesDir: string): string[] {
-  return find_all_files_path(objectTypesDir, (file) => !file.endsWith(".uistate.json"));
+  return find_all_files_path(objectTypesDir, (file) => !isEditorLocalPath(file));
 }
 
 // Return true if layout must be saved.
@@ -518,7 +534,7 @@ export interface ExtractedScript {
  * Find all eventSheet JSON files (excluding .uistate.json) in a directory tree.
  */
 export function find_all_eventsheets_path(eventSheetsDir: string): string[] {
-  return find_all_files_path(eventSheetsDir, (file) => file.endsWith(".json") && !file.endsWith(".uistate.json"));
+  return find_all_files_path(eventSheetsDir, (file) => file.endsWith(".json") && !isEditorLocalPath(file));
 }
 
 export function isScriptAction(action: ScriptAction | Record<string, unknown>): action is ScriptAction {
@@ -907,36 +923,295 @@ export function extractFunctions(sheet: EventSheet): ExtractedFunction[] {
   return functions;
 }
 
-/** Recursively visit every object carrying a numeric `sid`, with its dotted/indexed path. */
-function walkSids(node: unknown, path: string, emit: (sid: number, path: string) => void): void {
-  if (Array.isArray(node)) {
-    node.forEach((item, i) => walkSids(item, `${path}[${i}]`, emit));
-    return;
+/** A path segment: object key (string) or array index (number). */
+export type SidPathSegment = string | number;
+
+/** Render segments into the canonical dotted/indexed path string. Empty segments -> "". */
+export function formatSidPath(segments: ReadonlyArray<SidPathSegment>): string {
+  let out = "";
+  for (const seg of segments) {
+    if (typeof seg === "number") out += `[${seg}]`;
+    else out += out ? `.${seg}` : seg;
   }
-  if (node && typeof node === "object") {
-    const obj = node as Record<string, unknown>;
-    if (typeof obj.sid === "number") {
-      emit(obj.sid, path);
+  return out;
+}
+
+/** Recursively visit every object carrying a numeric `sid`, with its structured path segments. */
+export function walkSids(node: unknown, visit: (sid: number, segments: SidPathSegment[]) => void): void {
+  const recur = (n: unknown, segs: SidPathSegment[]): void => {
+    if (Array.isArray(n)) {
+      n.forEach((item, i) => recur(item, [...segs, i]));
+      return;
     }
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === "sid") continue;
-      walkSids(value, path ? `${path}.${key}` : key, emit);
+    if (n && typeof n === "object") {
+      const obj = n as Record<string, unknown>;
+      if (typeof obj.sid === "number") visit(obj.sid, segs);
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === "sid") continue;
+        recur(value, [...segs, key]);
+      }
     }
-  }
+  };
+  recur(node, []);
 }
 
 /** Collect every `sid` in an arbitrary C3 JSON subtree. */
 export function collectSids(node: unknown): Set<number> {
   const sids = new Set<number>();
-  walkSids(node, "", (sid) => sids.add(sid));
+  walkSids(node, (sid) => sids.add(sid));
   return sids;
 }
 
 /** Collect every `sid` in an arbitrary C3 JSON subtree, paired with the path to its owning object. */
 export function collectSidsWithPaths(node: unknown): Array<{ sid: number; path: string }> {
   const out: Array<{ sid: number; path: string }> = [];
-  walkSids(node, "", (sid, path) => out.push({ sid, path }));
+  walkSids(node, (sid, segments) => out.push({ sid, path: formatSidPath(segments) }));
   return out;
+}
+
+// ─── Piece C: project.c3proj manifest model ──────────────────────────────────
+
+/** A folder of named items (layouts, eventSheets, timelines, …) in the manifest. */
+export interface C3NameFolder {
+  items: string[];
+  subfolders: C3NameFolder[];
+}
+
+/** A single file entry in a rootFileFolders category. */
+export interface C3FileEntry {
+  name: string;
+  type: string;
+  sid: number;
+  [key: string]: unknown;
+}
+
+/** A folder of file entries in the manifest (scripts, icons, …). */
+export interface C3FileFolder {
+  items: C3FileEntry[];
+  subfolders: C3FileFolder[];
+}
+
+/** All seven rootFileFolders categories. */
+export interface C3RootFileFolders {
+  script: C3FileFolder;
+  sound: C3FileFolder;
+  music: C3FileFolder;
+  video: C3FileFolder;
+  font: C3FileFolder;
+  icon: C3FileFolder;
+  general: C3FileFolder;
+}
+
+/** The parsed project.c3proj manifest (folder-project format, NOT the single-file .c3p archive). */
+export interface C3ProjectManifest {
+  projectFormatVersion: number;
+  savedWithRelease: number;
+  name: string;
+  runtime: string;
+  objectTypes: C3NameFolder;
+  layouts: C3NameFolder;
+  eventSheets: C3NameFolder;
+  timelines: C3NameFolder;
+  flowcharts: C3NameFolder;
+  families: C3NameFolder;
+  models3d: C3NameFolder;
+  containers: unknown[];
+  rootFileFolders: C3RootFileFolders;
+  properties: Record<string, unknown>;
+  [key: string]: unknown; // forward-compat: usedAddons, viewportWidth, firstLayout, …
+}
+
+/** One section's drift result. Editor-local entries are already filtered out. */
+export interface SectionDrift {
+  /** e.g. "layouts", "rootFileFolders.script" */
+  section: string;
+  /** Resolved on-disk folder name, e.g. "layouts", "scripts". */
+  folder: string;
+  /** Names declared in the manifest but no file found on disk. */
+  missingOnDisk: string[];
+  /** Files on disk that the manifest doesn't declare. */
+  untracked: string[];
+}
+
+/** Result of detectManifestDrift. */
+export interface ManifestDrift {
+  sections: SectionDrift[];
+  inSync: boolean;
+}
+
+// ─── Private guards ───────────────────────────────────────────────────────────
+
+function assert(cond: unknown, msg: string): asserts cond {
+  if (!cond) throw new Error(`invalid project.c3proj: ${msg}`);
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function assertNameFolder(v: unknown, where: string): asserts v is C3NameFolder {
+  assert(isRecord(v), `${where} must be an object`);
+  assert(Array.isArray(v.items) && v.items.every((i) => typeof i === "string"), `${where}.items must be string[]`);
+  assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
+  v.subfolders.forEach((sf, i) => assertNameFolder(sf, `${where}.subfolders[${i}]`));
+}
+
+function assertFileFolder(v: unknown, where: string): asserts v is C3FileFolder {
+  assert(isRecord(v), `${where} must be an object`);
+  assert(Array.isArray(v.items), `${where}.items must be an array`);
+  v.items.forEach((it, i) => {
+    assert(isRecord(it), `${where}.items[${i}] must be an object`);
+    assert(typeof it.name === "string", `${where}.items[${i}].name must be a string`);
+    assert(typeof it.type === "string", `${where}.items[${i}].type must be a string`);
+    assert(typeof it.sid === "number", `${where}.items[${i}].sid must be a number`);
+  });
+  assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
+  v.subfolders.forEach((sf, i) => assertFileFolder(sf, `${where}.subfolders[${i}]`));
+}
+
+const NAME_SECTIONS = [
+  "layouts",
+  "eventSheets",
+  "objectTypes",
+  "timelines",
+  "flowcharts",
+  "families",
+  "models3d",
+] as const;
+
+// ─── Mapping tables ───────────────────────────────────────────────────────────
+
+/**
+ * Manifest section key → on-disk folder name for name-folder sections.
+ * NOTE: objectTypes assumes flat convention (objectTypes/<name>.json); unconfirmed
+ * by the fixture (empty objectTypes). families/models3d/containers intentionally absent.
+ */
+export const C3_SECTION_FOLDERS = {
+  layouts: "layouts",
+  eventSheets: "eventSheets",
+  /** Flat <name>.json convention assumed; unconfirmed by the empty fixture — mark for richer fixture. */
+  objectTypes: "objectTypes",
+  timelines: "timelines",
+  flowcharts: "flowcharts",
+} as const;
+
+/**
+ * Manifest rootFileFolders category → on-disk source folder (plural).
+ * CONFIRMED by fixture: script→scripts, icon→icons.
+ * INFERRED (shipped anyway; c3source owns the fix if wrong):
+ * sound→sounds, music→music, video→videos, font→fonts, general→files.
+ */
+export const C3_ROOT_FILE_FOLDERS = {
+  script: "scripts",
+  sound: "sounds",
+  music: "music",
+  video: "videos",
+  font: "fonts",
+  icon: "icons",
+  general: "files",
+} as const;
+
+// ─── Parser ───────────────────────────────────────────────────────────────────
+
+/**
+ * Parse and validate a raw JSON value as a C3ProjectManifest.
+ * Throws on shape violations. Absent modeled sections are tolerated (treated as empty).
+ * Unmodeled top-level fields pass through.
+ */
+export function parseProjectManifest(json: unknown): C3ProjectManifest {
+  assert(isRecord(json), "top-level value must be an object");
+  assert(typeof json.name === "string", "name must be a string");
+  assert(typeof json.runtime === "string", "runtime must be a string");
+  assert(typeof json.projectFormatVersion === "number", "projectFormatVersion must be a number");
+  assert(typeof json.savedWithRelease === "number", "savedWithRelease must be a number");
+  for (const sec of NAME_SECTIONS) if (sec in json) assertNameFolder(json[sec], sec);
+  if ("rootFileFolders" in json) {
+    const rff = json.rootFileFolders;
+    assert(isRecord(rff), "rootFileFolders must be an object");
+    for (const cat of Object.keys(C3_ROOT_FILE_FOLDERS))
+      if (cat in rff) assertFileFolder(rff[cat], `rootFileFolders.${cat}`);
+  }
+  return json as unknown as C3ProjectManifest;
+}
+
+/** Read and parse a project.c3proj file. Source-folder disk content is NOT consulted. */
+export function readProjectManifest(manifestPath: string): C3ProjectManifest {
+  return parseProjectManifest(JSON.parse(readFileSync(manifestPath, "utf-8")));
+}
+
+// ─── Flatteners ───────────────────────────────────────────────────────────────
+
+/** Collect all item names from a C3NameFolder, recursing into subfolders. */
+export function collectManifestItemNames(folder: C3NameFolder): string[] {
+  const out = [...folder.items];
+  for (const sub of folder.subfolders) out.push(...collectManifestItemNames(sub));
+  return out;
+}
+
+/** Collect all file entry names from a C3FileFolder, recursing into subfolders. */
+export function collectManifestFileNames(folder: C3FileFolder): string[] {
+  const out = folder.items.map((it) => it.name);
+  for (const sub of folder.subfolders) out.push(...collectManifestFileNames(sub));
+  return out;
+}
+
+// ─── Drift detector ───────────────────────────────────────────────────────────
+
+/** Recursive walk: collect basename-minus-.json for every .json that is not editor-local. */
+function diskNameFolderItems(folder: string): string[] {
+  if (!existsSync(folder)) return [];
+  return find_all_files_path(folder, (f) => f.endsWith(".json") && !isEditorLocalPath(f)).map((p) =>
+    path.basename(p, ".json"),
+  );
+}
+
+/**
+ * Shallow walk: collect basenames of files (not dirs) that are not editor-local.
+ * Shallow is intentional — manifest rootFileFolder membership is itself flat, so we
+ * must NOT recurse. This sidesteps generated subdirs like ts-defs/ without a new
+ * exclusion rule (the construct3-chef#36 mitigation).
+ */
+function diskFileFolderNames(folder: string): string[] {
+  if (!existsSync(folder)) return [];
+  return readdirSync(folder)
+    .filter((f) => !isEditorLocalPath(f))
+    .filter((f) => statSync(path.join(folder, f)).isFile());
+}
+
+function diffNames(declared: string[], onDisk: string[]): { missingOnDisk: string[]; untracked: string[] } {
+  const D = new Set(declared);
+  const K = new Set(onDisk);
+  return {
+    missingOnDisk: declared.filter((n) => !K.has(n)).sort(),
+    untracked: onDisk.filter((n) => !D.has(n)).sort(),
+  };
+}
+
+/**
+ * Compare manifest-declared membership against on-disk source (editor-local filtered).
+ * When `manifest` is omitted, reads `projectDir/project.c3proj`.
+ * Detection only — policy (warn, fail, sync) is the caller's responsibility.
+ */
+export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
+  const m = manifest ?? readProjectManifest(path.join(projectDir, "project.c3proj"));
+  const sections: SectionDrift[] = [];
+  for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
+    const declared = m[section] ? collectManifestItemNames(m[section] as C3NameFolder) : [];
+    const onDisk = diskNameFolderItems(path.join(projectDir, folderName));
+    const d = diffNames(declared, onDisk);
+    if (d.missingOnDisk.length || d.untracked.length) sections.push({ section, folder: folderName, ...d });
+  }
+  const rff = m.rootFileFolders;
+  if (rff)
+    for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
+      const folder = rff[cat as keyof C3RootFileFolders];
+      const declared = folder ? collectManifestFileNames(folder) : [];
+      const onDisk = diskFileFolderNames(path.join(projectDir, folderName));
+      const d = diffNames(declared, onDisk);
+      if (d.missingOnDisk.length || d.untracked.length)
+        sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, ...d });
+    }
+  return { sections, inSync: sections.length === 0 };
 }
 
 /** Which C3 schema slot a sid was found in. */
