@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -1155,11 +1155,63 @@ export function collectManifestFileNames(folder: C3FileFolder): string[] {
   return out;
 }
 
-// ─── Drift detector (stub — full implementation in next commit) ──────────────
+// ─── Drift detector ───────────────────────────────────────────────────────────
 
-/** @internal — replaced in feat(manifest): detectManifestDrift */
-export function detectManifestDrift(_projectDir: string, _manifest?: C3ProjectManifest): ManifestDrift {
-  throw new Error("detectManifestDrift not yet implemented");
+/** Recursive walk: collect basename-minus-.json for every .json that is not editor-local. */
+function diskNameFolderItems(folder: string): string[] {
+  if (!existsSync(folder)) return [];
+  return find_all_files_path(folder, (f) => f.endsWith(".json") && !isEditorLocalPath(f)).map((p) =>
+    path.basename(p, ".json"),
+  );
+}
+
+/**
+ * Shallow walk: collect basenames of files (not dirs) that are not editor-local.
+ * Shallow is intentional — manifest rootFileFolder membership is itself flat, so we
+ * must NOT recurse. This sidesteps generated subdirs like ts-defs/ without a new
+ * exclusion rule (the construct3-chef#36 mitigation).
+ */
+function diskFileFolderNames(folder: string): string[] {
+  if (!existsSync(folder)) return [];
+  return readdirSync(folder)
+    .filter((f) => !isEditorLocalPath(f))
+    .filter((f) => statSync(path.join(folder, f)).isFile());
+}
+
+function diffNames(declared: string[], onDisk: string[]): { missingOnDisk: string[]; untracked: string[] } {
+  const D = new Set(declared);
+  const K = new Set(onDisk);
+  return {
+    missingOnDisk: declared.filter((n) => !K.has(n)).sort(),
+    untracked: onDisk.filter((n) => !D.has(n)).sort(),
+  };
+}
+
+/**
+ * Compare manifest-declared membership against on-disk source (editor-local filtered).
+ * When `manifest` is omitted, reads `projectDir/project.c3proj`.
+ * Detection only — policy (warn, fail, sync) is the caller's responsibility.
+ */
+export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
+  const m = manifest ?? readProjectManifest(path.join(projectDir, "project.c3proj"));
+  const sections: SectionDrift[] = [];
+  for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
+    const declared = m[section] ? collectManifestItemNames(m[section] as C3NameFolder) : [];
+    const onDisk = diskNameFolderItems(path.join(projectDir, folderName));
+    const d = diffNames(declared, onDisk);
+    if (d.missingOnDisk.length || d.untracked.length) sections.push({ section, folder: folderName, ...d });
+  }
+  const rff = m.rootFileFolders;
+  if (rff)
+    for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
+      const folder = rff[cat as keyof C3RootFileFolders];
+      const declared = folder ? collectManifestFileNames(folder) : [];
+      const onDisk = diskFileFolderNames(path.join(projectDir, folderName));
+      const d = diffNames(declared, onDisk);
+      if (d.missingOnDisk.length || d.untracked.length)
+        sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, ...d });
+    }
+  return { sections, inSync: sections.length === 0 };
 }
 
 /** Which C3 schema slot a sid was found in. */
