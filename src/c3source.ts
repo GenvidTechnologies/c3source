@@ -1396,6 +1396,12 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     }
   const containerEntries = detectContainerDrift(m);
   if (containerEntries.length) sections.push({ section: "containers", folder: "", entries: containerEntries });
+  try {
+    const imagesDrift = detectImageDrift(projectDir, m);
+    if (imagesDrift && imagesDrift.entries.length) sections.push(imagesDrift);
+  } catch {
+    // images derivation is best-effort; never fail core drift on it
+  }
   return { sections, inSync: sections.length === 0 };
 }
 
@@ -1415,6 +1421,109 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
       if (!objectTypeNames.has(member)) entries.push({ kind: "dangling-ref", name: member, manifestPath: [`#${i}`] });
   });
   return entries;
+}
+
+// ─── Image-derived drift ──────────────────────────────────────────────────────
+
+/** Shape of an animation item within an object type's `animations` tree. */
+interface AnimationItem {
+  name: string;
+  frames?: unknown[];
+}
+
+/** Shape of an animation folder node within an object type's `animations` tree. */
+interface AnimationFolder {
+  items: AnimationItem[];
+  subfolders: AnimationFolder[];
+}
+
+/**
+ * Derive the expected on-disk image filenames for a single object type.
+ *
+ * **V1 coverage rule (structural detection):**
+ * - Object type with a top-level `image` field (NinePatch, TiledBg, Tilemap plugins and
+ *   any future single-image plugin): exactly one expected image `<lowercased-name>.png`.
+ * - Object type with a top-level `animations` field (Sprite plugin and compatible):
+ *   one `<lowercased-name>-<lowercased-animation-name>-<frame3>.png` per animation frame,
+ *   where `frame3` is the zero-based frame index zero-padded to 3 digits (000, 001, …).
+ *   Animation subfolders **collapse** — the subfolder name does NOT appear in the filename;
+ *   animation names are unique within an object type.
+ * - Object types with neither `image` nor `animations` (Text, JSON, etc.): no images.
+ *
+ * **Explicit limits (extensible in future releases):**
+ * - Does NOT cover spritesheet/atlas packing (a sprite whose frames are packed into a
+ *   single atlas sheet will not match the per-frame pattern).
+ * - Does NOT cover custom export formats or non-png `fileType` values.
+ * - Does NOT cover collision-polygon or image-point sidecar files.
+ * - Detection is structural (field presence), not plugin-id allowlist — robust to
+ *   third-party single-image plugins but may over-derive for unusual plugin shapes.
+ */
+export function deriveExpectedImageNames(objectType: Record<string, unknown>): string[] {
+  const name = String(objectType.name).toLowerCase();
+  if ("image" in objectType) {
+    return [`${name}.png`];
+  }
+  if ("animations" in objectType) {
+    const result: string[] = [];
+    const collectAnimations = (folder: AnimationFolder): void => {
+      for (const animItem of folder.items) {
+        const animName = String(animItem.name).toLowerCase();
+        const frameCount = Array.isArray(animItem.frames) ? animItem.frames.length : 0;
+        for (let i = 0; i < frameCount; i++) {
+          result.push(`${name}-${animName}-${String(i).padStart(3, "0")}.png`);
+        }
+      }
+      for (const sub of folder.subfolders) {
+        collectAnimations(sub);
+      }
+    };
+    const animationsRoot = objectType.animations as AnimationFolder;
+    if (animationsRoot && typeof animationsRoot === "object") {
+      collectAnimations({
+        items: Array.isArray(animationsRoot.items) ? animationsRoot.items : [],
+        subfolders: Array.isArray(animationsRoot.subfolders) ? animationsRoot.subfolders : [],
+      });
+    }
+    return result;
+  }
+  return [];
+}
+
+/**
+ * Compare derived expected image names against the `images/` folder on disk.
+ * Returns a `SectionDrift` for the "images" section, or `null` if `images/` is absent.
+ * Expected names are derived from all object-type JSON files under `objectTypes/`.
+ * Actual names are the flat files found in `images/` (editor-local entries filtered).
+ * All paths are `[]` (images/ is a flat folder — no subfolder nesting for moves).
+ *
+ * Detection is best-effort (see `deriveExpectedImageNames` for coverage limits).
+ * Errors during derivation/parsing propagate to the caller; `detectManifestDrift`
+ * wraps this in a try/catch so a failure degrades to "images section omitted".
+ */
+export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
+  const imagesDir = path.join(projectDir, "images");
+  if (!existsSync(imagesDir)) return null;
+
+  const expectedNames: string[] = [];
+  const objectTypesDir = path.join(projectDir, "objectTypes");
+  if (existsSync(objectTypesDir)) {
+    const jsonPaths = find_all_files_path(objectTypesDir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));
+    for (const jsonPath of jsonPaths) {
+      const parsed = JSON.parse(readFileSync(jsonPath, "utf-8")) as Record<string, unknown>;
+      expectedNames.push(...deriveExpectedImageNames(parsed));
+    }
+  }
+
+  const actualNames = readdirSync(imagesDir).filter(
+    (f) => !isEditorLocalPath(f) && statSync(path.join(imagesDir, f)).isFile(),
+  );
+
+  const entries = diffNameMaps(
+    expectedNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
+    actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
+  );
+
+  return { section: "images", folder: "images", entries };
 }
 
 /** Which C3 schema slot a sid was found in. */

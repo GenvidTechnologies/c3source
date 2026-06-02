@@ -8,6 +8,8 @@ import {
   collectManifestItemNames,
   collectManifestFileNames,
   detectManifestDrift,
+  deriveExpectedImageNames,
+  detectImageDrift,
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
   walkManifestNameTree,
@@ -348,5 +350,65 @@ describe("F1: path-walk primitives", () => {
     const timeline = items!.find((e) => e.name === "Timeline 1");
     expect(timeline).to.not.be.undefined;
     expect(timeline!.path).to.deep.equal([]);
+  });
+});
+
+describe("F4: image-derived drift", () => {
+  const readObjectType = (...segments: string[]): Record<string, unknown> => {
+    const p = path.join(FIXTURE_DIR, "objectTypes", ...segments);
+    return JSON.parse(readFileSync(p, "utf-8")) as Record<string, unknown>;
+  };
+
+  it("F4-1: deriveExpectedImageNames on 9patch.json → [9patch.png]; on Tilemap.json → [tilemap.png]", () => {
+    const nineP = readObjectType("images", "9patch.json");
+    expect(deriveExpectedImageNames(nineP)).to.deep.equal(["9patch.png"]);
+
+    const tilemap = readObjectType("tiles", "Tilemap.json");
+    expect(deriveExpectedImageNames(tilemap)).to.deep.equal(["tilemap.png"]);
+  });
+
+  it("F4-2: deriveExpectedImageNames on Sprite.json → 4 frame names with subfolder collapsed and frames padded", () => {
+    const sprite = readObjectType("images", "Sprite.json");
+    const names = deriveExpectedImageNames(sprite).sort();
+    expect(names).to.deep.equal([
+      "sprite-animation 1-000.png",
+      "sprite-animation 2-000.png",
+      "sprite-animation 2-001.png",
+      "sprite-animation 3-000.png",
+    ]);
+  });
+
+  it("F4-3: deriveExpectedImageNames on Text.json → [] (no image or animations field)", () => {
+    const text = readObjectType("Text.json");
+    expect(deriveExpectedImageNames(text)).to.deep.equal([]);
+  });
+
+  it("F4-4: detectImageDrift on clean fixture → not null, entries empty (all 9 names match 9 on-disk pngs)", () => {
+    const result = detectImageDrift(FIXTURE_DIR);
+    expect(result).to.not.be.null;
+    expect(result!.section).to.equal("images");
+    expect(result!.folder).to.equal("images");
+    expect(result!.entries).to.deep.equal([]);
+  });
+
+  it("F4-5: detectManifestDrift inSync stays true on clean fixture with images wired in (R-C12 holds)", () => {
+    const drift = detectManifestDrift(FIXTURE_DIR);
+    expect(drift.inSync).to.equal(true);
+    // images section is not appended when entries is empty
+    const imagesSection = drift.sections.find((s: SectionDrift) => s.section === "images");
+    expect(imagesSection).to.be.undefined;
+  });
+
+  it("F4-6: detectImageDrift returns null when images/ is absent; deriveExpectedImageNames({}) → [] (safe on minimal input)", () => {
+    // No images/ directory: use a path that does not exist on disk
+    const noImagesDir = path.join(FIXTURE_DIR, "__no_images_here__");
+    const result = detectImageDrift(noImagesDir);
+    expect(result).to.be.null;
+
+    // Minimal object type with no image or animations fields → empty array, no throw
+    expect(deriveExpectedImageNames({})).to.deep.equal([]);
+
+    // Object type with animations but empty items/subfolders → no throw, empty result
+    expect(deriveExpectedImageNames({ name: "Ghost", animations: { items: [], subfolders: [] } })).to.deep.equal([]);
   });
 });
