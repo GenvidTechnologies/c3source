@@ -923,35 +923,49 @@ export function extractFunctions(sheet: EventSheet): ExtractedFunction[] {
   return functions;
 }
 
-/** Recursively visit every object carrying a numeric `sid`, with its dotted/indexed path. */
-function walkSids(node: unknown, path: string, emit: (sid: number, path: string) => void): void {
-  if (Array.isArray(node)) {
-    node.forEach((item, i) => walkSids(item, `${path}[${i}]`, emit));
-    return;
+/** A path segment: object key (string) or array index (number). */
+export type SidPathSegment = string | number;
+
+/** Render segments into the canonical dotted/indexed path string. Empty segments -> "". */
+export function formatSidPath(segments: ReadonlyArray<SidPathSegment>): string {
+  let out = "";
+  for (const seg of segments) {
+    if (typeof seg === "number") out += `[${seg}]`;
+    else out += out ? `.${seg}` : seg;
   }
-  if (node && typeof node === "object") {
-    const obj = node as Record<string, unknown>;
-    if (typeof obj.sid === "number") {
-      emit(obj.sid, path);
+  return out;
+}
+
+/** Recursively visit every object carrying a numeric `sid`, with its structured path segments. */
+export function walkSids(node: unknown, visit: (sid: number, segments: SidPathSegment[]) => void): void {
+  const recur = (n: unknown, segs: SidPathSegment[]): void => {
+    if (Array.isArray(n)) {
+      n.forEach((item, i) => recur(item, [...segs, i]));
+      return;
     }
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === "sid") continue;
-      walkSids(value, path ? `${path}.${key}` : key, emit);
+    if (n && typeof n === "object") {
+      const obj = n as Record<string, unknown>;
+      if (typeof obj.sid === "number") visit(obj.sid, segs);
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === "sid") continue;
+        recur(value, [...segs, key]);
+      }
     }
-  }
+  };
+  recur(node, []);
 }
 
 /** Collect every `sid` in an arbitrary C3 JSON subtree. */
 export function collectSids(node: unknown): Set<number> {
   const sids = new Set<number>();
-  walkSids(node, "", (sid) => sids.add(sid));
+  walkSids(node, (sid) => sids.add(sid));
   return sids;
 }
 
 /** Collect every `sid` in an arbitrary C3 JSON subtree, paired with the path to its owning object. */
 export function collectSidsWithPaths(node: unknown): Array<{ sid: number; path: string }> {
   const out: Array<{ sid: number; path: string }> = [];
-  walkSids(node, "", (sid, path) => out.push({ sid, path }));
+  walkSids(node, (sid, segments) => out.push({ sid, path: formatSidPath(segments) }));
   return out;
 }
 
