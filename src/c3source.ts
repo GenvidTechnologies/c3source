@@ -1194,6 +1194,174 @@ export function collectManifestFileNames(folder: C3FileFolder): string[] {
   return out;
 }
 
+// ─── Path-bearing drift types ─────────────────────────────────────────────────
+
+/** A path segment locating an item in the manifest/disk subfolder tree (subfolder name). */
+export type ManifestPathSegment = string; // subfolder name; number is reserved to mirror SidPathSegment
+
+/** The kind of drift a DriftEntry represents. */
+export type DriftKind = "missing" | "untracked" | "moved" | "folder-missing" | "folder-untracked" | "dangling-ref";
+
+/** A structured drift entry locating an item within the manifest/disk subfolder nesting. */
+export interface DriftEntry {
+  kind: DriftKind;
+  name: string;
+  /** Subfolder-name segments in the MANIFEST tree (absent on "untracked" and "dangling-ref"). */
+  manifestPath?: ManifestPathSegment[];
+  /** Subfolder-name segments on DISK (absent on "missing" and "dangling-ref"). */
+  diskPath?: ManifestPathSegment[];
+}
+
+/** Render manifest path segments into a slash-joined string. Empty segments → "". */
+export function formatManifestPath(segments: ReadonlyArray<ManifestPathSegment>): string {
+  return segments.length === 0 ? "" : segments.join("/");
+}
+
+// ─── Path-preserving manifest tree walks ─────────────────────────────────────
+
+/**
+ * Yield every declared item from a C3NameFolder tree with its ancestor subfolder path.
+ * `path` is the chain of ancestor subfolder NAMES (NOT including the item name itself).
+ * The section root's own `name` is never included in any item's path.
+ * If a subfolder has no `name` (the degenerate empty `timelines` case), its items
+ * (none in practice) inherit the parent path unchanged — the nameless subfolder
+ * contributes no segment to the path.
+ */
+export function walkManifestNameTree(
+  folder: C3NameFolder,
+  basePath: ManifestPathSegment[] = [],
+): Array<{ name: string; path: ManifestPathSegment[] }> {
+  const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
+  for (const name of folder.items) out.push({ name, path: basePath });
+  for (const sub of folder.subfolders) {
+    // Nameless subfolder: contributes no path segment (degenerate empty case).
+    const childPath = sub.name !== undefined ? [...basePath, sub.name] : basePath;
+    out.push(...walkManifestNameTree(sub, childPath));
+  }
+  return out;
+}
+
+/**
+ * Yield every declared file entry from a C3FileFolder tree with its ancestor subfolder path.
+ * `path` is the chain of ancestor subfolder NAMES; emitted `name` is `entry.name`.
+ * The category root's own `name` is never included in any entry's path.
+ * Nameless subfolders (degenerate case) contribute no segment to the path.
+ */
+export function walkManifestFileTree(
+  folder: C3FileFolder,
+  basePath: ManifestPathSegment[] = [],
+): Array<{ name: string; path: ManifestPathSegment[] }> {
+  const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
+  for (const entry of folder.items) out.push({ name: entry.name, path: basePath });
+  for (const sub of folder.subfolders) {
+    const childPath = sub.name !== undefined ? [...basePath, sub.name] : basePath;
+    out.push(...walkManifestFileTree(sub, childPath));
+  }
+  return out;
+}
+
+// ─── Path-preserving disk tree walks ─────────────────────────────────────────
+
+/**
+ * Yield every source-name item found on disk under a name-section root directory,
+ * with its section-root-relative subfolder path.
+ * `path` segments are relative to `diskFolder` (the section root), never absolute.
+ * Skips editor-local entries via `isEditorLocalPath`. Returns [] if `diskFolder` absent.
+ * Uses `readdirSync`/`statSync` directly (NOT `find_all_files_path`) to preserve path context.
+ */
+export function walkDiskNameTree(
+  diskFolder: string,
+  basePath: ManifestPathSegment[] = [],
+): Array<{ name: string; path: ManifestPathSegment[] }> {
+  if (!existsSync(diskFolder)) return [];
+  const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
+  for (const entry of readdirSync(diskFolder).sort()) {
+    if (isEditorLocalPath(entry)) continue;
+    const full = path.join(diskFolder, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...walkDiskNameTree(full, [...basePath, entry]));
+    } else if (entry.endsWith(".json")) {
+      out.push({ name: path.basename(entry, ".json"), path: basePath });
+    }
+  }
+  return out;
+}
+
+/**
+ * Yield every source file found on disk under a file-section root directory,
+ * with its section-root-relative subfolder path.
+ * Recurses ONLY into subdirectories whose name matches a declared subfolder's `name`
+ * (D3/R5: undeclared subdirs like `ts-defs/` are never walked).
+ * Emits full filenames WITH extension (file-folder matching is extension-agnostic, R11).
+ * Returns [] if `diskFolder` absent.
+ */
+export function walkDiskFileTree(
+  diskFolder: string,
+  declaredSubfolders: C3FileFolder[],
+  basePath: ManifestPathSegment[] = [],
+): Array<{ name: string; path: ManifestPathSegment[] }> {
+  if (!existsSync(diskFolder)) return [];
+  const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
+  for (const entry of readdirSync(diskFolder).sort()) {
+    if (isEditorLocalPath(entry)) continue;
+    const full = path.join(diskFolder, entry);
+    if (statSync(full).isDirectory()) {
+      // Only recurse into declared subfolders; skip undeclared dirs (e.g. ts-defs/).
+      const matched = declaredSubfolders.find((sf) => sf.name === entry);
+      if (matched) out.push(...walkDiskFileTree(full, matched.subfolders, [...basePath, entry]));
+    } else if (statSync(full).isFile()) {
+      out.push({ name: entry, path: basePath });
+    }
+  }
+  return out;
+}
+
+// ─── Diff engine ──────────────────────────────────────────────────────────────
+
+const DRIFT_KIND_ORDER: Record<DriftKind, number> = {
+  missing: 0,
+  untracked: 1,
+  moved: 2,
+  "folder-missing": 3,
+  "folder-untracked": 4,
+  "dangling-ref": 5,
+};
+
+/**
+ * Diff two name→path lists and return structured DriftEntry records.
+ * Per-category name uniqueness (a C3 invariant) means the maps have no collisions.
+ * - name in manifest only → missing
+ * - name in disk only → untracked
+ * - name in both, paths differ → moved (carries both manifestPath and diskPath)
+ * - name in both, same path → no entry
+ * Results are sorted deterministically by kind then name.
+ */
+export function diffNameMaps(
+  manifestItems: Array<{ name: string; path: ManifestPathSegment[] }>,
+  diskItems: Array<{ name: string; path: ManifestPathSegment[] }>,
+): DriftEntry[] {
+  const mMap = new Map<string, ManifestPathSegment[]>();
+  for (const { name, path: p } of manifestItems) mMap.set(name, p);
+  const dMap = new Map<string, ManifestPathSegment[]>();
+  for (const { name, path: p } of diskItems) dMap.set(name, p);
+
+  const entries: DriftEntry[] = [];
+  for (const [name, mPath] of mMap) {
+    const dPath = dMap.get(name);
+    if (dPath === undefined) {
+      entries.push({ kind: "missing", name, manifestPath: mPath });
+    } else if (formatManifestPath(mPath) !== formatManifestPath(dPath)) {
+      entries.push({ kind: "moved", name, manifestPath: mPath, diskPath: dPath });
+    }
+    // same path → no entry
+  }
+  for (const [name, dPath] of dMap) {
+    if (!mMap.has(name)) entries.push({ kind: "untracked", name, diskPath: dPath });
+  }
+  entries.sort((a, b) => DRIFT_KIND_ORDER[a.kind] - DRIFT_KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
+  return entries;
+}
+
 // ─── Drift detector ───────────────────────────────────────────────────────────
 
 /** Recursive walk: collect basename-minus-.json for every .json that is not editor-local. */

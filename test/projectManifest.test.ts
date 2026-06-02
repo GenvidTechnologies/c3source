@@ -10,6 +10,11 @@ import {
   detectManifestDrift,
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
+  walkManifestNameTree,
+  walkDiskNameTree,
+  walkDiskFileTree,
+  diffNameMaps,
+  formatManifestPath,
   type C3ProjectManifest,
   type SectionDrift,
 } from "../src/c3source.js";
@@ -179,5 +184,136 @@ describe("detectManifestDrift", () => {
     // ts-defs/ (dir) and tsconfig.json (generated) are editor-local and must not appear
     expect(scriptDrift!.untracked.some((u: string) => u.includes("ts-defs"))).to.equal(false);
     expect(scriptDrift!.untracked.includes("tsconfig.json")).to.equal(false);
+  });
+});
+
+describe("F1: path-walk primitives", () => {
+  let m: C3ProjectManifest;
+
+  before(() => {
+    m = readProjectManifest(MANIFEST_PATH);
+  });
+
+  it('F1-1: formatManifestPath renders slash-joined segments; empty → ""', () => {
+    expect(formatManifestPath(["images", "Sprite"])).to.equal("images/Sprite");
+    expect(formatManifestPath(["images"])).to.equal("images");
+    expect(formatManifestPath([])).to.equal("");
+  });
+
+  it("F1-2: walkManifestNameTree finds Sprite under images and Text at root", () => {
+    const items = walkManifestNameTree(m.objectTypes);
+    const sprite = items.find((e) => e.name === "Sprite");
+    expect(sprite).to.not.be.undefined;
+    expect(sprite!.path).to.deep.equal(["images"]);
+
+    const text = items.find((e) => e.name === "Text");
+    expect(text).to.not.be.undefined;
+    expect(text!.path).to.deep.equal([]);
+  });
+
+  it("F1-3: walkManifestNameTree yields all 10 objectType items with correct paths", () => {
+    const items = walkManifestNameTree(m.objectTypes);
+    // root: Text, TextInput, Text2
+    expect(
+      items
+        .filter((e) => e.path.length === 0)
+        .map((e) => e.name)
+        .sort(),
+    ).to.deep.equal(["Text", "Text2", "TextInput"]);
+    // global subfolder
+    expect(items.find((e) => e.name === "JSON")!.path).to.deep.equal(["global"]);
+    // images subfolder: 9patch, Sprite, Sprite2, Sprite3
+    const imageItems = items.filter((e) => e.path.length === 1 && e.path[0] === "images").map((e) => e.name);
+    expect(imageItems.sort()).to.deep.equal(["9patch", "Sprite", "Sprite2", "Sprite3"]);
+    // tiles subfolder
+    const tileItems = items.filter((e) => e.path.length === 1 && e.path[0] === "tiles").map((e) => e.name);
+    expect(tileItems.sort()).to.deep.equal(["TiledBackground", "Tilemap"]);
+    expect(items.length).to.equal(10);
+  });
+
+  it("F1-4: walkDiskNameTree yields the same 10 name/path pairs as manifest (section-root-relative)", () => {
+    const diskItems = walkDiskNameTree(path.join(FIXTURE_DIR, "objectTypes"));
+    expect(diskItems.length).to.equal(10);
+
+    // Paths must be section-root-relative (not absolute)
+    for (const item of diskItems) {
+      for (const seg of item.path) {
+        expect(path.isAbsolute(seg)).to.equal(false);
+      }
+    }
+
+    // spot-check specific items
+    const sprite = diskItems.find((e) => e.name === "Sprite");
+    expect(sprite).to.not.be.undefined;
+    expect(sprite!.path).to.deep.equal(["images"]);
+
+    const text = diskItems.find((e) => e.name === "Text");
+    expect(text).to.not.be.undefined;
+    expect(text!.path).to.deep.equal([]);
+
+    const json = diskItems.find((e) => e.name === "JSON");
+    expect(json).to.not.be.undefined;
+    expect(json!.path).to.deep.equal(["global"]);
+
+    const tilemap = diskItems.find((e) => e.name === "Tilemap");
+    expect(tilemap).to.not.be.undefined;
+    expect(tilemap!.path).to.deep.equal(["tiles"]);
+  });
+
+  it("F1-5: diffNameMaps produces missing, untracked, and moved entries correctly", () => {
+    const manifestItems = [
+      { name: "Alpha", path: ["a"] as string[] },
+      { name: "Beta", path: ["a"] as string[] }, // will be moved
+      { name: "Gamma", path: [] as string[] }, // manifest-only → missing
+    ];
+    const diskItems = [
+      { name: "Alpha", path: ["a"] as string[] }, // same → no entry
+      { name: "Beta", path: ["b"] as string[] }, // different path → moved
+      { name: "Delta", path: [] as string[] }, // disk-only → untracked
+    ];
+    const entries = diffNameMaps(manifestItems, diskItems);
+
+    const missing = entries.filter((e) => e.kind === "missing");
+    expect(missing.length).to.equal(1);
+    expect(missing[0].name).to.equal("Gamma");
+    expect(missing[0].manifestPath).to.deep.equal([]);
+    expect(missing[0].diskPath).to.be.undefined;
+
+    const untracked = entries.filter((e) => e.kind === "untracked");
+    expect(untracked.length).to.equal(1);
+    expect(untracked[0].name).to.equal("Delta");
+    expect(untracked[0].diskPath).to.deep.equal([]);
+    expect(untracked[0].manifestPath).to.be.undefined;
+
+    const moved = entries.filter((e) => e.kind === "moved");
+    expect(moved.length).to.equal(1);
+    expect(moved[0].name).to.equal("Beta");
+    expect(moved[0].manifestPath).to.deep.equal(["a"]);
+    expect(moved[0].diskPath).to.deep.equal(["b"]);
+  });
+
+  it("F1-6: walkDiskFileTree returns main.ts and importsForEvents.ts; excludes ts-defs/ and tsconfig.json", () => {
+    const scriptFolder = path.join(FIXTURE_DIR, "scripts");
+    const items = walkDiskFileTree(scriptFolder, m.rootFileFolders.script.subfolders);
+    const names = items.map((e) => e.name);
+
+    expect(names).to.include("main.ts");
+    expect(names).to.include("importsForEvents.ts");
+
+    // ts-defs/ is undeclared → not recursed
+    expect(names.some((n) => n.includes("ts-defs"))).to.equal(false);
+    // tsconfig.json is editor-local → filtered
+    expect(names.includes("tsconfig.json")).to.equal(false);
+  });
+
+  it("F1-7: walkManifestNameTree with nameless subfolder (timelines) does not throw and yields Timeline 1 at root path", () => {
+    let items: Array<{ name: string; path: string[] }>;
+    expect(() => {
+      items = walkManifestNameTree(m.timelines);
+    }).to.not.throw();
+    // Timeline 1 is a root item; the nameless subfolder has no items, so path is []
+    const timeline = items!.find((e) => e.name === "Timeline 1");
+    expect(timeline).to.not.be.undefined;
+    expect(timeline!.path).to.deep.equal([]);
   });
 });
