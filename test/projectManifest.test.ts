@@ -220,6 +220,39 @@ describe("detectManifestDrift", () => {
     expect(dangling[0].name).to.equal("Sprite2");
     expect(dangling[0].manifestPath).to.deep.equal(["#0"]);
   });
+
+  it("R-C22: clean fixture has no folder-level drift (objectTypes subfolders match disk)", () => {
+    const drift = detectManifestDrift(FIXTURE_DIR);
+    const folderKinds = drift.sections.flatMap((s) => s.entries.map((e) => e.kind));
+    expect(folderKinds.includes("folder-missing")).to.equal(false);
+    expect(folderKinds.includes("folder-untracked")).to.equal(false);
+  });
+
+  it("R-C23: a manifest subfolder with no on-disk directory is folder-missing", () => {
+    const base = readProjectManifest(MANIFEST_PATH);
+    const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
+    clone.objectTypes.subfolders.push({ items: [], subfolders: [], name: "phantom" });
+    const drift = detectManifestDrift(FIXTURE_DIR, clone);
+    const objectTypesDrift = drift.sections.find((s: SectionDrift) => s.section === "objectTypes");
+    expect(objectTypesDrift).to.not.be.undefined;
+    const missing = objectTypesDrift!.entries.filter((e) => e.kind === "folder-missing");
+    expect(missing.length).to.equal(1);
+    expect(missing[0].name).to.equal("phantom");
+    expect(missing[0].manifestPath).to.deep.equal(["phantom"]);
+  });
+
+  it("R-C24: an on-disk subdirectory with no manifest subfolder is folder-untracked", () => {
+    const base = readProjectManifest(MANIFEST_PATH);
+    const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
+    // drop the "tiles" subfolder from the manifest; the tiles/ directory still exists on disk
+    clone.objectTypes.subfolders = clone.objectTypes.subfolders.filter((sf) => sf.name !== "tiles");
+    const drift = detectManifestDrift(FIXTURE_DIR, clone);
+    const objectTypesDrift = drift.sections.find((s: SectionDrift) => s.section === "objectTypes");
+    expect(objectTypesDrift).to.not.be.undefined;
+    const untrackedFolders = objectTypesDrift!.entries.filter((e) => e.kind === "folder-untracked");
+    expect(untrackedFolders.map((e) => e.name)).to.include("tiles");
+    expect(untrackedFolders.find((e) => e.name === "tiles")!.diskPath).to.deep.equal(["tiles"]);
+  });
 });
 
 describe("F1: path-walk primitives", () => {

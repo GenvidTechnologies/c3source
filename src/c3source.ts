@@ -1332,6 +1332,12 @@ const DRIFT_KIND_ORDER: Record<DriftKind, number> = {
   "dangling-ref": 5,
 };
 
+/** Sort drift entries deterministically by kind then name (in place; returns the array). */
+function sortDriftEntries(entries: DriftEntry[]): DriftEntry[] {
+  entries.sort((a, b) => DRIFT_KIND_ORDER[a.kind] - DRIFT_KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
+  return entries;
+}
+
 /**
  * Diff two name→path lists and return structured DriftEntry records.
  * Per-category name uniqueness (a C3 invariant) means the maps have no collisions.
@@ -1363,7 +1369,51 @@ export function diffNameMaps(
   for (const [name, dPath] of dMap) {
     if (!mMap.has(name)) entries.push({ kind: "untracked", name, diskPath: dPath });
   }
-  entries.sort((a, b) => DRIFT_KIND_ORDER[a.kind] - DRIFT_KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
+  return sortDriftEntries(entries);
+}
+
+/** Collect every subfolder path (segment chains of names) declared in a manifest name-folder tree. */
+function collectManifestFolderPaths(folder: C3NameFolder, base: ManifestPathSegment[] = []): ManifestPathSegment[][] {
+  const out: ManifestPathSegment[][] = [];
+  for (const sub of folder.subfolders) {
+    // Nameless (degenerate empty) subfolder contributes no path; recurse with base unchanged.
+    const childPath = sub.name !== undefined ? [...base, sub.name] : base;
+    if (sub.name !== undefined) out.push(childPath);
+    out.push(...collectManifestFolderPaths(sub, childPath));
+  }
+  return out;
+}
+
+/** Collect every subdirectory path (segment chains, section-root-relative) on disk, editor-local filtered. */
+function collectDiskFolderPaths(dir: string, base: ManifestPathSegment[] = []): ManifestPathSegment[][] {
+  if (!existsSync(dir)) return [];
+  const out: ManifestPathSegment[][] = [];
+  for (const entry of readdirSync(dir).sort()) {
+    if (isEditorLocalPath(entry)) continue;
+    if (statSync(path.join(dir, entry)).isDirectory()) {
+      const childPath = [...base, entry];
+      out.push(childPath);
+      out.push(...collectDiskFolderPaths(path.join(dir, entry), childPath));
+    }
+  }
+  return out;
+}
+
+/**
+ * Diff manifest-declared subfolder paths against on-disk subdirectory paths, returning
+ * folder-level drift entries (folder-missing for manifest-only, folder-untracked for
+ * disk-only). A subfolder present on both sides yields no entry (folders are keyed by
+ * their full path, so there is no folder "move"). `name` is the leaf subfolder name.
+ */
+function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: ManifestPathSegment[][]): DriftEntry[] {
+  const mSet = new Set(manifestPaths.map(formatManifestPath));
+  const dSet = new Set(diskPaths.map(formatManifestPath));
+  const entries: DriftEntry[] = [];
+  for (const p of manifestPaths)
+    if (!dSet.has(formatManifestPath(p))) entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
+  for (const p of diskPaths)
+    if (!mSet.has(formatManifestPath(p)))
+      entries.push({ kind: "folder-untracked", name: p[p.length - 1], diskPath: p });
   return entries;
 }
 
@@ -1378,9 +1428,15 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
   const m = manifest ?? readProjectManifest(path.join(projectDir, "project.c3proj"));
   const sections: SectionDrift[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
-    const declared = m[section] ? walkManifestNameTree(m[section] as C3NameFolder) : [];
+    const sectionFolder = m[section] as C3NameFolder | undefined;
+    const declared = sectionFolder ? walkManifestNameTree(sectionFolder) : [];
     const onDisk = walkDiskNameTree(path.join(projectDir, folderName));
-    const entries = diffNameMaps(declared, onDisk);
+    const itemEntries = diffNameMaps(declared, onDisk);
+    const folderEntries = diffFolderPaths(
+      sectionFolder ? collectManifestFolderPaths(sectionFolder) : [],
+      collectDiskFolderPaths(path.join(projectDir, folderName)),
+    );
+    const entries = sortDriftEntries([...itemEntries, ...folderEntries]);
     if (entries.length) sections.push({ section, folder: folderName, entries });
   }
   const rff = m.rootFileFolders;
