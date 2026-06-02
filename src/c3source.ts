@@ -969,6 +969,199 @@ export function collectSidsWithPaths(node: unknown): Array<{ sid: number; path: 
   return out;
 }
 
+// ─── Piece C: project.c3proj manifest model ──────────────────────────────────
+
+/** A folder of named items (layouts, eventSheets, timelines, …) in the manifest. */
+export interface C3NameFolder {
+  items: string[];
+  subfolders: C3NameFolder[];
+}
+
+/** A single file entry in a rootFileFolders category. */
+export interface C3FileEntry {
+  name: string;
+  type: string;
+  sid: number;
+  [key: string]: unknown;
+}
+
+/** A folder of file entries in the manifest (scripts, icons, …). */
+export interface C3FileFolder {
+  items: C3FileEntry[];
+  subfolders: C3FileFolder[];
+}
+
+/** All seven rootFileFolders categories. */
+export interface C3RootFileFolders {
+  script: C3FileFolder;
+  sound: C3FileFolder;
+  music: C3FileFolder;
+  video: C3FileFolder;
+  font: C3FileFolder;
+  icon: C3FileFolder;
+  general: C3FileFolder;
+}
+
+/** The parsed project.c3proj manifest (folder-project format, NOT the single-file .c3p archive). */
+export interface C3ProjectManifest {
+  projectFormatVersion: number;
+  savedWithRelease: number;
+  name: string;
+  runtime: string;
+  objectTypes: C3NameFolder;
+  layouts: C3NameFolder;
+  eventSheets: C3NameFolder;
+  timelines: C3NameFolder;
+  flowcharts: C3NameFolder;
+  families: C3NameFolder;
+  models3d: C3NameFolder;
+  containers: unknown[];
+  rootFileFolders: C3RootFileFolders;
+  properties: Record<string, unknown>;
+  [key: string]: unknown; // forward-compat: usedAddons, viewportWidth, firstLayout, …
+}
+
+/** One section's drift result. Editor-local entries are already filtered out. */
+export interface SectionDrift {
+  /** e.g. "layouts", "rootFileFolders.script" */
+  section: string;
+  /** Resolved on-disk folder name, e.g. "layouts", "scripts". */
+  folder: string;
+  /** Names declared in the manifest but no file found on disk. */
+  missingOnDisk: string[];
+  /** Files on disk that the manifest doesn't declare. */
+  untracked: string[];
+}
+
+/** Result of detectManifestDrift. */
+export interface ManifestDrift {
+  sections: SectionDrift[];
+  inSync: boolean;
+}
+
+// ─── Private guards ───────────────────────────────────────────────────────────
+
+function assert(cond: unknown, msg: string): asserts cond {
+  if (!cond) throw new Error(`invalid project.c3proj: ${msg}`);
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function assertNameFolder(v: unknown, where: string): asserts v is C3NameFolder {
+  assert(isRecord(v), `${where} must be an object`);
+  assert(Array.isArray(v.items) && v.items.every((i) => typeof i === "string"), `${where}.items must be string[]`);
+  assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
+  v.subfolders.forEach((sf, i) => assertNameFolder(sf, `${where}.subfolders[${i}]`));
+}
+
+function assertFileFolder(v: unknown, where: string): asserts v is C3FileFolder {
+  assert(isRecord(v), `${where} must be an object`);
+  assert(Array.isArray(v.items), `${where}.items must be an array`);
+  v.items.forEach((it, i) => {
+    assert(isRecord(it), `${where}.items[${i}] must be an object`);
+    assert(typeof it.name === "string", `${where}.items[${i}].name must be a string`);
+    assert(typeof it.type === "string", `${where}.items[${i}].type must be a string`);
+    assert(typeof it.sid === "number", `${where}.items[${i}].sid must be a number`);
+  });
+  assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
+  v.subfolders.forEach((sf, i) => assertFileFolder(sf, `${where}.subfolders[${i}]`));
+}
+
+const NAME_SECTIONS = [
+  "layouts",
+  "eventSheets",
+  "objectTypes",
+  "timelines",
+  "flowcharts",
+  "families",
+  "models3d",
+] as const;
+
+// ─── Mapping tables ───────────────────────────────────────────────────────────
+
+/**
+ * Manifest section key → on-disk folder name for name-folder sections.
+ * NOTE: objectTypes assumes flat convention (objectTypes/<name>.json); unconfirmed
+ * by the fixture (empty objectTypes). families/models3d/containers intentionally absent.
+ */
+export const C3_SECTION_FOLDERS = {
+  layouts: "layouts",
+  eventSheets: "eventSheets",
+  /** Flat <name>.json convention assumed; unconfirmed by the empty fixture — mark for richer fixture. */
+  objectTypes: "objectTypes",
+  timelines: "timelines",
+  flowcharts: "flowcharts",
+} as const;
+
+/**
+ * Manifest rootFileFolders category → on-disk source folder (plural).
+ * CONFIRMED by fixture: script→scripts, icon→icons.
+ * INFERRED (shipped anyway; c3source owns the fix if wrong):
+ * sound→sounds, music→music, video→videos, font→fonts, general→files.
+ */
+export const C3_ROOT_FILE_FOLDERS = {
+  script: "scripts",
+  sound: "sounds",
+  music: "music",
+  video: "videos",
+  font: "fonts",
+  icon: "icons",
+  general: "files",
+} as const;
+
+// ─── Parser ───────────────────────────────────────────────────────────────────
+
+/**
+ * Parse and validate a raw JSON value as a C3ProjectManifest.
+ * Throws on shape violations. Absent modeled sections are tolerated (treated as empty).
+ * Unmodeled top-level fields pass through.
+ */
+export function parseProjectManifest(json: unknown): C3ProjectManifest {
+  assert(isRecord(json), "top-level value must be an object");
+  assert(typeof json.name === "string", "name must be a string");
+  assert(typeof json.runtime === "string", "runtime must be a string");
+  assert(typeof json.projectFormatVersion === "number", "projectFormatVersion must be a number");
+  assert(typeof json.savedWithRelease === "number", "savedWithRelease must be a number");
+  for (const sec of NAME_SECTIONS) if (sec in json) assertNameFolder(json[sec], sec);
+  if ("rootFileFolders" in json) {
+    const rff = json.rootFileFolders;
+    assert(isRecord(rff), "rootFileFolders must be an object");
+    for (const cat of Object.keys(C3_ROOT_FILE_FOLDERS))
+      if (cat in rff) assertFileFolder(rff[cat], `rootFileFolders.${cat}`);
+  }
+  return json as unknown as C3ProjectManifest;
+}
+
+/** Read and parse a project.c3proj file. Source-folder disk content is NOT consulted. */
+export function readProjectManifest(manifestPath: string): C3ProjectManifest {
+  return parseProjectManifest(JSON.parse(readFileSync(manifestPath, "utf-8")));
+}
+
+// ─── Flatteners ───────────────────────────────────────────────────────────────
+
+/** Collect all item names from a C3NameFolder, recursing into subfolders. */
+export function collectManifestItemNames(folder: C3NameFolder): string[] {
+  const out = [...folder.items];
+  for (const sub of folder.subfolders) out.push(...collectManifestItemNames(sub));
+  return out;
+}
+
+/** Collect all file entry names from a C3FileFolder, recursing into subfolders. */
+export function collectManifestFileNames(folder: C3FileFolder): string[] {
+  const out = folder.items.map((it) => it.name);
+  for (const sub of folder.subfolders) out.push(...collectManifestFileNames(sub));
+  return out;
+}
+
+// ─── Drift detector (stub — full implementation in next commit) ──────────────
+
+/** @internal — replaced in feat(manifest): detectManifestDrift */
+export function detectManifestDrift(_projectDir: string, _manifest?: C3ProjectManifest): ManifestDrift {
+  throw new Error("detectManifestDrift not yet implemented");
+}
+
 /** Which C3 schema slot a sid was found in. */
 export type SidSlot = "event" | "condition" | "action" | "function-parameter";
 

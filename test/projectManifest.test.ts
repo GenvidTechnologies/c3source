@@ -11,6 +11,7 @@ import {
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
   type C3ProjectManifest,
+  type SectionDrift,
 } from "../src/c3source.js";
 import { fixturePath } from "./fixtureHelpers.js";
 
@@ -117,7 +118,7 @@ describe("detectManifestDrift", () => {
     clone.layouts.items.push("Phantom Layout");
     const drift = detectManifestDrift(FIXTURE_DIR, clone);
     expect(drift.inSync).to.equal(false);
-    const layoutsDrift = drift.sections.find((s) => s.section === "layouts");
+    const layoutsDrift = drift.sections.find((s: SectionDrift) => s.section === "layouts");
     expect(layoutsDrift).to.not.be.undefined;
     expect(layoutsDrift!.missingOnDisk).to.deep.equal(["Phantom Layout"]);
   });
@@ -128,12 +129,12 @@ describe("detectManifestDrift", () => {
     clone.layouts.items = [];
     const drift = detectManifestDrift(FIXTURE_DIR, clone);
     expect(drift.inSync).to.equal(false);
-    const layoutsDrift = drift.sections.find((s) => s.section === "layouts");
+    const layoutsDrift = drift.sections.find((s: SectionDrift) => s.section === "layouts");
     expect(layoutsDrift).to.not.be.undefined;
     expect(layoutsDrift!.untracked).to.deep.equal(["Layout 1"]);
     // editor-local artifacts must not appear
-    const allUntracked = drift.sections.flatMap((s) => s.untracked);
-    expect(allUntracked.some((u) => u.includes("instancesBar") || u === "uistate")).to.equal(false);
+    const allUntracked = drift.sections.flatMap((s: SectionDrift) => s.untracked);
+    expect(allUntracked.some((u: string) => u.includes("instancesBar") || u === "uistate")).to.equal(false);
   });
 
   it("R-C15: clearing script items surfaces js files as untracked; ts-defs/ not flagged", () => {
@@ -142,10 +143,10 @@ describe("detectManifestDrift", () => {
     clone.rootFileFolders.script.items = [];
     const drift = detectManifestDrift(FIXTURE_DIR, clone);
     expect(drift.inSync).to.equal(false);
-    const scriptDrift = drift.sections.find((s) => s.section === "rootFileFolders.script");
+    const scriptDrift = drift.sections.find((s: SectionDrift) => s.section === "rootFileFolders.script");
     expect(scriptDrift).to.not.be.undefined;
     expect(scriptDrift!.untracked.sort()).to.deep.equal(["importsForEvents.js", "main.js"]);
     // ts-defs/ is a directory and must not appear
-    expect(scriptDrift!.untracked.some((u) => u.includes("ts-defs"))).to.equal(false);
+    expect(scriptDrift!.untracked.some((u: string) => u.includes("ts-defs"))).to.equal(false);
   });
 });
