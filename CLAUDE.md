@@ -131,7 +131,14 @@ Two functional areas:
    pre-collected before traversal. Regular sibling blocks disambiguate their
    scope keys with `#<eventIndex>`; functions/ACEs use their unique names.
    `formatAction`/`formatCondition` render events into a single-line DSL (see
-   the doc comment on `formatAction` for the full grammar).
+   the doc comment on `formatAction` for the full grammar). Sibling extractors
+   `walkScriptActions`, `extractFunctions`, and `extractIncludes` are thin
+   consumers of the same `visitEvents` walk, returning (respectively) script
+   actions, function/custom-ACE definitions (each carrying its `params` +
+   `returnType` signature), and include edges (`IncludeReference` =
+   `includeSheet` + `jsonPath`), all in canonical event order. The
+   `isFunctionDefinition` guard narrows an event to the two signature-bearing
+   kinds for callers that walk events themselves.
    **SID traversal** — `walkSids(node, visit: (sid, segments) => void)` is the
    exported primitive that recursively visits every object carrying a numeric
    `sid`, delivering both the sid value and its structured

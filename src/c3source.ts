@@ -914,6 +914,15 @@ export interface ExtractedFunction {
   name: string;
   /** Owning object class (custom-ACEs only). */
   objectClass?: string;
+  /** Declared parameters, in order. Structured so the consumer owns formatting. */
+  params: FunctionParameter[];
+  /** Declared return type (C3's raw string, e.g. "none" | "number" | "string"). */
+  returnType: string;
+}
+
+/** Narrow an event to the two kinds that declare a callable signature. */
+export function isFunctionDefinition(event: EventSheetEvent): event is FunctionBlockEvent | CustomAceBlockEvent {
+  return event.eventType === "function-block" || event.eventType === "custom-ace-block";
 }
 
 /** List the functions and custom-ACEs a sheet defines, in canonical event order. */
@@ -921,12 +930,46 @@ export function extractFunctions(sheet: EventSheet): ExtractedFunction[] {
   const functions: ExtractedFunction[] = [];
   visitEvents(sheet.events, (event) => {
     if (event.eventType === "function-block") {
-      functions.push({ kind: "function", name: event.functionName });
+      functions.push({
+        kind: "function",
+        name: event.functionName,
+        params: event.functionParameters,
+        returnType: event.functionReturnType,
+      });
     } else if (event.eventType === "custom-ace-block") {
-      functions.push({ kind: "custom-ace", name: event.aceName, objectClass: event.objectClass });
+      functions.push({
+        kind: "custom-ace",
+        name: event.aceName,
+        objectClass: event.objectClass,
+        params: event.functionParameters,
+        returnType: event.functionReturnType,
+      });
     }
   });
   return functions;
+}
+
+/** A single include edge: the sheet pulled in, plus its locator in the tree. */
+export interface IncludeReference {
+  /** Name of the included event sheet (IncludeEvent.includeSheet). */
+  includeSheet: string;
+  /** Locator of the include event, e.g. "events[2]" or "events[0].children[1]". */
+  jsonPath: string;
+}
+
+/**
+ * List the sheets this sheet includes, in canonical event order, each paired
+ * with its `jsonPath` coordinate. Includes are non-counting events (no
+ * eventNumber), so the jsonPath is their canonical locator.
+ */
+export function extractIncludes(sheet: EventSheet): IncludeReference[] {
+  const includes: IncludeReference[] = [];
+  visitEvents(sheet.events, (event, ctx) => {
+    if (event.eventType === "include") {
+      includes.push({ includeSheet: event.includeSheet, jsonPath: ctx.jsonPath });
+    }
+  });
+  return includes;
 }
 
 /** A path segment: object key (string) or array index (number). */
