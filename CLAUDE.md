@@ -139,6 +139,18 @@ Two functional areas:
    `includeSheet` + `jsonPath`), all in canonical event order. The
    `isFunctionDefinition` guard narrows an event to the two signature-bearing
    kinds for callers that walk events themselves.
+   **Event-variable references** — `isEventVarReference(ace)` and
+   `getEventVarReferenceName(ace)` classify a single action/condition as
+   referencing a C3 event variable. The canonical fact table
+   `EVENTVAR_REFERENCE_ACES` maps each known System ACE id (`set-eventvar-value`,
+   `compare-eventvar`, `compare-boolean-eventvar`, …) to the parameter **key**
+   that holds the variable name — a key, not a positional index, because ACE
+   parameters are a keyed `Record`. `isEventVarReference` gates on
+   `objectClass === "System"` (avoiding false positives from a plugin reusing an
+   id); `getEventVarReferenceName` resolves `parameters[nameParamKey]`
+   defensively. This is the C3 *domain fact* (id-list + name param) owned here so
+   downstream need not re-hardcode it (#26); name→declaration scope resolution
+   (incl. shadowing) stays the consumer's job.
    **SID traversal** — `walkSids(node, visit: (sid, segments) => void)` is the
    exported primitive that recursively visits every object carrying a numeric
    `sid`, delivering both the sid value and its structured
