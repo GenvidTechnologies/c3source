@@ -23,7 +23,7 @@ import {
 } from "../src/c3source.js";
 import { fixturePath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("sample-project");
+const FIXTURE_DIR = fixturePath("c3source-fixture");
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
 
 describe("parseProjectManifest / readProjectManifest", () => {
@@ -34,7 +34,7 @@ describe("parseProjectManifest / readProjectManifest", () => {
   });
 
   it("R-C1: reads name and savedWithRelease from the fixture", () => {
-    expect(m.name).to.equal("sample-project");
+    expect(m.name).to.equal("c3source-fixture");
     expect(m.savedWithRelease).to.equal(48702);
   });
 

@@ -119,8 +119,8 @@ describe("visit_layers_in_layouts (file walker)", () => {
   });
 
   it("discovers the real fixture layout and qualifies its layer name", function () {
-    const layoutsDir = fixturePath("sample-project/layouts");
-    if (!fixtureExists("sample-project/layouts/Main Layout.json")) return this.skip();
+    const layoutsDir = fixturePath("c3source-fixture/layouts");
+    if (!fixtureExists("c3source-fixture/layouts/Main Layout.json")) return this.skip();
     const found: string[] = [];
     visit_layers_in_layouts(layoutsDir, (layer, fullLayerName) => {
       if (layer.name) found.push(fullLayerName);
