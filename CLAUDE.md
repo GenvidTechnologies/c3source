@@ -117,6 +117,19 @@ Two functional areas:
    is the diff engine: it builds `name → path` maps per side and emits `missing`/`untracked`/`moved`
    entries (a same-name/different-path leaf is a move, not a delete+add, exploiting
    per-category name uniqueness — a C3 invariant).
+   **Timeline transitions exception** — C3 serializes a timeline's `transitions/` directory
+   (shown as **"Eases"** in the editor) as an **unnamed** subfolder under `timelines` in
+   `project.c3proj` (a `{items, subfolders}` node with no `name` key). This is the one place a
+   nameless manifest subfolder is meaningful, not degenerate. `TIMELINE_TRANSITIONS_FOLDER`
+   (`"transitions"`) is the exported C3 domain fact (cf. `EVENTVAR_REFERENCE_ACES`); the
+   manifest walks `walkManifestNameTree`/`collectManifestFolderPaths` take an optional
+   `unnamedSubfolderName` that names a nameless **top-level** subfolder (not propagated into
+   recursion → direct children of the section root only, matching C3 where transitions is always
+   a direct child). `detectManifestDrift` passes it for `section === "timelines"` so a
+   timeline-with-transitions project round-trips without false `moved`/`folder-*` drift (#28).
+   The model itself stays faithful (the subfolder stays unnamed — the synthetic name lives only
+   in the drift comparison, never written back); c3source owns no manifest writer, so emitting
+   the unnamed form on sync is the consumer's job.
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,

@@ -1224,6 +1224,19 @@ export const C3_SECTION_FOLDERS = {
 } as const;
 
 /**
+ * On-disk directory name for a timeline's auto-managed transition container — shown as
+ * **"Eases"** in the C3 editor (English). This is a C3 format **exception**: the editor
+ * serializes the `timelines/transitions/` directory as an **unnamed** subfolder under
+ * `timelines` in `project.c3proj` (a `{items, subfolders}` node with NO `name` key), and
+ * it is the one place a nameless manifest subfolder is meaningful rather than degenerate.
+ * Drift detection maps that unnamed top-level subfolder back to this directory name so a
+ * timeline-with-transitions project round-trips without false drift (#28). Exported so the
+ * C3 domain fact is owned here (cf. {@link EVENTVAR_REFERENCE_ACES}) rather than re-hardcoded
+ * downstream. The container can itself hold ordinary named subfolders (e.g. "Other Eases").
+ */
+export const TIMELINE_TRANSITIONS_FOLDER = "transitions";
+
+/**
  * Manifest rootFileFolders category → on-disk source folder (plural).
  * CONFIRMED by fixture: script→scripts, icon→icons.
  * INFERRED (shipped anyway; c3source owns the fix if wrong):
@@ -1318,19 +1331,27 @@ export function formatManifestPath(segments: ReadonlyArray<ManifestPathSegment>)
  * Yield every declared item from a C3NameFolder tree with its ancestor subfolder path.
  * `path` is the chain of ancestor subfolder NAMES (NOT including the item name itself).
  * The section root's own `name` is never included in any item's path.
- * If a subfolder has no `name` (the degenerate empty `timelines` case), its items
- * (none in practice) inherit the parent path unchanged — the nameless subfolder
- * contributes no segment to the path.
+ *
+ * A subfolder with no `name` normally contributes no segment (the section root's items
+ * inherit the parent path). The exception is `unnamedSubfolderName`: when supplied, a
+ * nameless DIRECT child of the section root adopts that name as its segment. This models
+ * the `timelines/transitions/` ("Eases") container, which C3 serializes as an unnamed
+ * subfolder (see {@link TIMELINE_TRANSITIONS_FOLDER}). The param is intentionally NOT
+ * propagated into recursion, so it applies to top-level children only — matching C3, where
+ * the transitions container is always a direct child of the `timelines` root.
  */
 export function walkManifestNameTree(
   folder: C3NameFolder,
   basePath: ManifestPathSegment[] = [],
+  unnamedSubfolderName?: string,
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
   for (const name of folder.items) out.push({ name, path: basePath });
   for (const sub of folder.subfolders) {
-    // Nameless subfolder: contributes no path segment (degenerate empty case).
-    const childPath = sub.name !== undefined ? [...basePath, sub.name] : basePath;
+    // Nameless subfolder contributes no segment, UNLESS unnamedSubfolderName names it
+    // (the timelines/transitions exception). Not propagated → top-level children only.
+    const effectiveName = sub.name ?? unnamedSubfolderName;
+    const childPath = effectiveName !== undefined ? [...basePath, effectiveName] : basePath;
     out.push(...walkManifestNameTree(sub, childPath));
   }
   return out;
@@ -1462,13 +1483,23 @@ export function diffNameMaps(
   return sortDriftEntries(entries);
 }
 
-/** Collect every subfolder path (segment chains of names) declared in a manifest name-folder tree. */
-function collectManifestFolderPaths(folder: C3NameFolder, base: ManifestPathSegment[] = []): ManifestPathSegment[][] {
+/**
+ * Collect every subfolder path (segment chains of names) declared in a manifest name-folder tree.
+ * `unnamedSubfolderName` mirrors {@link walkManifestNameTree}: a nameless direct child of the
+ * section root adopts that name (the `timelines/transitions` exception); not propagated into
+ * recursion, so it applies to top-level children only.
+ */
+function collectManifestFolderPaths(
+  folder: C3NameFolder,
+  base: ManifestPathSegment[] = [],
+  unnamedSubfolderName?: string,
+): ManifestPathSegment[][] {
   const out: ManifestPathSegment[][] = [];
   for (const sub of folder.subfolders) {
-    // Nameless (degenerate empty) subfolder contributes no path; recurse with base unchanged.
-    const childPath = sub.name !== undefined ? [...base, sub.name] : base;
-    if (sub.name !== undefined) out.push(childPath);
+    // Nameless subfolder contributes no path, UNLESS unnamedSubfolderName names it.
+    const effectiveName = sub.name ?? unnamedSubfolderName;
+    const childPath = effectiveName !== undefined ? [...base, effectiveName] : base;
+    if (effectiveName !== undefined) out.push(childPath);
     out.push(...collectManifestFolderPaths(sub, childPath));
   }
   return out;
@@ -1520,11 +1551,13 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
   const sections: SectionDrift[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
-    const declared = sectionFolder ? walkManifestNameTree(sectionFolder) : [];
+    // timelines exception: the unnamed top-level subfolder is the on-disk transitions/ ("Eases") dir.
+    const unnamed = section === "timelines" ? TIMELINE_TRANSITIONS_FOLDER : undefined;
+    const declared = sectionFolder ? walkManifestNameTree(sectionFolder, [], unnamed) : [];
     const onDisk = walkDiskNameTree(path.join(projectDir, folderName));
     const itemEntries = diffNameMaps(declared, onDisk);
     const folderEntries = diffFolderPaths(
-      sectionFolder ? collectManifestFolderPaths(sectionFolder) : [],
+      sectionFolder ? collectManifestFolderPaths(sectionFolder, [], unnamed) : [],
       collectDiskFolderPaths(path.join(projectDir, folderName)),
     );
     const entries = sortDriftEntries([...itemEntries, ...folderEntries]);

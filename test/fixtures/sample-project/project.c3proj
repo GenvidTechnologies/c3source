@@ -232,8 +232,25 @@
 		],
 		"subfolders": [
 			{
-				"items": [],
-				"subfolders": []
+				"items": [
+					"Matt's Ease"
+				],
+				"subfolders": [
+					{
+						"items": [
+							"Matt's Ease2"
+						],
+						"subfolders": [],
+						"name": "Other Eases"
+					}
+				]
+			},
+			{
+				"items": [
+					"Timeline 2"
+				],
+				"subfolders": [],
+				"name": "Real subfolder"
 			}
 		]
 	},
