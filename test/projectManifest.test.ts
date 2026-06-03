@@ -34,7 +34,7 @@ describe("parseProjectManifest / readProjectManifest", () => {
 
   it("R-C1: reads name and savedWithRelease from the fixture", () => {
     expect(m.name).to.equal("sample-project");
-    expect(m.savedWithRelease).to.equal(48700);
+    expect(m.savedWithRelease).to.equal(48702);
   });
 
   it("R-C2: name-folder typing — layouts.items and eventSheets.items", () => {
