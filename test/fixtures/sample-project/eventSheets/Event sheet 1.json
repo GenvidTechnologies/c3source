@@ -1,5 +1,81 @@
 {
 	"name": "Event sheet 1",
-	"events": [],
+	"events": [
+		{
+			"eventType": "variable",
+			"name": "globalVar1",
+			"type": "number",
+			"initialValue": "0",
+			"comment": "",
+			"isStatic": false,
+			"isConstant": false,
+			"sid": 313730046218879
+		},
+		{
+			"eventType": "group",
+			"disabled": false,
+			"title": "Event Group 1",
+			"description": "",
+			"isActiveOnStart": true,
+			"children": [
+				{
+					"eventType": "variable",
+					"name": "localVar1",
+					"type": "boolean",
+					"initialValue": "false",
+					"comment": "",
+					"isStatic": false,
+					"isConstant": false,
+					"sid": 644103509699271
+				},
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "compare-boolean-eventvar",
+							"objectClass": "System",
+							"sid": 182118583488986,
+							"parameters": {
+								"variable": "localVar1"
+							},
+							"isInverted": true
+						},
+						{
+							"id": "compare-eventvar",
+							"objectClass": "System",
+							"sid": 505585045057431,
+							"parameters": {
+								"variable": "globalVar1",
+								"comparison": 0,
+								"value": "0"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "set-eventvar-value",
+							"objectClass": "System",
+							"sid": 596956969384316,
+							"parameters": {
+								"variable": "globalVar1",
+								"value": "1"
+							}
+						},
+						{
+							"id": "set-boolean-eventvar",
+							"objectClass": "System",
+							"sid": 631328997181618,
+							"parameters": {
+								"variable": "localVar1",
+								"value": "true"
+							}
+						}
+					],
+					"sid": 979793041802766
+				}
+			],
+			"sid": 526119147965622
+		}
+	],
 	"sid": 635959236260852
 }

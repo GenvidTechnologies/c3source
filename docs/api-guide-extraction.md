@@ -9,6 +9,7 @@ For SID traversal and editor-local classification see [api-guide.md](api-guide.m
 - [Actions-only walk: `walkScriptActions`](#actions-only-walk-walkscriptactions)
 - [Function discovery: `extractFunctions`](#function-discovery-extractfunctions)
 - [Type guard: `isFunctionDefinition`](#type-guard-isfunctiondefinition)
+- [Event-variable references: `isEventVarReference` / `getEventVarReferenceName`](#event-variable-references-iseventvarreference--geteventvarreferencename)
 - [Include edges: `extractIncludes`](#include-edges-extractincludes)
 
 ---
@@ -205,6 +206,64 @@ visitEvents(sheet.events, (event) => {
   }
 });
 ```
+
+---
+
+## Event-variable references: `isEventVarReference` / `getEventVarReferenceName`
+
+```ts
+EVENTVAR_REFERENCE_ACES: Record<string, string>   // System ACE id → name-bearing param key
+
+isEventVarReference(ace: Condition | ScriptAction | Record<string, unknown>): { nameParamKey: string } | null
+getEventVarReferenceName(ace: Condition | ScriptAction | Record<string, unknown>): string | null
+```
+
+Classify a single action or condition: does it reference an event variable, and
+under which parameter key is the variable name stored? This is C3 *domain
+knowledge* — the set of System ACE ids that target event variables
+(`set-eventvar-value`, `add-to-eventvar`, `compare-eventvar`,
+`compare-boolean-eventvar`, …) drifts with C3 versions, so it is owned here
+rather than re-hardcoded by every consumer that walks events.
+
+**`EVENTVAR_REFERENCE_ACES`** is the canonical fact table mapping each known
+System event-variable ACE id to the parameter key that holds the variable name
+(currently `"variable"` for all of them). It is exported so consumers can
+introspect or extend the set; the table is intentionally non-exhaustive across
+every C3 version.
+
+**`isEventVarReference`** returns `{ nameParamKey }` when `ace.objectClass ===
+"System"` and `ace.id` is in the table, else `null`. The locator is a parameter
+**key**, not a positional index, because c3source stores ACE parameters as a
+keyed `Record<string, unknown>` (the same shape `formatAction`/`formatCondition`
+iterate). Gating on `"System"` avoids false positives from a plugin that happens
+to reuse a known id.
+
+**`getEventVarReferenceName`** resolves the name directly: it classifies, then
+reads `ace.parameters[nameParamKey]`, returning the string or `null` when
+`parameters` is absent or the value is not a string.
+
+```ts
+import { visitEvents, hasConditions, hasActions, getEventVarReferenceName } from "@genvid/c3source";
+
+// Collect every event-variable name referenced anywhere in a sheet.
+const referenced: string[] = [];
+visitEvents(sheet.events, (event) => {
+  if (hasConditions(event)) for (const c of event.conditions) {
+    const name = getEventVarReferenceName(c);
+    if (name) referenced.push(name);
+  }
+  if (hasActions(event)) for (const a of event.actions) {
+    const name = getEventVarReferenceName(a);
+    if (name) referenced.push(name);
+  }
+});
+```
+
+**Scope resolution is the caller's job.** This classifier answers only "which
+variable name is referenced here". Mapping a referenced name to its declaration
+— including lexical shadowing, where a local variable shadows a same-named
+global — is presentation/analysis logic that belongs in the consumer (a
+`variable` event at the sheet root is global; nested, it is local).
 
 ---
 

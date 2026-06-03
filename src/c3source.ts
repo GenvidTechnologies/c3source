@@ -920,6 +920,53 @@ export interface ExtractedFunction {
   returnType: string;
 }
 
+/** System event-variable ACE id -> the parameter key that holds the variable name.
+ *  A C3 platform fact that drifts with C3 versions, owned here so downstream
+ *  need not re-hardcode it (issue #26). Exported so callers can introspect/extend. */
+export const EVENTVAR_REFERENCE_ACES: Record<string, string> = {
+  "set-eventvar-value": "variable",
+  "add-to-eventvar": "variable",
+  "subtract-from-eventvar": "variable",
+  "set-boolean-eventvar": "variable",
+  "toggle-boolean-eventvar": "variable",
+  "compare-eventvar": "variable",
+  "compare-boolean-eventvar": "variable",
+  "is-boolean-eventvar-set": "variable",
+};
+
+/**
+ * Returns `{ nameParamKey }` when `ace` is a System event-variable ACE —
+ * i.e. `objectClass === "System"` and `id` is a key in {@link EVENTVAR_REFERENCE_ACES}.
+ * Returns `null` for any other ACE, script action, comment, etc.
+ * Gating on `"System"` avoids false positives from a plugin reusing a known id.
+ */
+export function isEventVarReference(
+  ace: Condition | ScriptAction | Record<string, unknown>,
+): { nameParamKey: string } | null {
+  if (!("id" in ace) || !("objectClass" in ace)) return null;
+  const id = (ace as Record<string, unknown>).id as string;
+  const objectClass = (ace as Record<string, unknown>).objectClass as string;
+  if (objectClass !== "System") return null;
+  const nameParamKey = EVENTVAR_REFERENCE_ACES[id];
+  if (nameParamKey === undefined) return null;
+  return { nameParamKey };
+}
+
+/**
+ * Returns the event-variable name referenced by `ace`, or `null` if:
+ * - `ace` is not a System event-variable ACE (delegates to {@link isEventVarReference}), or
+ * - the expected `parameters[nameParamKey]` entry is absent or not a string.
+ * No line-ending normalization — variable names are plain identifiers.
+ */
+export function getEventVarReferenceName(ace: Condition | ScriptAction | Record<string, unknown>): string | null {
+  const ref = isEventVarReference(ace);
+  if (ref === null) return null;
+  const parameters = (ace as Record<string, unknown>).parameters as Record<string, unknown> | undefined;
+  if (!parameters) return null;
+  const value = parameters[ref.nameParamKey];
+  return typeof value === "string" ? value : null;
+}
+
 /** Narrow an event to the two kinds that declare a callable signature. */
 export function isFunctionDefinition(event: EventSheetEvent): event is FunctionBlockEvent | CustomAceBlockEvent {
   return event.eventType === "function-block" || event.eventType === "custom-ace-block";
@@ -1453,7 +1500,8 @@ function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: Mani
   const dSet = new Set(diskPaths.map(formatManifestPath));
   const entries: DriftEntry[] = [];
   for (const p of manifestPaths)
-    if (!dSet.has(formatManifestPath(p))) entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
+    if (!dSet.has(formatManifestPath(p)))
+      entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
   for (const p of diskPaths)
     if (!mSet.has(formatManifestPath(p)))
       entries.push({ kind: "folder-untracked", name: p[p.length - 1], diskPath: p });
