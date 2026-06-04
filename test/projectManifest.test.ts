@@ -12,6 +12,7 @@ import {
   detectImageDrift,
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
+  TIMELINE_TRANSITIONS_FOLDER,
   walkManifestNameTree,
   walkDiskNameTree,
   walkDiskFileTree,
@@ -22,7 +23,7 @@ import {
 } from "../src/c3source.js";
 import { fixturePath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("sample-project");
+const FIXTURE_DIR = fixturePath("c3source-fixture");
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
 
 describe("parseProjectManifest / readProjectManifest", () => {
@@ -33,7 +34,7 @@ describe("parseProjectManifest / readProjectManifest", () => {
   });
 
   it("R-C1: reads name and savedWithRelease from the fixture", () => {
-    expect(m.name).to.equal("sample-project");
+    expect(m.name).to.equal("c3source-fixture");
     expect(m.savedWithRelease).to.equal(48702);
   });
 
@@ -48,9 +49,10 @@ describe("parseProjectManifest / readProjectManifest", () => {
     expect(m.rootFileFolders.icon.items.length).to.equal(7);
   });
 
-  it("R-C4: collectManifestItemNames recurses into subfolders (timelines)", () => {
+  it("R-C4: collectManifestItemNames recurses into subfolders (timelines, incl. unnamed transitions)", () => {
     const names = collectManifestItemNames(m.timelines);
-    expect(names).to.deep.equal(["Timeline 1"]);
+    // root item, then the unnamed transitions subfolder + its named "Other Eases" child, then "Real subfolder"
+    expect(names).to.deep.equal(["Timeline 1", "Matt's Ease", "Matt's Ease2", "Timeline 2"]);
   });
 
   it("R-C5: parseProjectManifest(raw) deep-equals readProjectManifest(path)", () => {
@@ -76,10 +78,12 @@ describe("parseProjectManifest / readProjectManifest", () => {
     expect(Array.isArray(m.usedAddons)).to.equal(true);
   });
 
-  it("R-C16: populated subfolders carry a name; degenerate empty subfolder has none", () => {
+  it("R-C16: populated subfolders carry a name; the unnamed timelines/transitions subfolder has none", () => {
     expect(m.objectTypes.subfolders.map((sf) => sf.name)).to.deep.equal(["global", "images", "tiles"]);
-    // the empty timelines subfolder C3 serialized without a name must parse cleanly
+    // C3 serializes the timelines/transitions ("Eases") container as an UNNAMED subfolder;
+    // it must parse cleanly with name === undefined (the sibling "Real subfolder" is named).
     expect(m.timelines.subfolders[0].name).to.equal(undefined);
+    expect(m.timelines.subfolders[1].name).to.equal("Real subfolder");
   });
 
   it("R-C17: containers are typed with a string[] members list", () => {
@@ -253,6 +257,32 @@ describe("detectManifestDrift", () => {
     expect(untrackedFolders.map((e) => e.name)).to.include("tiles");
     expect(untrackedFolders.find((e) => e.name === "tiles")!.diskPath).to.deep.equal(["tiles"]);
   });
+
+  it("R-C25: timeline with a transitions/ ('Eases') dir reports NO drift (unnamed subfolder maps cleanly)", () => {
+    // The fixture's timelines/transitions/ is serialized as an unnamed subfolder; on a clean
+    // tree this must NOT surface as moved items or folder-missing/untracked drift (#28).
+    const drift = detectManifestDrift(FIXTURE_DIR);
+    expect(drift.sections.find((s: SectionDrift) => s.section === "timelines")).to.be.undefined;
+    expect(TIMELINE_TRANSITIONS_FOLDER).to.equal("transitions");
+  });
+
+  it("R-C26: a transition item declared at the timelines root (not in the unnamed subfolder) is moved", () => {
+    // Confirms the transitions mapping is genuinely applied to the disk comparison: if the
+    // manifest places "Matt's Ease" at the root instead of inside the unnamed transitions
+    // container, drift reports it as moved (manifest [] vs disk ["transitions"]) — not clean.
+    const base = readProjectManifest(MANIFEST_PATH);
+    const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
+    clone.timelines.items = [...clone.timelines.items, "Matt's Ease"];
+    clone.timelines.subfolders[0].items = []; // remove it from the unnamed transitions subfolder
+    const drift = detectManifestDrift(FIXTURE_DIR, clone);
+    const timelinesDrift = drift.sections.find((s: SectionDrift) => s.section === "timelines");
+    expect(timelinesDrift).to.not.be.undefined;
+    const moved = timelinesDrift!.entries.filter((e) => e.kind === "moved");
+    const mattsEase = moved.find((e) => e.name === "Matt's Ease");
+    expect(mattsEase).to.not.be.undefined;
+    expect(mattsEase!.manifestPath).to.deep.equal([]);
+    expect(mattsEase!.diskPath).to.deep.equal(["transitions"]);
+  });
 });
 
 describe("F1: path-walk primitives", () => {
@@ -374,15 +404,28 @@ describe("F1: path-walk primitives", () => {
     expect(names.includes("tsconfig.json")).to.equal(false);
   });
 
-  it("F1-7: walkManifestNameTree with nameless subfolder (timelines) does not throw and yields Timeline 1 at root path", () => {
+  it("F1-7: walkManifestNameTree without unnamedSubfolderName leaves a nameless subfolder segment-less", () => {
     let items: Array<{ name: string; path: string[] }>;
     expect(() => {
       items = walkManifestNameTree(m.timelines);
     }).to.not.throw();
-    // Timeline 1 is a root item; the nameless subfolder has no items, so path is []
-    const timeline = items!.find((e) => e.name === "Timeline 1");
-    expect(timeline).to.not.be.undefined;
-    expect(timeline!.path).to.deep.equal([]);
+    // Timeline 1 is a root item → path []
+    expect(items!.find((e) => e.name === "Timeline 1")!.path).to.deep.equal([]);
+    // With no unnamedSubfolderName, the unnamed transitions subfolder contributes no segment,
+    // so its item lands at root and its named child keeps only its own name.
+    expect(items!.find((e) => e.name === "Matt's Ease")!.path).to.deep.equal([]);
+    expect(items!.find((e) => e.name === "Matt's Ease2")!.path).to.deep.equal(["Other Eases"]);
+  });
+
+  it("F1-8: walkManifestNameTree maps the unnamed timelines subfolder to TIMELINE_TRANSITIONS_FOLDER", () => {
+    const items = walkManifestNameTree(m.timelines, [], TIMELINE_TRANSITIONS_FOLDER);
+    // unnamed transitions subfolder now contributes the "transitions" segment...
+    expect(items.find((e) => e.name === "Matt's Ease")!.path).to.deep.equal(["transitions"]);
+    // ...and its named child nests beneath it.
+    expect(items.find((e) => e.name === "Matt's Ease2")!.path).to.deep.equal(["transitions", "Other Eases"]);
+    // a real named sibling subfolder is unaffected; root items stay at root.
+    expect(items.find((e) => e.name === "Timeline 2")!.path).to.deep.equal(["Real subfolder"]);
+    expect(items.find((e) => e.name === "Timeline 1")!.path).to.deep.equal([]);
   });
 });
 

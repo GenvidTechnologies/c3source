@@ -1,7 +1,7 @@
 {
 	"projectFormatVersion": 1,
 	"savedWithRelease": 48702,
-	"name": "sample-project",
+	"name": "c3source-fixture",
 	"runtime": "c3",
 	"useWorker": "auto",
 	"bundleAddons": false,
@@ -232,8 +232,25 @@
 		],
 		"subfolders": [
 			{
-				"items": [],
-				"subfolders": []
+				"items": [
+					"Matt's Ease"
+				],
+				"subfolders": [
+					{
+						"items": [
+							"Matt's Ease2"
+						],
+						"subfolders": [],
+						"name": "Other Eases"
+					}
+				]
+			},
+			{
+				"items": [
+					"Timeline 2"
+				],
+				"subfolders": [],
+				"name": "Real subfolder"
 			}
 		]
 	},

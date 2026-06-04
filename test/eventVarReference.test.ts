@@ -121,7 +121,7 @@ describe("getEventVarReferenceName", () => {
 // ---------------------------------------------------------------------------
 
 describe("getEventVarReferenceName (fixture integration)", () => {
-  const fixturePath = "sample-project/eventSheets/Event sheet 1.json";
+  const fixturePath = "c3source-fixture/eventSheets/Event sheet 1.json";
 
   before(function () {
     if (!fixtureExists(fixturePath)) {
