@@ -13,6 +13,7 @@ import {
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
   TIMELINE_TRANSITIONS_FOLDER,
+  IMAGE_FILE_TYPE_EXTENSIONS,
   walkManifestNameTree,
   walkDiskNameTree,
   walkDiskFileTree,
@@ -486,5 +487,79 @@ describe("F4: image-derived drift", () => {
 
     // Object type with animations but empty items/subfolders → no throw, empty result
     expect(deriveExpectedImageNames({ name: "Ghost", animations: { items: [], subfolders: [] } })).to.deep.equal([]);
+  });
+
+  it("F4-7: IMAGE_FILE_TYPE_EXTENSIONS exports png/jpeg/svg+xml/webp", () => {
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/png"]).to.equal("png");
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/jpeg"]).to.equal("jpg");
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/svg+xml"]).to.equal("svg");
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/webp"]).to.equal("webp");
+  });
+
+  it("F4-8: single-image branch resolves extension from fileType (jpeg→.jpg, svg→.svg, webp→.webp, png→.png)", () => {
+    expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/jpeg" } })).to.deep.equal(["foo.jpg"]);
+    expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/svg+xml" } })).to.deep.equal(["foo.svg"]);
+    expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/webp" } })).to.deep.equal(["foo.webp"]);
+    expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/png" } })).to.deep.equal(["foo.png"]);
+  });
+
+  it("F4-9: animation branch resolves extension per frame from its own fileType", () => {
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{ fileType: "image/jpeg" }, { fileType: "image/webp" }] }],
+        subfolders: [],
+      },
+    };
+    const names = deriveExpectedImageNames(ot);
+    expect(names).to.deep.equal(["bar-run-000.jpg", "bar-run-001.webp"]);
+  });
+
+  it("F4-10: absent fileType on single-image branch throws (malformed)", () => {
+    expect(() => deriveExpectedImageNames({ name: "Foo", image: {} })).to.throw(/malformed|fileType/i);
+    expect(() => deriveExpectedImageNames({ name: "Foo", image: { fileType: null } })).to.throw(/malformed|fileType/i);
+  });
+
+  it("F4-11: unknown MIME on single-image branch throws with 'unknown'", () => {
+    expect(() => deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/gif" } })).to.throw(/unknown/i);
+  });
+
+  it("F4-12: absent fileType on animation frame throws (malformed)", () => {
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Idle", frames: [{}] }],
+        subfolders: [],
+      },
+    };
+    expect(() => deriveExpectedImageNames(ot)).to.throw(/malformed|fileType/i);
+  });
+
+  it("F4-13: unknown MIME on animation frame throws with 'unknown'", () => {
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Idle", frames: [{ fileType: "image/bmp" }] }],
+        subfolders: [],
+      },
+    };
+    expect(() => deriveExpectedImageNames(ot)).to.throw(/unknown/i);
+  });
+
+  it("F4-1 and F4-2 still pass with real fixtures (all png → .png)", () => {
+    const nineP = readObjectType("images", "9patch.json");
+    expect(deriveExpectedImageNames(nineP)).to.deep.equal(["9patch.png"]);
+
+    const tilemap = readObjectType("tiles", "Tilemap.json");
+    expect(deriveExpectedImageNames(tilemap)).to.deep.equal(["tilemap.png"]);
+
+    const sprite = readObjectType("images", "Sprite.json");
+    const names = deriveExpectedImageNames(sprite).sort();
+    expect(names).to.deep.equal([
+      "sprite-animation 1-000.png",
+      "sprite-animation 2-000.png",
+      "sprite-animation 2-001.png",
+      "sprite-animation 3-000.png",
+    ]);
   });
 });
