@@ -1605,10 +1605,36 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
 
 // ─── Image-derived drift ──────────────────────────────────────────────────────
 
+/** C3 image `fileType` (MIME) -> on-disk file extension (no leading dot).
+ *  A C3 platform fact owned here so downstream need not re-hardcode it (issue #29).
+ *  Exported so callers can introspect/extend. */
+export const IMAGE_FILE_TYPE_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/svg+xml": "svg",
+  "image/webp": "webp",
+};
+
+/**
+ * Resolve the on-disk extension for a C3 image `fileType` MIME string.
+ * Throws if `fileType` is absent/empty (malformed object type) or unmapped (unknown format).
+ * `context` is included in the error message to aid diagnosis.
+ */
+function extensionForFileType(fileType: unknown, context: string): string {
+  if (fileType == null || fileType === "") {
+    throw new Error(`malformed object type: missing fileType on "${context}"`);
+  }
+  const ext = IMAGE_FILE_TYPE_EXTENSIONS[String(fileType)];
+  if (ext === undefined) {
+    throw new Error(`unknown image fileType "${String(fileType)}" on "${context}"`);
+  }
+  return ext;
+}
+
 /** Shape of an animation item within an object type's `animations` tree. */
 interface AnimationItem {
   name: string;
-  frames?: unknown[];
+  frames?: Record<string, unknown>[];
 }
 
 /** Shape of an animation folder node within an object type's `animations` tree. */
@@ -1622,18 +1648,23 @@ interface AnimationFolder {
  *
  * **V1 coverage rule (structural detection):**
  * - Object type with a top-level `image` field (NinePatch, TiledBg, Tilemap plugins and
- *   any future single-image plugin): exactly one expected image `<lowercased-name>.png`.
+ *   any future single-image plugin): exactly one expected image
+ *   `<lowercased-name>.<ext>`, where `ext` is derived from `image.fileType` via
+ *   {@link IMAGE_FILE_TYPE_EXTENSIONS}.
  * - Object type with a top-level `animations` field (Sprite plugin and compatible):
- *   one `<lowercased-name>-<lowercased-animation-name>-<frame3>.png` per animation frame,
- *   where `frame3` is the zero-based frame index zero-padded to 3 digits (000, 001, …).
+ *   one `<lowercased-name>-<lowercased-animation-name>-<frame3>.<ext>` per animation frame,
+ *   where `frame3` is the zero-based frame index zero-padded to 3 digits (000, 001, …) and
+ *   `ext` is derived from each frame's own `fileType` field via {@link IMAGE_FILE_TYPE_EXTENSIONS}
+ *   (frames in the same animation may differ in format).
  *   Animation subfolders **collapse** — the subfolder name does NOT appear in the filename;
  *   animation names are unique within an object type.
  * - Object types with neither `image` nor `animations` (Text, JSON, etc.): no images.
  *
+ * An absent or unmapped `fileType` throws (malformed object type / unknown format).
+ *
  * **Explicit limits (extensible in future releases):**
  * - Does NOT cover spritesheet/atlas packing (a sprite whose frames are packed into a
  *   single atlas sheet will not match the per-frame pattern).
- * - Does NOT cover custom export formats or non-png `fileType` values.
  * - Does NOT cover collision-polygon or image-point sidecar files.
  * - Detection is structural (field presence), not plugin-id allowlist — robust to
  *   third-party single-image plugins but may over-derive for unusual plugin shapes.
@@ -1641,16 +1672,20 @@ interface AnimationFolder {
 export function deriveExpectedImageNames(objectType: Record<string, unknown>): string[] {
   const name = String(objectType.name).toLowerCase();
   if ("image" in objectType) {
-    return [`${name}.png`];
+    const img = objectType.image as Record<string, unknown>;
+    const ext = extensionForFileType(img?.fileType, String(objectType.name));
+    return [`${name}.${ext}`];
   }
   if ("animations" in objectType) {
     const result: string[] = [];
     const collectAnimations = (folder: AnimationFolder): void => {
       for (const animItem of folder.items) {
         const animName = String(animItem.name).toLowerCase();
-        const frameCount = Array.isArray(animItem.frames) ? animItem.frames.length : 0;
-        for (let i = 0; i < frameCount; i++) {
-          result.push(`${name}-${animName}-${String(i).padStart(3, "0")}.png`);
+        const frames = Array.isArray(animItem.frames) ? animItem.frames : [];
+        for (let i = 0; i < frames.length; i++) {
+          const frame = frames[i] as Record<string, unknown>;
+          const ext = extensionForFileType(frame?.fileType, `${String(objectType.name)}/${animItem.name}#${i}`);
+          result.push(`${name}-${animName}-${String(i).padStart(3, "0")}.${ext}`);
         }
       }
       for (const sub of folder.subfolders) {
@@ -1677,8 +1712,9 @@ export function deriveExpectedImageNames(objectType: Record<string, unknown>): s
  * All paths are `[]` (images/ is a flat folder — no subfolder nesting for moves).
  *
  * Detection is best-effort (see `deriveExpectedImageNames` for coverage limits).
- * Errors during derivation/parsing propagate to the caller; `detectManifestDrift`
- * wraps this in a try/catch so a failure degrades to "images section omitted".
+ * A malformed or unknown `fileType` in any object type causes `deriveExpectedImageNames`
+ * to throw; that error propagates to the caller. `detectManifestDrift` wraps this
+ * function in a try/catch so such a failure degrades gracefully to "images section omitted".
  */
 export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
   const imagesDir = path.join(projectDir, "images");

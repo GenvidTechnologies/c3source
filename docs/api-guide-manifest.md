@@ -344,27 +344,42 @@ filenames are derived from all object-type JSON files in `objectTypes/` (see
 
 | Object type shape | Expected images |
 |---|---|
-| Has `image` field (NinePatch, TiledBackground, Tilemap, …) | `<lowercased-name>.png` |
-| Has `animations` field (Sprite, …) | `<lowercased-name>-<lowercased-animation>-<frame3>.png` per frame |
+| Has `image` field (NinePatch, TiledBackground, Tilemap, …) | `<lowercased-name>.<ext>` |
+| Has `animations` field (Sprite, …) | `<lowercased-name>-<lowercased-animation>-<frame3>.<ext>` per frame |
 | Neither (Text, JSON, …) | None |
+
+The file extension `<ext>` is derived from each image member's `fileType` MIME via the exported
+`IMAGE_FILE_TYPE_EXTENSIONS` map:
+
+| MIME | Extension |
+|---|---|
+| `image/png` | `png` |
+| `image/jpeg` | `jpg` |
+| `image/svg+xml` | `svg` |
+| `image/webp` | `webp` |
+
+For the `image` case the MIME comes from the top-level `image.fileType` field. For the
+`animations` case it comes from each individual frame's own `fileType` field (frames within the
+same animation may differ in format).
 
 Animation subfolders collapse: the subfolder name does not appear in the
 filename. Animation names are unique within an object type. `frame3` is the
 zero-based frame index zero-padded to 3 digits (`000`, `001`, …).
 
+An absent or unmapped `fileType` is treated as an error: `deriveExpectedImageNames` throws
+(`malformed object type` / `unknown image fileType`). `detectManifestDrift` wraps image
+derivation in a try/catch, so a thrown error degrades gracefully to "images section omitted"
+rather than failing core drift. Call `detectImageDrift` directly if you want to surface
+derivation errors.
+
 **Known limits (intentionally incomplete; extensible in future releases):**
 
 - Spritesheet/atlas packing: a sprite whose frames are packed into a single
   atlas sheet will not match the per-frame pattern.
-- Custom export formats or non-`png` file types.
 - Collision-polygon and image-point sidecar files.
 
 Detection is structural (field presence), not a plugin-id allowlist — robust to
 third-party single-image plugins but may over-derive for unusual plugin shapes.
-
-If image derivation throws (e.g. a malformed object-type JSON), `detectManifestDrift`
-silently omits the images section rather than failing core drift. Call
-`detectImageDrift` directly if you want to surface derivation errors.
 
 ### Walk depth
 
