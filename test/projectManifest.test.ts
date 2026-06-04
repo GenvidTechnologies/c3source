@@ -326,13 +326,13 @@ describe("F1: path-walk primitives", () => {
     expect(imageItems.sort()).to.deep.equal(["9patch", "Sprite", "Sprite2", "Sprite3"]);
     // tiles subfolder
     const tileItems = items.filter((e) => e.path.length === 1 && e.path[0] === "tiles").map((e) => e.name);
-    expect(tileItems.sort()).to.deep.equal(["TiledBackground", "Tilemap"]);
-    expect(items.length).to.equal(10);
+    expect(tileItems.sort()).to.deep.equal(["JPEGTileBackground", "TiledBackground", "Tilemap"]);
+    expect(items.length).to.equal(11);
   });
 
-  it("F1-4: walkDiskNameTree yields the same 10 name/path pairs as manifest (section-root-relative)", () => {
+  it("F1-4: walkDiskNameTree yields the same 11 name/path pairs as manifest (section-root-relative)", () => {
     const diskItems = walkDiskNameTree(path.join(FIXTURE_DIR, "objectTypes"));
-    expect(diskItems.length).to.equal(10);
+    expect(diskItems.length).to.equal(11);
 
     // Paths must be section-root-relative (not absolute)
     for (const item of diskItems) {
@@ -460,7 +460,7 @@ describe("F4: image-derived drift", () => {
     expect(deriveExpectedImageNames(text)).to.deep.equal([]);
   });
 
-  it("F4-4: detectImageDrift on clean fixture → not null, entries empty (all 9 names match 9 on-disk images: 8 png + tiledbackground.jpg)", () => {
+  it("F4-4: detectImageDrift on clean fixture → not null, entries empty (all 10 names match 10 on-disk images: 9 png + jpegtilebackground.jpg)", () => {
     const result = detectImageDrift(FIXTURE_DIR);
     expect(result).to.not.be.null;
     expect(result!.section).to.equal("images");
@@ -563,18 +563,19 @@ describe("F4: image-derived drift", () => {
     ]);
   });
 
-  it("F4-14: TiledBackground (image/jpeg) resolves to tiledbackground.jpg and detectImageDrift reports no drift", () => {
-    // Real fixture now declares image/jpeg — this is the regression case from issue #29 where
-    // deriveExpectedImageNames was always emitting .png regardless of fileType.
-    const tiledBg = readObjectType("tiles", "TiledBackground.json");
-    expect(deriveExpectedImageNames(tiledBg)).to.deep.equal(["tiledbackground.jpg"]);
+  it("F4-14: JPEGTileBackground (image/jpeg) resolves to jpegtilebackground.jpg and detectImageDrift reports no drift", () => {
+    // Real fixture: a TiledBg object declaring image/jpeg, backed by a genuine .jpg on disk.
+    // This is the regression case from issue #29 where deriveExpectedImageNames always emitted
+    // .png regardless of fileType, producing a false missing-.png / untracked-.jpg pair.
+    const jpegBg = readObjectType("tiles", "JPEGTileBackground.json");
+    expect(deriveExpectedImageNames(jpegBg)).to.deep.equal(["jpegtilebackground.jpg"]);
 
     // End-to-end: no false missing .png / untracked .jpg pair in the images folder
     const imageDrift = detectImageDrift(FIXTURE_DIR);
     expect(imageDrift).to.not.be.null;
     expect(imageDrift!.entries).to.deep.equal([]);
 
-    // Manifest drift must still be clean (objectTypes membership is name-keyed, unaffected by rename)
+    // Manifest drift must still be clean (JPEGTileBackground + LevelMaps wired into project.c3proj)
     const manifestDrift = detectManifestDrift(FIXTURE_DIR);
     expect(manifestDrift.inSync).to.equal(true);
   });
