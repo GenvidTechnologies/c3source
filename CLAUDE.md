@@ -130,6 +130,20 @@ Two functional areas:
    The model itself stays faithful (the subfolder stays unnamed — the synthetic name lives only
    in the drift comparison, never written back); c3source owns no manifest writer, so emitting
    the unnamed form on sync is the consumer's job.
+   **Image-derived drift** — `detectImageDrift(projectDir)` is a best-effort sub-detector that
+   `detectManifestDrift` appends to its sections (wrapped in try/catch — a throw degrades to
+   "images section omitted", never failing core drift). Unlike the manifest walks it **ignores
+   the manifest**: it walks `objectTypes/` and the flat `images/` folder **directly** and diffs
+   derived-expected vs on-disk filenames. `deriveExpectedImageNames(objectType)` derives the
+   expected filenames structurally — `<name>.<ext>` for a top-level `image` field, one
+   `<name>-<anim>-<frame3>.<ext>` per animation frame — where `<ext>` comes from the member's
+   `fileType` MIME via the exported domain fact `IMAGE_FILE_TYPE_EXTENSIONS` (`image/png`→`png`,
+   `image/jpeg`→`jpg`, `image/svg+xml`→`svg`, `image/webp`→`webp`; cf. `EVENTVAR_REFERENCE_ACES`).
+   The MIME is read from `image.fileType` (single-image) or each frame's own `fileType`
+   (animations — frames may differ). An absent or unmapped `fileType` **throws** (malformed /
+   unknown format) — there is no `.png` fallback (#29). Because the manifest keys object types on
+   **names**, not filenames, a fixture's image format can be varied (change `fileType` + rename
+   the on-disk image) without churning any manifest-membership test.
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,
