@@ -460,7 +460,7 @@ describe("F4: image-derived drift", () => {
     expect(deriveExpectedImageNames(text)).to.deep.equal([]);
   });
 
-  it("F4-4: detectImageDrift on clean fixture → not null, entries empty (all 9 names match 9 on-disk pngs)", () => {
+  it("F4-4: detectImageDrift on clean fixture → not null, entries empty (all 9 names match 9 on-disk images: 8 png + tiledbackground.jpg)", () => {
     const result = detectImageDrift(FIXTURE_DIR);
     expect(result).to.not.be.null;
     expect(result!.section).to.equal("images");
@@ -561,5 +561,21 @@ describe("F4: image-derived drift", () => {
       "sprite-animation 2-001.png",
       "sprite-animation 3-000.png",
     ]);
+  });
+
+  it("F4-14: TiledBackground (image/jpeg) resolves to tiledbackground.jpg and detectImageDrift reports no drift", () => {
+    // Real fixture now declares image/jpeg — this is the regression case from issue #29 where
+    // deriveExpectedImageNames was always emitting .png regardless of fileType.
+    const tiledBg = readObjectType("tiles", "TiledBackground.json");
+    expect(deriveExpectedImageNames(tiledBg)).to.deep.equal(["tiledbackground.jpg"]);
+
+    // End-to-end: no false missing .png / untracked .jpg pair in the images folder
+    const imageDrift = detectImageDrift(FIXTURE_DIR);
+    expect(imageDrift).to.not.be.null;
+    expect(imageDrift!.entries).to.deep.equal([]);
+
+    // Manifest drift must still be clean (objectTypes membership is name-keyed, unaffected by rename)
+    const manifestDrift = detectManifestDrift(FIXTURE_DIR);
+    expect(manifestDrift.inSync).to.equal(true);
   });
 });
