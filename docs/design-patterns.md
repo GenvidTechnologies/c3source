@@ -224,6 +224,16 @@ fixture is a real C3 project, so it carries more than data):
   / `ts-defs/` skip is real, not vacuous) must `git add -f` a representative
   slice. Note the suffix patterns are exact: `*.uistate.json` does **not** match
   the `uistate/` directory's `*.instancesBar.json` files.
+- **Fixture images must be real, not faked.** The image-drift tests key only on
+  *filenames*, so a placeholder whose bytes don't match its extension and declared
+  `fileType` (e.g. a PNG renamed to `.jpg` alongside `fileType: image/jpeg`) passes
+  the suite yet is no longer a loadable C3 export — the editor fails to decode it.
+  To exercise a non-PNG format, add a **genuinely-exported** object backed by real
+  bytes of that format and keep the JSON `width`/`height` matching the actual image,
+  even though a new objectType/family costs manifest-membership churn (item counts,
+  name-tree `deep.equal`s, `inSync`). Fidelity beats minimizing churn — this was the
+  #29 regression, where a renamed-PNG fixture passed every test but corrupted the
+  export.
 
 Guard schema drift with a **key-parity test**: assert a generated structure's
 key set equals a real export's (see `makeDefaultLayer.test.ts`). This catches C3
