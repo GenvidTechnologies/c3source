@@ -187,6 +187,24 @@ Two functional areas:
    `collectSids` and `collectSidsWithPaths` are thin consumers: they call
    `walkSids` once and accumulate; callers that need a different rendering (e.g.
    a semantic label when `segments.length === 0`) can drive `walkSids` directly.
+   **Editor-strictness validation** — `validateForEditor(sheet)` and
+   `validateEventForEditor(event, jsonPath?)` model the **C3 editor loader's
+   required-field set**, which is stricter than c3source's intentionally lenient
+   parse types (fields like `EventSheetVariable.comment` / `GroupEvent.description`
+   are typed optional here but the editor rejects `undefined` on import with
+   `Error: expected string`). Detection-only — no mutation. Returns
+   `EditorValidationIssue[]: {path, rule, message}` where `path` is the
+   `visitEvents` `jsonPath` (cannot drift). `validateForEditor` is a thin
+   `visitEvents` consumer; `validateEventForEditor` validates a single detached
+   event (optional `jsonPath` defaults to `"event"`). The exported extensible
+   `EDITOR_FIELD_RULES: EditorFieldRule[]` table follows the same domain-fact
+   convention as `EVENTVAR_REFERENCE_ACES` / `IMAGE_FILE_TYPE_EXTENSIONS` — each
+   new C3-load bug becomes a one-line rule addition. Rule check is
+   `typeof === "string"` so an **empty string passes**; only `undefined`/non-string
+   is flagged (originating incident: adding `comment: ""` / `description: ""`
+   resolved C3 import failures). Seed rules: `eventvar-comment-required`
+   (`variable` → `.comment`) and `group-description-required` (`group` →
+   `.description`) (#33).
 
 All file writes serialize JSON with **tab indentation** to match C3's format,
 and text from expressions/comments is run through `normalizeLineEndings` (CRLF
