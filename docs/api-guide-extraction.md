@@ -11,6 +11,7 @@ For SID traversal and editor-local classification see [api-guide.md](api-guide.m
 - [Type guard: `isFunctionDefinition`](#type-guard-isfunctiondefinition)
 - [Event-variable references: `isEventVarReference` / `getEventVarReferenceName`](#event-variable-references-iseventvarreference--geteventvarreferencename)
 - [Include edges: `extractIncludes`](#include-edges-extractincludes)
+- [Editor-strictness validation: `validateForEditor`](#editor-strictness-validation-validateforeditor)
 
 ---
 
@@ -298,3 +299,88 @@ group by sheet name to get each sheet's direct dependencies. Because includes ca
 appear at any nesting depth (including inside groups or blocks), `jsonPath`
 locates each edge precisely — useful for error reporting and for tools that
 navigate to a specific include in the source tree.
+
+---
+
+## Editor-strictness validation: `validateForEditor`
+
+```ts
+validateForEditor(sheet: EventSheet): EditorValidationIssue[]
+validateEventForEditor(event: EventSheetEvent, jsonPath?: string): EditorValidationIssue[]
+
+interface EditorValidationIssue {
+  path: string;    // visitEvents jsonPath, e.g. "events[1].children[2]"
+  rule: string;    // stable rule id, e.g. "group-description-required"
+  message: string; // human-readable reason the C3 editor would reject this
+}
+
+interface EditorFieldRule {
+  rule: string;
+  eventType: EventSheetEvent["eventType"];  // fast dispatch — rule only fires for matching type
+  check: (event: EventSheetEvent) => string | null;  // returns message or null if valid
+}
+
+EDITOR_FIELD_RULES: EditorFieldRule[]   // exported, extensible domain-fact table
+```
+
+Models the **C3 editor loader's required-field set**, which is stricter than
+c3source's intentionally lenient parse types. Fields like `EventSheetVariable.comment`
+and `GroupEvent.description` are typed optional in c3source, but the C3 editor
+rejects the project on import with `Error: expected string` if they are `undefined`.
+This validator detects those mismatches without mutating anything — detection-only,
+no auto-fix.
+
+**Rule semantics.** The check is `typeof value === "string"`, so an **empty string
+passes** — only `undefined` or a non-string value is flagged. This matches the
+originating incident (#33): adding `comment: ""` / `description: ""` resolved the
+C3 import failures.
+
+**Two seed rules** are included:
+
+| Rule id | Event type | Field checked |
+|---|---|---|
+| `eventvar-comment-required` | `"variable"` | `EventSheetVariable.comment` |
+| `group-description-required` | `"group"` | `GroupEvent.description` |
+
+**`validateForEditor`** is a thin consumer of the canonical `visitEvents` walk.
+Issue `path` values are the same `jsonPath` coordinates produced by every other
+c3source traversal, so they cannot drift.
+
+**`validateEventForEditor`** validates a single detached event outside a sheet
+walk. The optional `jsonPath` argument (default `"event"`) is used verbatim in the
+returned issue paths — pass the locator from a surrounding `visitEvents` call if
+you are integrating the check into your own walk.
+
+**`EDITOR_FIELD_RULES`** is the exported fact table. Following the same convention
+as `EVENTVAR_REFERENCE_ACES` and `IMAGE_FILE_TYPE_EXTENSIONS`, it is owned here so
+downstream need not re-hardcode it; each new C3-load bug that surfaces a
+required-field constraint becomes a one-line rule addition to the table.
+
+```ts
+import { validateForEditor } from "@genvid/c3source";
+
+const issues = validateForEditor(sheet);
+if (issues.length > 0) {
+  for (const issue of issues) {
+    console.error(`[${issue.rule}] ${issue.path}: ${issue.message}`);
+  }
+  // [group-description-required] events[2]: GroupEvent.description must be a string (C3 editor rejects undefined on import)
+}
+```
+
+To validate every sheet in a project and assert no issues exist (e.g. in a fixture
+test):
+
+```ts
+import { find_all_event_sheet_path, readEventSheet, validateForEditor } from "@genvid/c3source";
+
+const allIssues = find_all_event_sheet_path(projectDir)
+  .flatMap((p) => validateForEditor(readEventSheet(p)));
+
+assert.deepEqual(allIssues, [], "project has editor-load violations");
+```
+
+**Extending the table.** To contribute a rule specific to your downstream use
+case, push an `EditorFieldRule` onto `EDITOR_FIELD_RULES` before running
+validation. Mutating the exported array is intentional — the table is designed to
+grow as new C3 loader requirements are discovered.

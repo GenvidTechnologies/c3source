@@ -967,6 +967,86 @@ export function getEventVarReferenceName(ace: Condition | ScriptAction | Record<
   return typeof value === "string" ? value : null;
 }
 
+// ─── Editor-strictness validator ─────────────────────────────────────────────
+//
+// These types model the C3 *editor loader's* required-field set, which is
+// stricter than c3source's intentionally lenient parse types. Detection-only;
+// no mutation. As downstream tools forward C3-load bugs, each fix becomes a
+// one-line addition to EDITOR_FIELD_RULES (cf. EVENTVAR_REFERENCE_ACES). The
+// originating incident (issue #33): adding comment:"" / description:"" resolved
+// C3 import failures — so the rule is typeof === "string", empty string passes.
+
+/** A single validation finding produced by {@link validateForEditor} or {@link validateEventForEditor}. */
+export interface EditorValidationIssue {
+  /** jsonPath locator within the event tree, e.g. "events[1].children[2]". */
+  path: string;
+  /** Stable rule id, e.g. "eventvar-comment-required". */
+  rule: string;
+  /** Human-readable reason the C3 editor would reject this. */
+  message: string;
+}
+
+/** A single editor-strictness rule: which event kind it inspects + the check. */
+export interface EditorFieldRule {
+  rule: string;
+  /** The eventType this rule applies to — used for fast dispatch. */
+  eventType: EventSheetEvent["eventType"];
+  /** Returns a message if the event violates the rule, else null. */
+  check: (event: EventSheetEvent) => string | null;
+}
+
+/**
+ * The C3 editor loader's required-field rules, as a machine-readable table.
+ * A C3 platform fact owned here so downstream need not re-hardcode it (issue #33).
+ * Exported so callers can introspect or contribute rules via array extension.
+ */
+export const EDITOR_FIELD_RULES: EditorFieldRule[] = [
+  {
+    rule: "eventvar-comment-required",
+    eventType: "variable",
+    check: (e) =>
+      typeof (e as EventSheetVariable).comment === "string"
+        ? null
+        : "EventSheetVariable.comment must be a string (C3 editor rejects undefined on import)",
+  },
+  {
+    rule: "group-description-required",
+    eventType: "group",
+    check: (e) =>
+      typeof (e as GroupEvent).description === "string"
+        ? null
+        : "GroupEvent.description must be a string (C3 editor rejects undefined on import)",
+  },
+];
+
+/**
+ * Validate a single event against all editor-strictness rules.
+ * `jsonPath` is used verbatim in the returned issue paths; defaults to `"event"`
+ * for callers validating a detached node outside a sheet walk.
+ */
+export function validateEventForEditor(event: EventSheetEvent, jsonPath = "event"): EditorValidationIssue[] {
+  const issues: EditorValidationIssue[] = [];
+  for (const r of EDITOR_FIELD_RULES) {
+    if (r.eventType !== event.eventType) continue;
+    const message = r.check(event);
+    if (message !== null) issues.push({ path: jsonPath, rule: r.rule, message });
+  }
+  return issues;
+}
+
+/**
+ * Validate an entire event sheet against the editor-strictness rules.
+ * Walks via {@link visitEvents} so issue paths use the same `jsonPath` coordinates
+ * as every other c3source traversal and cannot drift.
+ */
+export function validateForEditor(sheet: EventSheet): EditorValidationIssue[] {
+  const issues: EditorValidationIssue[] = [];
+  visitEvents(sheet.events, (event, ctx) => {
+    issues.push(...validateEventForEditor(event, ctx.jsonPath));
+  });
+  return issues;
+}
+
 /** Narrow an event to the two kinds that declare a callable signature. */
 export function isFunctionDefinition(event: EventSheetEvent): event is FunctionBlockEvent | CustomAceBlockEvent {
   return event.eventType === "function-block" || event.eventType === "custom-ace-block";
