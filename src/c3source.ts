@@ -1286,6 +1286,9 @@ const NAME_SECTIONS = [
 
 // ─── Mapping tables ───────────────────────────────────────────────────────────
 
+/** The project manifest filename (constant C3 domain fact). */
+export const PROJECT_MANIFEST_FILE = "project.c3proj";
+
 /**
  * Manifest section key → on-disk folder name for name-folder sections.
  * Every section follows the same shape: flat <Name>.json files arranged in named
@@ -1627,7 +1630,7 @@ function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: Mani
  * Detection only — policy (warn, fail, sync) is the caller's responsibility.
  */
 export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
-  const m = manifest ?? readProjectManifest(path.join(projectDir, "project.c3proj"));
+  const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
   const sections: SectionDrift[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
@@ -1820,6 +1823,89 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
   );
 
   return { section: "images", folder: "images", entries };
+}
+
+// ─── Piece D: C3Project handle ────────────────────────────────────────────────
+
+/**
+ * A handle to an open C3 folder-project root. All path fields are computed once
+ * at construction with no I/O; `has*()` queries call `existsSync` fresh on each
+ * invocation so they reflect the actual state of the disk at call time.
+ *
+ * Obtain via {@link openProject}.
+ */
+export interface C3Project {
+  /** Absolute path to the project root (the directory containing `project.c3proj`). */
+  readonly root: string;
+  /** Absolute path to `project.c3proj`. */
+  readonly manifestPath: string;
+  /** Absolute path to the event sheets source directory. */
+  readonly eventSheetsDir: string;
+  /** Absolute path to the layouts source directory. */
+  readonly layoutsDir: string;
+  /** Absolute path to the object types source directory. */
+  readonly objectTypesDir: string;
+  /** Absolute path to the families source directory. */
+  readonly familiesDir: string;
+  /** Absolute path to the scripts source directory. */
+  readonly scriptsDir: string;
+
+  /** Whether the event sheets directory exists on disk (evaluated fresh on each call). */
+  hasEventSheets(): boolean;
+  /** Whether the layouts directory exists on disk (evaluated fresh on each call). */
+  hasLayouts(): boolean;
+  /** Whether the object types directory exists on disk (evaluated fresh on each call). */
+  hasObjectTypes(): boolean;
+  /** Whether the families directory exists on disk (evaluated fresh on each call). */
+  hasFamilies(): boolean;
+  /** Whether the scripts directory exists on disk (evaluated fresh on each call). */
+  hasScripts(): boolean;
+
+  /**
+   * The parsed project manifest. Lazy: first call reads and caches the result;
+   * subsequent calls return the cached value without re-reading disk.
+   */
+  manifest(): C3ProjectManifest;
+}
+
+/**
+ * Open a C3 folder-project at `root` and return a {@link C3Project} handle.
+ *
+ * **No I/O at construction** — path fields are string joins; the manifest is read
+ * lazily on the first call to `manifest()`. Safe to call on a non-existent path.
+ */
+export function openProject(root: string): C3Project {
+  const manifestPath = path.join(root, PROJECT_MANIFEST_FILE);
+  const eventSheetsDir = path.join(root, C3_SECTION_FOLDERS.eventSheets);
+  const layoutsDir = path.join(root, C3_SECTION_FOLDERS.layouts);
+  const objectTypesDir = path.join(root, C3_SECTION_FOLDERS.objectTypes);
+  const familiesDir = path.join(root, C3_SECTION_FOLDERS.families);
+  const scriptsDir = path.join(root, C3_ROOT_FILE_FOLDERS.script);
+
+  let cachedManifest: C3ProjectManifest | undefined;
+
+  return {
+    root,
+    manifestPath,
+    eventSheetsDir,
+    layoutsDir,
+    objectTypesDir,
+    familiesDir,
+    scriptsDir,
+
+    hasEventSheets: () => existsSync(eventSheetsDir),
+    hasLayouts: () => existsSync(layoutsDir),
+    hasObjectTypes: () => existsSync(objectTypesDir),
+    hasFamilies: () => existsSync(familiesDir),
+    hasScripts: () => existsSync(scriptsDir),
+
+    manifest() {
+      if (cachedManifest === undefined) {
+        cachedManifest = readProjectManifest(manifestPath);
+      }
+      return cachedManifest;
+    },
+  };
 }
 
 /** Which C3 schema slot a sid was found in. */
