@@ -12,6 +12,8 @@ import {
   find_all_eventsheets_path,
   find_all_layouts_path,
   find_all_objectTypes_path,
+  detectManifestDrift,
+  detectImageDrift,
   type C3Project,
 } from "../src/c3source.js";
 import { fixturePath } from "./fixtureHelpers.js";
@@ -247,5 +249,36 @@ describe("openProject — findAll*() finders", () => {
     } finally {
       rmdirSync(tmpDir);
     }
+  });
+});
+
+describe("openProject — detectManifestDrift() and detectImageDrift() delegators", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-37: detectManifestDrift() deep-equals standalone detectManifestDrift(FIXTURE_DIR) and inSync is true", () => {
+    const fromHandle = proj.detectManifestDrift();
+    const standalone = detectManifestDrift(FIXTURE_DIR);
+    expect(fromHandle).to.deep.equal(standalone);
+    expect(fromHandle.inSync).to.equal(true);
+  });
+
+  it("OP-38: detectImageDrift() deep-equals standalone detectImageDrift(FIXTURE_DIR)", () => {
+    const fromHandle = proj.detectImageDrift();
+    const standalone = detectImageDrift(FIXTURE_DIR);
+    expect(fromHandle).to.deep.equal(standalone);
+  });
+
+  it("OP-39: detectManifestDrift() reuses the cached manifest (same manifest object as manifest())", () => {
+    // Calling manifest() first caches the manifest; detectManifestDrift() should pass
+    // that cached instance to the free function. We verify indirectly: the result must
+    // match the standalone call (no infinite recursion or double-read failure).
+    const cachedManifest = proj.manifest();
+    const fromHandle = proj.detectManifestDrift();
+    const direct = detectManifestDrift(FIXTURE_DIR, cachedManifest);
+    expect(fromHandle).to.deep.equal(direct);
   });
 });

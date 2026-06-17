@@ -1915,6 +1915,20 @@ export interface C3Project {
    * @param sub - Optional subdirectory relative to `scriptsDir` (default `""`).
    */
   findAllScripts(sub?: string): string[];
+
+  /**
+   * Detect manifest drift for this project.
+   * Delegates to {@link detectManifestDrift} with the project root and the handle's
+   * cached manifest (reuses the already-parsed manifest instead of re-reading disk).
+   */
+  detectManifestDrift(): ManifestDrift;
+
+  /**
+   * Detect image-derived drift for this project.
+   * Delegates to {@link detectImageDrift} with the project root.
+   * Returns `null` if the `images/` directory does not exist.
+   */
+  detectImageDrift(): SectionDrift | null;
 }
 
 /**
@@ -1930,6 +1944,13 @@ export function openProject(root: string): C3Project {
   const objectTypesDir = path.join(root, C3_SECTION_FOLDERS.objectTypes);
   const familiesDir = path.join(root, C3_SECTION_FOLDERS.families);
   const scriptsDir = path.join(root, C3_ROOT_FILE_FOLDERS.script);
+
+  // Capture free-function references before the returned object methods shadow them.
+  // Without these aliases, a method named `detectManifestDrift` inside the returned
+  // object literal would shadow the module-level function of the same name, causing
+  // infinite recursion when the method tries to call `detectManifestDrift(...)`.
+  const freeDetectManifestDrift = detectManifestDrift;
+  const freeDetectImageDrift = detectImageDrift;
 
   let cachedManifest: C3ProjectManifest | undefined;
 
@@ -1989,6 +2010,16 @@ export function openProject(root: string): C3Project {
       return findInSection(scriptsDir, sub, (dir) =>
         find_all_files_path(dir, (file) => file.endsWith(".ts") && !file.endsWith(".d.ts") && !isEditorLocalPath(file)),
       );
+    },
+
+    detectManifestDrift(): ManifestDrift {
+      // Pass the handle's cached manifest as the second arg so the free function reuses
+      // the already-parsed manifest instead of re-reading project.c3proj from disk.
+      return freeDetectManifestDrift(root, this.manifest());
+    },
+
+    detectImageDrift(): SectionDrift | null {
+      return freeDetectImageDrift(root);
     },
   };
 }
