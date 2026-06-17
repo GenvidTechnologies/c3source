@@ -9,6 +9,9 @@ import {
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
   PROJECT_MANIFEST_FILE,
+  find_all_eventsheets_path,
+  find_all_layouts_path,
+  find_all_objectTypes_path,
   type C3Project,
 } from "../src/c3source.js";
 import { fixturePath } from "./fixtureHelpers.js";
@@ -133,5 +136,61 @@ describe("openProject — empty temp dir (no I/O at construction)", () => {
 
   it("OP-21: root equals the temp dir path", () => {
     expect(proj.root).to.equal(tmpDir);
+  });
+});
+
+describe("openProject — findAll*() finders", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-22: findAllEventSheets() equals find_all_eventsheets_path on the fixture eventSheets dir", () => {
+    const expected = find_all_eventsheets_path(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.eventSheets));
+    expect(proj.findAllEventSheets()).to.deep.equal(expected);
+  });
+
+  it("OP-23: findAllLayouts() equals find_all_layouts_path on the fixture layouts dir", () => {
+    const expected = find_all_layouts_path(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.layouts));
+    expect(proj.findAllLayouts()).to.deep.equal(expected);
+  });
+
+  it("OP-24: findAllObjectTypes() equals find_all_objectTypes_path on the fixture objectTypes dir", () => {
+    const expected = find_all_objectTypes_path(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.objectTypes));
+    expect(proj.findAllObjectTypes()).to.deep.equal(expected);
+  });
+
+  it("OP-25: findAllObjectTypes('tiles') returns a non-empty strict subset of findAllObjectTypes()", () => {
+    const all = proj.findAllObjectTypes();
+    const sub = proj.findAllObjectTypes("tiles");
+    expect(sub.length).to.be.greaterThan(0);
+    expect(sub.length).to.be.lessThan(all.length);
+    for (const p of sub) {
+      expect(all).to.include(p);
+    }
+  });
+
+  it("OP-26: findAllObjectTypes('tiles') — every path contains the 'tiles' segment", () => {
+    const sub = proj.findAllObjectTypes("tiles");
+    for (const p of sub) {
+      // Use path.sep-agnostic check: split and look for the segment
+      const segments = p.split(/[\\/]/);
+      expect(segments).to.include("tiles");
+    }
+  });
+
+  it("OP-27: findAllEventSheets('does-not-exist') returns []", () => {
+    expect(proj.findAllEventSheets("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-28: findAllLayouts() on a temp dir with no layouts subfolder returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-nolayouts-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllLayouts()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
   });
 });

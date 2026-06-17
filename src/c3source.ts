@@ -1866,6 +1866,33 @@ export interface C3Project {
    * subsequent calls return the cached value without re-reading disk.
    */
   manifest(): C3ProjectManifest;
+
+  /**
+   * Return all event sheet paths under `eventSheetsDir` (or its `sub` subdirectory).
+   * Delegates to {@link find_all_eventsheets_path} — only `.json` non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `eventSheetsDir` (default `""`).
+   */
+  findAllEventSheets(sub?: string): string[];
+
+  /**
+   * Return all layout paths under `layoutsDir` (or its `sub` subdirectory).
+   * Delegates to {@link find_all_layouts_path} — all non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `layoutsDir` (default `""`).
+   */
+  findAllLayouts(sub?: string): string[];
+
+  /**
+   * Return all object-type paths under `objectTypesDir` (or its `sub` subdirectory).
+   * Delegates to {@link find_all_objectTypes_path} — all non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `objectTypesDir` (default `""`).
+   */
+  findAllObjectTypes(sub?: string): string[];
 }
 
 /**
@@ -1883,6 +1910,13 @@ export function openProject(root: string): C3Project {
   const scriptsDir = path.join(root, C3_ROOT_FILE_FOLDERS.script);
 
   let cachedManifest: C3ProjectManifest | undefined;
+
+  /** Walk `sectionDir/sub` with `rawFinder`; return `[]` if the target dir is absent. */
+  function findInSection(sectionDir: string, sub: string = "", rawFinder: (dir: string) => string[]): string[] {
+    const targetDir = path.join(sectionDir, sub);
+    if (!existsSync(targetDir)) return [];
+    return rawFinder(targetDir);
+  }
 
   return {
     root,
@@ -1904,6 +1938,18 @@ export function openProject(root: string): C3Project {
         cachedManifest = readProjectManifest(manifestPath);
       }
       return cachedManifest;
+    },
+
+    findAllEventSheets(sub?: string): string[] {
+      return findInSection(eventSheetsDir, sub, find_all_eventsheets_path);
+    },
+
+    findAllLayouts(sub?: string): string[] {
+      return findInSection(layoutsDir, sub, find_all_layouts_path);
+    },
+
+    findAllObjectTypes(sub?: string): string[] {
+      return findInSection(objectTypesDir, sub, find_all_objectTypes_path);
     },
   };
 }
