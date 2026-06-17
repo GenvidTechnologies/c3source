@@ -1893,6 +1893,28 @@ export interface C3Project {
    * @param sub - Optional subdirectory relative to `objectTypesDir` (default `""`).
    */
   findAllObjectTypes(sub?: string): string[];
+
+  /**
+   * Return all family paths under `familiesDir` (or its `sub` subdirectory).
+   * Families are pure `<Name>.json` name-section files (no sub-assets).
+   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `familiesDir` (default `""`).
+   */
+  findAllFamilies(sub?: string): string[];
+
+  /**
+   * Return all source script paths under `scriptsDir` (or its `sub` subdirectory).
+   * Returns only `.ts` source files — excludes generated `.d.ts` declaration files
+   * (all of which live under `ts-defs/` and carry the `.d.ts` suffix).
+   * Built on {@link find_all_files_path} — the recursive walk handles `ts-defs/`
+   * correctly because every file inside it ends in `.d.ts`.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `scriptsDir` (default `""`).
+   */
+  findAllScripts(sub?: string): string[];
 }
 
 /**
@@ -1950,6 +1972,23 @@ export function openProject(root: string): C3Project {
 
     findAllObjectTypes(sub?: string): string[] {
       return findInSection(objectTypesDir, sub, find_all_objectTypes_path);
+    },
+
+    findAllFamilies(sub?: string): string[] {
+      // Families are pure <Name>.json files — same predicate shape as find_all_eventsheets_path.
+      return findInSection(familiesDir, sub, (dir) =>
+        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
+      );
+    },
+
+    findAllScripts(sub?: string): string[] {
+      // Source scripts are .ts files. Generated declaration files in ts-defs/ all end in
+      // .d.ts, so filtering !file.endsWith(".d.ts") is sufficient to exclude them while
+      // find_all_files_path recurses normally (ts-defs/ is not an editor-local dir so it
+      // is not skipped by isEditorLocalPath — it is excluded by the predicate alone).
+      return findInSection(scriptsDir, sub, (dir) =>
+        find_all_files_path(dir, (file) => file.endsWith(".ts") && !file.endsWith(".d.ts") && !isEditorLocalPath(file)),
+      );
     },
   };
 }

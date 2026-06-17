@@ -193,4 +193,59 @@ describe("openProject — findAll*() finders", () => {
       rmdirSync(tmpDir);
     }
   });
+
+  it("OP-29: findAllFamilies() returns exactly {LevelMaps.json, TextFamily.json} by basename", () => {
+    const families = proj.findAllFamilies();
+    const basenames = families.map((p) => path.basename(p)).sort();
+    expect(basenames).to.deep.equal(["LevelMaps.json", "TextFamily.json"]);
+  });
+
+  it("OP-30: findAllScripts() returns exactly {importsForEvents.ts, main.ts} by basename (source scripts only)", () => {
+    const scripts = proj.findAllScripts();
+    const basenames = scripts.map((p) => path.basename(p)).sort();
+    expect(basenames).to.deep.equal(["importsForEvents.ts", "main.ts"]);
+  });
+
+  it("OP-31: findAllScripts() returns no .d.ts files (ts-defs/ excluded by predicate)", () => {
+    const scripts = proj.findAllScripts();
+    for (const p of scripts) {
+      expect(p).to.not.match(/\.d\.ts$/);
+    }
+  });
+
+  it("OP-32: findAllScripts() returns no path containing a 'ts-defs' segment", () => {
+    const scripts = proj.findAllScripts();
+    for (const p of scripts) {
+      const segments = p.split(/[\\/]/);
+      expect(segments).to.not.include("ts-defs");
+    }
+  });
+
+  it("OP-33: findAllFamilies('does-not-exist') returns []", () => {
+    expect(proj.findAllFamilies("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-34: findAllScripts('does-not-exist') returns []", () => {
+    expect(proj.findAllScripts("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-35: findAllFamilies() on a temp dir with no families subfolder returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-nofamilies-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllFamilies()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+
+  it("OP-36: findAllScripts() on a temp dir with no scripts subfolder returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-noscripts-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllScripts()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
 });
