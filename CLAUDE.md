@@ -144,6 +144,19 @@ Two functional areas:
    unknown format) — there is no `.png` fallback (#29). Because the manifest keys object types on
    **names**, not filenames, a fixture's image format can be varied (change `fileType` + rename
    the on-disk image) without churning any manifest-membership test.
+   **C3Project handle** — `openProject(root): C3Project` is a root-bound handle that
+   unifies the previously-split API: callers no longer assemble section paths by
+   hardcoding `"eventSheets"`/`"layouts"`/etc., because the handle derives all path
+   fields from `C3_SECTION_FOLDERS`/`C3_ROOT_FILE_FOLDERS` at construction (#36).
+   Construction does **no I/O** — path fields are string joins, `manifest()` reads
+   lazily and caches, `has*()` methods call `existsSync` fresh. `findAll*(sub?)` methods
+   delegate to the existing `find_all_*_path` finders (graceful-empty: return `[]` when
+   the section directory is absent). `findAllFamilies` filters `.json` via
+   `find_all_files_path`; `findAllScripts` filters `.ts` source (excludes `.d.ts` —
+   all generated declaration files live under `ts-defs/`). `detectManifestDrift()` and
+   `detectImageDrift()` delegate to the free functions, passing the cached manifest.
+   The exported constant `PROJECT_MANIFEST_FILE = "project.c3proj"` is also new (#36).
+   The free functions remain exported and unchanged — the handle is additive.
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,
