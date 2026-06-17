@@ -1,0 +1,284 @@
+import { describe, it } from "mocha";
+import { expect } from "chai";
+import { mkdtempSync, rmdirSync } from "node:fs";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import {
+  openProject,
+  readProjectManifest,
+  C3_SECTION_FOLDERS,
+  C3_ROOT_FILE_FOLDERS,
+  PROJECT_MANIFEST_FILE,
+  find_all_eventsheets_path,
+  find_all_layouts_path,
+  find_all_objectTypes_path,
+  detectManifestDrift,
+  detectImageDrift,
+  type C3Project,
+} from "../src/c3source.js";
+import { fixturePath } from "./fixtureHelpers.js";
+
+const FIXTURE_DIR = fixturePath("c3source-fixture");
+
+describe("openProject — path fields", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-1: root equals the argument passed to openProject", () => {
+    expect(proj.root).to.equal(FIXTURE_DIR);
+  });
+
+  it("OP-2: manifestPath is join(root, PROJECT_MANIFEST_FILE)", () => {
+    expect(proj.manifestPath).to.equal(path.join(FIXTURE_DIR, PROJECT_MANIFEST_FILE));
+  });
+
+  it("OP-3: eventSheetsDir is derived from C3_SECTION_FOLDERS table, not a literal", () => {
+    expect(proj.eventSheetsDir).to.equal(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.eventSheets));
+  });
+
+  it("OP-4: layoutsDir is derived from C3_SECTION_FOLDERS table", () => {
+    expect(proj.layoutsDir).to.equal(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.layouts));
+  });
+
+  it("OP-5: objectTypesDir is derived from C3_SECTION_FOLDERS table", () => {
+    expect(proj.objectTypesDir).to.equal(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.objectTypes));
+  });
+
+  it("OP-6: familiesDir is derived from C3_SECTION_FOLDERS table", () => {
+    expect(proj.familiesDir).to.equal(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.families));
+  });
+
+  it("OP-7: scriptsDir is derived from C3_ROOT_FILE_FOLDERS table (script → scripts)", () => {
+    expect(proj.scriptsDir).to.equal(path.join(FIXTURE_DIR, C3_ROOT_FILE_FOLDERS.script));
+  });
+});
+
+describe("openProject — manifest() lazy read", () => {
+  it("OP-8: manifest() deep-equals readProjectManifest(manifestPath)", () => {
+    const proj = openProject(FIXTURE_DIR);
+    const expected = readProjectManifest(path.join(FIXTURE_DIR, PROJECT_MANIFEST_FILE));
+    expect(proj.manifest()).to.deep.equal(expected);
+  });
+
+  it("OP-9: manifest() returns the same cached object on repeated calls (referential equality)", () => {
+    const proj = openProject(FIXTURE_DIR);
+    const first = proj.manifest();
+    const second = proj.manifest();
+    expect(first).to.equal(second);
+  });
+});
+
+describe("openProject — has*() methods on the fixture", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-10: hasEventSheets() is true for the fixture", () => {
+    expect(proj.hasEventSheets()).to.equal(true);
+  });
+
+  it("OP-11: hasLayouts() is true for the fixture", () => {
+    expect(proj.hasLayouts()).to.equal(true);
+  });
+
+  it("OP-12: hasObjectTypes() is true for the fixture", () => {
+    expect(proj.hasObjectTypes()).to.equal(true);
+  });
+
+  it("OP-13: hasFamilies() is true for the fixture", () => {
+    expect(proj.hasFamilies()).to.equal(true);
+  });
+
+  it("OP-14: hasScripts() is true for the fixture", () => {
+    expect(proj.hasScripts()).to.equal(true);
+  });
+});
+
+describe("openProject — empty temp dir (no I/O at construction)", () => {
+  let tmpDir: string;
+  let proj: C3Project;
+
+  before(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-test-"));
+    proj = openProject(tmpDir);
+  });
+
+  after(() => {
+    rmdirSync(tmpDir);
+  });
+
+  it("OP-15: construction on an empty dir does not throw", () => {
+    expect(() => openProject(tmpDir)).to.not.throw();
+  });
+
+  it("OP-16: hasEventSheets() is false for an empty dir", () => {
+    expect(proj.hasEventSheets()).to.equal(false);
+  });
+
+  it("OP-17: hasLayouts() is false for an empty dir", () => {
+    expect(proj.hasLayouts()).to.equal(false);
+  });
+
+  it("OP-18: hasObjectTypes() is false for an empty dir", () => {
+    expect(proj.hasObjectTypes()).to.equal(false);
+  });
+
+  it("OP-19: hasFamilies() is false for an empty dir", () => {
+    expect(proj.hasFamilies()).to.equal(false);
+  });
+
+  it("OP-20: hasScripts() is false for an empty dir", () => {
+    expect(proj.hasScripts()).to.equal(false);
+  });
+
+  it("OP-21: root equals the temp dir path", () => {
+    expect(proj.root).to.equal(tmpDir);
+  });
+});
+
+describe("openProject — findAll*() finders", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-22: findAllEventSheets() equals find_all_eventsheets_path on the fixture eventSheets dir", () => {
+    const expected = find_all_eventsheets_path(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.eventSheets));
+    expect(proj.findAllEventSheets()).to.deep.equal(expected);
+  });
+
+  it("OP-23: findAllLayouts() equals find_all_layouts_path on the fixture layouts dir", () => {
+    const expected = find_all_layouts_path(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.layouts));
+    expect(proj.findAllLayouts()).to.deep.equal(expected);
+  });
+
+  it("OP-24: findAllObjectTypes() equals find_all_objectTypes_path on the fixture objectTypes dir", () => {
+    const expected = find_all_objectTypes_path(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.objectTypes));
+    expect(proj.findAllObjectTypes()).to.deep.equal(expected);
+  });
+
+  it("OP-25: findAllObjectTypes('tiles') returns a non-empty strict subset of findAllObjectTypes()", () => {
+    const all = proj.findAllObjectTypes();
+    const sub = proj.findAllObjectTypes("tiles");
+    expect(sub.length).to.be.greaterThan(0);
+    expect(sub.length).to.be.lessThan(all.length);
+    for (const p of sub) {
+      expect(all).to.include(p);
+    }
+  });
+
+  it("OP-26: findAllObjectTypes('tiles') — every path contains the 'tiles' segment", () => {
+    const sub = proj.findAllObjectTypes("tiles");
+    for (const p of sub) {
+      // Use path.sep-agnostic check: split and look for the segment
+      const segments = p.split(/[\\/]/);
+      expect(segments).to.include("tiles");
+    }
+  });
+
+  it("OP-27: findAllEventSheets('does-not-exist') returns []", () => {
+    expect(proj.findAllEventSheets("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-28: findAllLayouts() on a temp dir with no layouts subfolder returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-nolayouts-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllLayouts()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+
+  it("OP-29: findAllFamilies() returns exactly {LevelMaps.json, TextFamily.json} by basename", () => {
+    const families = proj.findAllFamilies();
+    const basenames = families.map((p) => path.basename(p)).sort();
+    expect(basenames).to.deep.equal(["LevelMaps.json", "TextFamily.json"]);
+  });
+
+  it("OP-30: findAllScripts() returns exactly {importsForEvents.ts, main.ts} by basename (source scripts only)", () => {
+    const scripts = proj.findAllScripts();
+    const basenames = scripts.map((p) => path.basename(p)).sort();
+    expect(basenames).to.deep.equal(["importsForEvents.ts", "main.ts"]);
+  });
+
+  it("OP-31: findAllScripts() returns no .d.ts files (ts-defs/ excluded by predicate)", () => {
+    const scripts = proj.findAllScripts();
+    for (const p of scripts) {
+      expect(p).to.not.match(/\.d\.ts$/);
+    }
+  });
+
+  it("OP-32: findAllScripts() returns no path containing a 'ts-defs' segment", () => {
+    const scripts = proj.findAllScripts();
+    for (const p of scripts) {
+      const segments = p.split(/[\\/]/);
+      expect(segments).to.not.include("ts-defs");
+    }
+  });
+
+  it("OP-33: findAllFamilies('does-not-exist') returns []", () => {
+    expect(proj.findAllFamilies("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-34: findAllScripts('does-not-exist') returns []", () => {
+    expect(proj.findAllScripts("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-35: findAllFamilies() on a temp dir with no families subfolder returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-nofamilies-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllFamilies()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+
+  it("OP-36: findAllScripts() on a temp dir with no scripts subfolder returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-noscripts-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllScripts()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+});
+
+describe("openProject — detectManifestDrift() and detectImageDrift() delegators", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-37: detectManifestDrift() deep-equals standalone detectManifestDrift(FIXTURE_DIR) and inSync is true", () => {
+    const fromHandle = proj.detectManifestDrift();
+    const standalone = detectManifestDrift(FIXTURE_DIR);
+    expect(fromHandle).to.deep.equal(standalone);
+    expect(fromHandle.inSync).to.equal(true);
+  });
+
+  it("OP-38: detectImageDrift() deep-equals standalone detectImageDrift(FIXTURE_DIR)", () => {
+    const fromHandle = proj.detectImageDrift();
+    const standalone = detectImageDrift(FIXTURE_DIR);
+    expect(fromHandle).to.deep.equal(standalone);
+  });
+
+  it("OP-39: detectManifestDrift() reuses the cached manifest (same manifest object as manifest())", () => {
+    // Calling manifest() first caches the manifest; detectManifestDrift() should pass
+    // that cached instance to the free function. We verify indirectly: the result must
+    // match the standalone call (no infinite recursion or double-read failure).
+    const cachedManifest = proj.manifest();
+    const fromHandle = proj.detectManifestDrift();
+    const direct = detectManifestDrift(FIXTURE_DIR, cachedManifest);
+    expect(fromHandle).to.deep.equal(direct);
+  });
+});

@@ -15,10 +15,12 @@ the C3 editor. There is no runtime application; it ships as a library.
 Feature branches are squashed on merge, and work documents under
 `docs/superpowers/` (specs, plans) are routinely cleaned up — treat them as
 ephemeral scaffolding, not durable records. The root `plan.md` produced by the
-`plan-task` workflow is the same: it is committed as a prep commit while the
-branch is in flight, but **removed as part of PR creation** so it never lands on
-`main` (a stale one leaking onto `main` once misled a later session into reading
-the wrong plan). The durable record of a design or
+`plan-task` workflow is the same, and in this repo it is **gitignored**
+(`/plan.md`): it stays a **local-only working artifact** — never committed, so
+there is no prep commit and nothing to remove at PR creation. (`plan-task`
+detects this via `git check-ignore plan.md` and skips the prep commit.) This
+keeps a stale `plan.md` from ever leaking onto `main` and misleading a later
+session into reading the wrong plan. The durable record of a design or
 decision is the **GitHub issue or PR** (post the spec as an issue comment or in
 the PR body, where it survives the squash) — and the PR body should be a concise
 summary linking to real docs, not a paste of the design spec. Never cite an
@@ -144,6 +146,19 @@ Two functional areas:
    unknown format) — there is no `.png` fallback (#29). Because the manifest keys object types on
    **names**, not filenames, a fixture's image format can be varied (change `fileType` + rename
    the on-disk image) without churning any manifest-membership test.
+   **C3Project handle** — `openProject(root): C3Project` is a root-bound handle that
+   unifies the previously-split API: callers no longer assemble section paths by
+   hardcoding `"eventSheets"`/`"layouts"`/etc., because the handle derives all path
+   fields from `C3_SECTION_FOLDERS`/`C3_ROOT_FILE_FOLDERS` at construction (#36).
+   Construction does **no I/O** — path fields are string joins, `manifest()` reads
+   lazily and caches, `has*()` methods call `existsSync` fresh. `findAll*(sub?)` methods
+   delegate to the existing `find_all_*_path` finders (graceful-empty: return `[]` when
+   the section directory is absent). `findAllFamilies` filters `.json` via
+   `find_all_files_path`; `findAllScripts` filters `.ts` source (excludes `.d.ts` —
+   all generated declaration files live under `ts-defs/`). `detectManifestDrift()` and
+   `detectImageDrift()` delegate to the free functions, passing the cached manifest.
+   The exported constant `PROJECT_MANIFEST_FILE = "project.c3proj"` is also new (#36).
+   The free functions remain exported and unchanged — the handle is additive.
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,

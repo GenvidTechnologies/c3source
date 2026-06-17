@@ -1286,6 +1286,9 @@ const NAME_SECTIONS = [
 
 // ─── Mapping tables ───────────────────────────────────────────────────────────
 
+/** The project manifest filename (constant C3 domain fact). */
+export const PROJECT_MANIFEST_FILE = "project.c3proj";
+
 /**
  * Manifest section key → on-disk folder name for name-folder sections.
  * Every section follows the same shape: flat <Name>.json files arranged in named
@@ -1627,7 +1630,7 @@ function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: Mani
  * Detection only — policy (warn, fail, sync) is the caller's responsibility.
  */
 export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
-  const m = manifest ?? readProjectManifest(path.join(projectDir, "project.c3proj"));
+  const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
   const sections: SectionDrift[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
@@ -1820,6 +1823,205 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
   );
 
   return { section: "images", folder: "images", entries };
+}
+
+// ─── Piece D: C3Project handle ────────────────────────────────────────────────
+
+/**
+ * A handle to an open C3 folder-project root. All path fields are computed once
+ * at construction with no I/O; `has*()` queries call `existsSync` fresh on each
+ * invocation so they reflect the actual state of the disk at call time.
+ *
+ * Obtain via {@link openProject}.
+ */
+export interface C3Project {
+  /** Absolute path to the project root (the directory containing `project.c3proj`). */
+  readonly root: string;
+  /** Absolute path to `project.c3proj`. */
+  readonly manifestPath: string;
+  /** Absolute path to the event sheets source directory. */
+  readonly eventSheetsDir: string;
+  /** Absolute path to the layouts source directory. */
+  readonly layoutsDir: string;
+  /** Absolute path to the object types source directory. */
+  readonly objectTypesDir: string;
+  /** Absolute path to the families source directory. */
+  readonly familiesDir: string;
+  /** Absolute path to the scripts source directory. */
+  readonly scriptsDir: string;
+
+  /** Whether the event sheets directory exists on disk (evaluated fresh on each call). */
+  hasEventSheets(): boolean;
+  /** Whether the layouts directory exists on disk (evaluated fresh on each call). */
+  hasLayouts(): boolean;
+  /** Whether the object types directory exists on disk (evaluated fresh on each call). */
+  hasObjectTypes(): boolean;
+  /** Whether the families directory exists on disk (evaluated fresh on each call). */
+  hasFamilies(): boolean;
+  /** Whether the scripts directory exists on disk (evaluated fresh on each call). */
+  hasScripts(): boolean;
+
+  /**
+   * The parsed project manifest. Lazy: first call reads and caches the result;
+   * subsequent calls return the cached value without re-reading disk.
+   */
+  manifest(): C3ProjectManifest;
+
+  /**
+   * Return all event sheet paths under `eventSheetsDir` (or its `sub` subdirectory).
+   * Delegates to {@link find_all_eventsheets_path} — only `.json` non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `eventSheetsDir` (default `""`).
+   */
+  findAllEventSheets(sub?: string): string[];
+
+  /**
+   * Return all layout paths under `layoutsDir` (or its `sub` subdirectory).
+   * Delegates to {@link find_all_layouts_path} — all non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `layoutsDir` (default `""`).
+   */
+  findAllLayouts(sub?: string): string[];
+
+  /**
+   * Return all object-type paths under `objectTypesDir` (or its `sub` subdirectory).
+   * Delegates to {@link find_all_objectTypes_path} — all non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `objectTypesDir` (default `""`).
+   */
+  findAllObjectTypes(sub?: string): string[];
+
+  /**
+   * Return all family paths under `familiesDir` (or its `sub` subdirectory).
+   * Families are pure `<Name>.json` name-section files (no sub-assets).
+   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `familiesDir` (default `""`).
+   */
+  findAllFamilies(sub?: string): string[];
+
+  /**
+   * Return all source script paths under `scriptsDir` (or its `sub` subdirectory).
+   * Returns only `.ts` source files — excludes generated `.d.ts` declaration files
+   * (all of which live under `ts-defs/` and carry the `.d.ts` suffix).
+   * Built on {@link find_all_files_path} — the recursive walk handles `ts-defs/`
+   * correctly because every file inside it ends in `.d.ts`.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `scriptsDir` (default `""`).
+   */
+  findAllScripts(sub?: string): string[];
+
+  /**
+   * Detect manifest drift for this project.
+   * Delegates to {@link detectManifestDrift} with the project root and the handle's
+   * cached manifest (reuses the already-parsed manifest instead of re-reading disk).
+   */
+  detectManifestDrift(): ManifestDrift;
+
+  /**
+   * Detect image-derived drift for this project.
+   * Delegates to {@link detectImageDrift} with the project root.
+   * Returns `null` if the `images/` directory does not exist.
+   */
+  detectImageDrift(): SectionDrift | null;
+}
+
+/**
+ * Open a C3 folder-project at `root` and return a {@link C3Project} handle.
+ *
+ * **No I/O at construction** — path fields are string joins; the manifest is read
+ * lazily on the first call to `manifest()`. Safe to call on a non-existent path.
+ */
+export function openProject(root: string): C3Project {
+  const manifestPath = path.join(root, PROJECT_MANIFEST_FILE);
+  const eventSheetsDir = path.join(root, C3_SECTION_FOLDERS.eventSheets);
+  const layoutsDir = path.join(root, C3_SECTION_FOLDERS.layouts);
+  const objectTypesDir = path.join(root, C3_SECTION_FOLDERS.objectTypes);
+  const familiesDir = path.join(root, C3_SECTION_FOLDERS.families);
+  const scriptsDir = path.join(root, C3_ROOT_FILE_FOLDERS.script);
+
+  // Capture free-function references before the returned object methods shadow them.
+  // Without these aliases, a method named `detectManifestDrift` inside the returned
+  // object literal would shadow the module-level function of the same name, causing
+  // infinite recursion when the method tries to call `detectManifestDrift(...)`.
+  const freeDetectManifestDrift = detectManifestDrift;
+  const freeDetectImageDrift = detectImageDrift;
+
+  let cachedManifest: C3ProjectManifest | undefined;
+
+  /** Walk `sectionDir/sub` with `rawFinder`; return `[]` if the target dir is absent. */
+  function findInSection(sectionDir: string, sub: string = "", rawFinder: (dir: string) => string[]): string[] {
+    const targetDir = path.join(sectionDir, sub);
+    if (!existsSync(targetDir)) return [];
+    return rawFinder(targetDir);
+  }
+
+  return {
+    root,
+    manifestPath,
+    eventSheetsDir,
+    layoutsDir,
+    objectTypesDir,
+    familiesDir,
+    scriptsDir,
+
+    hasEventSheets: () => existsSync(eventSheetsDir),
+    hasLayouts: () => existsSync(layoutsDir),
+    hasObjectTypes: () => existsSync(objectTypesDir),
+    hasFamilies: () => existsSync(familiesDir),
+    hasScripts: () => existsSync(scriptsDir),
+
+    manifest() {
+      if (cachedManifest === undefined) {
+        cachedManifest = readProjectManifest(manifestPath);
+      }
+      return cachedManifest;
+    },
+
+    findAllEventSheets(sub?: string): string[] {
+      return findInSection(eventSheetsDir, sub, find_all_eventsheets_path);
+    },
+
+    findAllLayouts(sub?: string): string[] {
+      return findInSection(layoutsDir, sub, find_all_layouts_path);
+    },
+
+    findAllObjectTypes(sub?: string): string[] {
+      return findInSection(objectTypesDir, sub, find_all_objectTypes_path);
+    },
+
+    findAllFamilies(sub?: string): string[] {
+      // Families are pure <Name>.json files — same predicate shape as find_all_eventsheets_path.
+      return findInSection(familiesDir, sub, (dir) =>
+        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
+      );
+    },
+
+    findAllScripts(sub?: string): string[] {
+      // Source scripts are .ts files. Generated declaration files in ts-defs/ all end in
+      // .d.ts, so filtering !file.endsWith(".d.ts") is sufficient to exclude them while
+      // find_all_files_path recurses normally (ts-defs/ is not an editor-local dir so it
+      // is not skipped by isEditorLocalPath — it is excluded by the predicate alone).
+      return findInSection(scriptsDir, sub, (dir) =>
+        find_all_files_path(dir, (file) => file.endsWith(".ts") && !file.endsWith(".d.ts") && !isEditorLocalPath(file)),
+      );
+    },
+
+    detectManifestDrift(): ManifestDrift {
+      // Pass the handle's cached manifest as the second arg so the free function reuses
+      // the already-parsed manifest instead of re-reading project.c3proj from disk.
+      return freeDetectManifestDrift(root, this.manifest());
+    },
+
+    detectImageDrift(): SectionDrift | null {
+      return freeDetectImageDrift(root);
+    },
+  };
 }
 
 /** Which C3 schema slot a sid was found in. */
