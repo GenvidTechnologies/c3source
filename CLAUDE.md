@@ -15,10 +15,12 @@ the C3 editor. There is no runtime application; it ships as a library.
 Feature branches are squashed on merge, and work documents under
 `docs/superpowers/` (specs, plans) are routinely cleaned up — treat them as
 ephemeral scaffolding, not durable records. The root `plan.md` produced by the
-`plan-task` workflow is the same: it is committed as a prep commit while the
-branch is in flight, but **removed as part of PR creation** so it never lands on
-`main` (a stale one leaking onto `main` once misled a later session into reading
-the wrong plan). The durable record of a design or
+`plan-task` workflow is the same, and in this repo it is **gitignored**
+(`/plan.md`): it stays a **local-only working artifact** — never committed, so
+there is no prep commit and nothing to remove at PR creation. (`plan-task`
+detects this via `git check-ignore plan.md` and skips the prep commit.) This
+keeps a stale `plan.md` from ever leaking onto `main` and misleading a later
+session into reading the wrong plan. The durable record of a design or
 decision is the **GitHub issue or PR** (post the spec as an issue comment or in
 the PR body, where it survives the squash) — and the PR body should be a concise
 summary linking to real docs, not a paste of the design spec. Never cite an
