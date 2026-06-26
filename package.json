@@ -1,6 +1,6 @@
 {
 	"name": "@genvidtech/c3source",
-	"version": "1.5.0",
+	"version": "1.6.0",
 	"description": "Typed interfaces and traversal/formatting utilities for reading and mutating Construct 3 project source files (layouts, layers, instances, event sheets) on disk.",
 	"license": "MIT-0",
 	"author": "Genvid Technologies, inc. <support@genvidtech.com>",
