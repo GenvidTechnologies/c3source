@@ -9,6 +9,7 @@ import {
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
   PROJECT_MANIFEST_FILE,
+  IMAGES_FOLDER,
   find_all_eventsheets_path,
   find_all_layouts_path,
   find_all_objectTypes_path,
@@ -280,5 +281,205 @@ describe("openProject — detectManifestDrift() and detectImageDrift() delegator
     const fromHandle = proj.detectManifestDrift();
     const direct = detectManifestDrift(FIXTURE_DIR, cachedManifest);
     expect(fromHandle).to.deep.equal(direct);
+  });
+});
+
+describe("openProject — new *Dir path fields (OP-40 to OP-49)", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-40: timelinesDir is derived from C3_SECTION_FOLDERS.timelines", () => {
+    expect(proj.timelinesDir).to.equal(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.timelines));
+  });
+
+  it("OP-41: flowchartsDir is derived from C3_SECTION_FOLDERS.flowcharts", () => {
+    expect(proj.flowchartsDir).to.equal(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.flowcharts));
+  });
+
+  it("OP-42: models3dDir is derived from C3_SECTION_FOLDERS.models3d", () => {
+    expect(proj.models3dDir).to.equal(path.join(FIXTURE_DIR, C3_SECTION_FOLDERS.models3d));
+  });
+
+  it("OP-43: imagesDir is derived from IMAGES_FOLDER", () => {
+    expect(proj.imagesDir).to.equal(path.join(FIXTURE_DIR, IMAGES_FOLDER));
+  });
+
+  it("OP-44: soundsDir is derived from C3_ROOT_FILE_FOLDERS.sound", () => {
+    expect(proj.soundsDir).to.equal(path.join(FIXTURE_DIR, C3_ROOT_FILE_FOLDERS.sound));
+  });
+
+  it("OP-45: musicDir is derived from C3_ROOT_FILE_FOLDERS.music", () => {
+    expect(proj.musicDir).to.equal(path.join(FIXTURE_DIR, C3_ROOT_FILE_FOLDERS.music));
+  });
+
+  it("OP-46: videosDir is derived from C3_ROOT_FILE_FOLDERS.video", () => {
+    expect(proj.videosDir).to.equal(path.join(FIXTURE_DIR, C3_ROOT_FILE_FOLDERS.video));
+  });
+
+  it("OP-47: fontsDir is derived from C3_ROOT_FILE_FOLDERS.font", () => {
+    expect(proj.fontsDir).to.equal(path.join(FIXTURE_DIR, C3_ROOT_FILE_FOLDERS.font));
+  });
+
+  it("OP-48: iconsDir is derived from C3_ROOT_FILE_FOLDERS.icon", () => {
+    expect(proj.iconsDir).to.equal(path.join(FIXTURE_DIR, C3_ROOT_FILE_FOLDERS.icon));
+  });
+
+  it("OP-49: filesDir is derived from C3_ROOT_FILE_FOLDERS.general", () => {
+    expect(proj.filesDir).to.equal(path.join(FIXTURE_DIR, C3_ROOT_FILE_FOLDERS.general));
+  });
+});
+
+describe("openProject — new has*() methods on empty temp dir (OP-50 to OP-59)", () => {
+  let tmpDir: string;
+  let proj: C3Project;
+
+  before(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-newdirs-"));
+    proj = openProject(tmpDir);
+  });
+
+  after(() => {
+    rmdirSync(tmpDir);
+  });
+
+  it("OP-50: hasTimelines() is false for an empty dir", () => {
+    expect(proj.hasTimelines()).to.equal(false);
+  });
+
+  it("OP-51: hasFlowcharts() is false for an empty dir", () => {
+    expect(proj.hasFlowcharts()).to.equal(false);
+  });
+
+  it("OP-52: hasModels3d() is false for an empty dir", () => {
+    expect(proj.hasModels3d()).to.equal(false);
+  });
+
+  it("OP-53: hasImages() is false for an empty dir", () => {
+    expect(proj.hasImages()).to.equal(false);
+  });
+
+  it("OP-54: hasSounds() is false for an empty dir", () => {
+    expect(proj.hasSounds()).to.equal(false);
+  });
+
+  it("OP-55: hasMusic() is false for an empty dir", () => {
+    expect(proj.hasMusic()).to.equal(false);
+  });
+
+  it("OP-56: hasVideos() is false for an empty dir", () => {
+    expect(proj.hasVideos()).to.equal(false);
+  });
+
+  it("OP-57: hasFonts() is false for an empty dir", () => {
+    expect(proj.hasFonts()).to.equal(false);
+  });
+
+  it("OP-58: hasIcons() is false for an empty dir", () => {
+    expect(proj.hasIcons()).to.equal(false);
+  });
+
+  it("OP-59: hasFiles() is false for an empty dir", () => {
+    expect(proj.hasFiles()).to.equal(false);
+  });
+});
+
+describe("openProject — new has*() methods on the fixture (OP-60 to OP-63)", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  // fixture has: timelines/, flowcharts/, images/, icons/
+  // fixture does NOT have: models3d/, sounds/, music/, videos/, fonts/, files/
+
+  it("OP-60: hasTimelines() is true for the fixture", () => {
+    expect(proj.hasTimelines()).to.equal(true);
+  });
+
+  it("OP-61: hasFlowcharts() is true for the fixture", () => {
+    expect(proj.hasFlowcharts()).to.equal(true);
+  });
+
+  it("OP-62: hasImages() is true for the fixture", () => {
+    expect(proj.hasImages()).to.equal(true);
+  });
+
+  it("OP-63: hasIcons() is true for the fixture", () => {
+    expect(proj.hasIcons()).to.equal(true);
+  });
+});
+
+describe("openProject — new findAll*() methods (OP-64 to OP-72)", () => {
+  let proj: C3Project;
+
+  before(() => {
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-64: findAllTimelines('does-not-exist') returns []", () => {
+    expect(proj.findAllTimelines("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-65: findAllFlowcharts('does-not-exist') returns []", () => {
+    expect(proj.findAllFlowcharts("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-66: findAllModels3d('does-not-exist') returns []", () => {
+    expect(proj.findAllModels3d("does-not-exist")).to.deep.equal([]);
+  });
+
+  it("OP-67: findAllTimelines() on empty temp dir returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-notimelines-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllTimelines()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+
+  it("OP-68: findAllFlowcharts() on empty temp dir returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-noflowcharts-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllFlowcharts()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+
+  it("OP-69: findAllModels3d() on empty temp dir returns [] (does not throw)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-nomodels3d-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllModels3d()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+
+  it("OP-70: findAllTimelines() on fixture returns a non-empty list of .json paths", () => {
+    const timelines = proj.findAllTimelines();
+    expect(timelines.length).to.be.greaterThan(0);
+    for (const p of timelines) {
+      expect(p).to.match(/\.json$/);
+    }
+  });
+
+  it("OP-71: findAllFlowcharts() on fixture returns a non-empty list of .json paths", () => {
+    const flowcharts = proj.findAllFlowcharts();
+    expect(flowcharts.length).to.be.greaterThan(0);
+    for (const p of flowcharts) {
+      expect(p).to.match(/\.json$/);
+    }
+  });
+
+  it("OP-72: IMAGES_FOLDER is exported as a string with value 'images'", () => {
+    expect(typeof IMAGES_FOLDER).to.equal("string");
+    expect(IMAGES_FOLDER).to.equal("images");
   });
 });
