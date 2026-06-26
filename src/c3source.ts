@@ -1335,6 +1335,13 @@ export const C3_ROOT_FILE_FOLDERS = {
   general: "files",
 } as const;
 
+/**
+ * The special flat folder C3 writes object-type and animation image files into.
+ * Owned here as a C3 domain fact (cf. {@link TIMELINE_TRANSITIONS_FOLDER},
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS}) so downstream does not re-hardcode it.
+ */
+export const IMAGES_FOLDER = "images";
+
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 /**
@@ -1800,7 +1807,7 @@ export function deriveExpectedImageNames(objectType: Record<string, unknown>): s
  * function in a try/catch so such a failure degrades gracefully to "images section omitted".
  */
 export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
-  const imagesDir = path.join(projectDir, "images");
+  const imagesDir = path.join(projectDir, IMAGES_FOLDER);
   if (!existsSync(imagesDir)) return null;
 
   const expectedNames: string[] = [];
@@ -1822,7 +1829,7 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
     actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
   );
 
-  return { section: "images", folder: "images", entries };
+  return { section: "images", folder: IMAGES_FOLDER, entries };
 }
 
 // ─── Piece D: C3Project handle ────────────────────────────────────────────────
@@ -1849,6 +1856,26 @@ export interface C3Project {
   readonly familiesDir: string;
   /** Absolute path to the scripts source directory. */
   readonly scriptsDir: string;
+  /** Absolute path to the timelines source directory. */
+  readonly timelinesDir: string;
+  /** Absolute path to the flowcharts source directory. */
+  readonly flowchartsDir: string;
+  /** Absolute path to the 3D models source directory. */
+  readonly models3dDir: string;
+  /** Absolute path to the images flat directory (cf. {@link IMAGES_FOLDER}). */
+  readonly imagesDir: string;
+  /** Absolute path to the sounds source directory. */
+  readonly soundsDir: string;
+  /** Absolute path to the music source directory. */
+  readonly musicDir: string;
+  /** Absolute path to the videos source directory. */
+  readonly videosDir: string;
+  /** Absolute path to the fonts source directory. */
+  readonly fontsDir: string;
+  /** Absolute path to the icons source directory. */
+  readonly iconsDir: string;
+  /** Absolute path to the general files source directory. */
+  readonly filesDir: string;
 
   /** Whether the event sheets directory exists on disk (evaluated fresh on each call). */
   hasEventSheets(): boolean;
@@ -1860,6 +1887,26 @@ export interface C3Project {
   hasFamilies(): boolean;
   /** Whether the scripts directory exists on disk (evaluated fresh on each call). */
   hasScripts(): boolean;
+  /** Whether the timelines directory exists on disk (evaluated fresh on each call). */
+  hasTimelines(): boolean;
+  /** Whether the flowcharts directory exists on disk (evaluated fresh on each call). */
+  hasFlowcharts(): boolean;
+  /** Whether the 3D models directory exists on disk (evaluated fresh on each call). */
+  hasModels3d(): boolean;
+  /** Whether the images directory exists on disk (evaluated fresh on each call). */
+  hasImages(): boolean;
+  /** Whether the sounds directory exists on disk (evaluated fresh on each call). */
+  hasSounds(): boolean;
+  /** Whether the music directory exists on disk (evaluated fresh on each call). */
+  hasMusic(): boolean;
+  /** Whether the videos directory exists on disk (evaluated fresh on each call). */
+  hasVideos(): boolean;
+  /** Whether the fonts directory exists on disk (evaluated fresh on each call). */
+  hasFonts(): boolean;
+  /** Whether the icons directory exists on disk (evaluated fresh on each call). */
+  hasIcons(): boolean;
+  /** Whether the general files directory exists on disk (evaluated fresh on each call). */
+  hasFiles(): boolean;
 
   /**
    * The parsed project manifest. Lazy: first call reads and caches the result;
@@ -1917,6 +1964,35 @@ export interface C3Project {
   findAllScripts(sub?: string): string[];
 
   /**
+   * Return all timeline paths under `timelinesDir` (or its `sub` subdirectory).
+   * Timelines are `.json` name-section files; the walk is recursive so it also includes
+   * files under the unnamed transitions/ "Eases" subfolder. Callers can scope with `sub`.
+   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `timelinesDir` (default `""`).
+   */
+  findAllTimelines(sub?: string): string[];
+
+  /**
+   * Return all flowchart paths under `flowchartsDir` (or its `sub` subdirectory).
+   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `flowchartsDir` (default `""`).
+   */
+  findAllFlowcharts(sub?: string): string[];
+
+  /**
+   * Return all 3D model paths under `models3dDir` (or its `sub` subdirectory).
+   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Returns `[]` if the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `models3dDir` (default `""`).
+   */
+  findAllModels3d(sub?: string): string[];
+
+  /**
    * Detect manifest drift for this project.
    * Delegates to {@link detectManifestDrift} with the project root and the handle's
    * cached manifest (reuses the already-parsed manifest instead of re-reading disk).
@@ -1944,6 +2020,16 @@ export function openProject(root: string): C3Project {
   const objectTypesDir = path.join(root, C3_SECTION_FOLDERS.objectTypes);
   const familiesDir = path.join(root, C3_SECTION_FOLDERS.families);
   const scriptsDir = path.join(root, C3_ROOT_FILE_FOLDERS.script);
+  const timelinesDir = path.join(root, C3_SECTION_FOLDERS.timelines);
+  const flowchartsDir = path.join(root, C3_SECTION_FOLDERS.flowcharts);
+  const models3dDir = path.join(root, C3_SECTION_FOLDERS.models3d);
+  const imagesDir = path.join(root, IMAGES_FOLDER);
+  const soundsDir = path.join(root, C3_ROOT_FILE_FOLDERS.sound);
+  const musicDir = path.join(root, C3_ROOT_FILE_FOLDERS.music);
+  const videosDir = path.join(root, C3_ROOT_FILE_FOLDERS.video);
+  const fontsDir = path.join(root, C3_ROOT_FILE_FOLDERS.font);
+  const iconsDir = path.join(root, C3_ROOT_FILE_FOLDERS.icon);
+  const filesDir = path.join(root, C3_ROOT_FILE_FOLDERS.general);
 
   // Capture free-function references before the returned object methods shadow them.
   // Without these aliases, a method named `detectManifestDrift` inside the returned
@@ -1969,12 +2055,32 @@ export function openProject(root: string): C3Project {
     objectTypesDir,
     familiesDir,
     scriptsDir,
+    timelinesDir,
+    flowchartsDir,
+    models3dDir,
+    imagesDir,
+    soundsDir,
+    musicDir,
+    videosDir,
+    fontsDir,
+    iconsDir,
+    filesDir,
 
     hasEventSheets: () => existsSync(eventSheetsDir),
     hasLayouts: () => existsSync(layoutsDir),
     hasObjectTypes: () => existsSync(objectTypesDir),
     hasFamilies: () => existsSync(familiesDir),
     hasScripts: () => existsSync(scriptsDir),
+    hasTimelines: () => existsSync(timelinesDir),
+    hasFlowcharts: () => existsSync(flowchartsDir),
+    hasModels3d: () => existsSync(models3dDir),
+    hasImages: () => existsSync(imagesDir),
+    hasSounds: () => existsSync(soundsDir),
+    hasMusic: () => existsSync(musicDir),
+    hasVideos: () => existsSync(videosDir),
+    hasFonts: () => existsSync(fontsDir),
+    hasIcons: () => existsSync(iconsDir),
+    hasFiles: () => existsSync(filesDir),
 
     manifest() {
       if (cachedManifest === undefined) {
@@ -2009,6 +2115,25 @@ export function openProject(root: string): C3Project {
       // is not skipped by isEditorLocalPath — it is excluded by the predicate alone).
       return findInSection(scriptsDir, sub, (dir) =>
         find_all_files_path(dir, (file) => file.endsWith(".ts") && !file.endsWith(".d.ts") && !isEditorLocalPath(file)),
+      );
+    },
+
+    findAllTimelines(sub?: string): string[] {
+      // The walk is recursive so it includes files under the unnamed transitions/ "Eases" subfolder.
+      return findInSection(timelinesDir, sub, (dir) =>
+        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
+      );
+    },
+
+    findAllFlowcharts(sub?: string): string[] {
+      return findInSection(flowchartsDir, sub, (dir) =>
+        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
+      );
+    },
+
+    findAllModels3d(sub?: string): string[] {
+      return findInSection(models3dDir, sub, (dir) =>
+        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
       );
     },
 

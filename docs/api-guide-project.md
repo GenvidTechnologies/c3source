@@ -1,6 +1,6 @@
 # API Guide: C3Project Handle
 
-Reference for `openProject` and the `C3Project` interface added in issue #36.
+Reference for `openProject` and the `C3Project` interface added in issues #36 and #38.
 For the underlying manifest model and drift detection types see
 [api-guide-manifest.md](api-guide-manifest.md).
 
@@ -24,9 +24,10 @@ project root. Callers had to assemble these paths themselves, which meant
 hardcoding folder names like `"eventSheets"` or `"layouts"`.
 
 `openProject(root)` replaces that pattern: it returns a single object whose
-path fields are derived from the canonical tables `C3_SECTION_FOLDERS` and
-`C3_ROOT_FILE_FOLDERS`, and whose methods delegate to the same underlying
-finders and detectors. The consumer never hardcodes a section folder name.
+path fields are derived from the canonical tables `C3_SECTION_FOLDERS`,
+`C3_ROOT_FILE_FOLDERS`, and the domain-fact constant `IMAGES_FOLDER`, and whose
+methods delegate to the same underlying finders and detectors. The consumer never
+hardcodes a section folder name.
 
 `openProject` does **no I/O at construction** — all path fields are plain
 string joins. The manifest is read lazily on the first call to `manifest()`.
@@ -53,30 +54,59 @@ All fields are `readonly string`; they are computed once at construction.
 ```ts
 project.root            // "/abs/path/to/my-game"
 project.manifestPath    // "<root>/project.c3proj"
+
+// C3_SECTION_FOLDERS — named JSON sections
 project.eventSheetsDir  // "<root>/eventSheets"   (C3_SECTION_FOLDERS.eventSheets)
 project.layoutsDir      // "<root>/layouts"        (C3_SECTION_FOLDERS.layouts)
 project.objectTypesDir  // "<root>/objectTypes"    (C3_SECTION_FOLDERS.objectTypes)
 project.familiesDir     // "<root>/families"       (C3_SECTION_FOLDERS.families)
+project.timelinesDir    // "<root>/timelines"      (C3_SECTION_FOLDERS.timelines)
+project.flowchartsDir   // "<root>/flowcharts"     (C3_SECTION_FOLDERS.flowcharts)
+project.models3dDir     // "<root>/models3d"       (C3_SECTION_FOLDERS.models3d)
+
+// C3_ROOT_FILE_FOLDERS — binary / file asset sections
 project.scriptsDir      // "<root>/scripts"        (C3_ROOT_FILE_FOLDERS.script)
+project.soundsDir       // "<root>/sounds"         (C3_ROOT_FILE_FOLDERS.sound)
+project.musicDir        // "<root>/music"          (C3_ROOT_FILE_FOLDERS.music)
+project.videosDir       // "<root>/videos"         (C3_ROOT_FILE_FOLDERS.video)
+project.fontsDir        // "<root>/fonts"          (C3_ROOT_FILE_FOLDERS.font)
+project.iconsDir        // "<root>/icons"          (C3_ROOT_FILE_FOLDERS.icon)
+project.filesDir        // "<root>/files"          (C3_ROOT_FILE_FOLDERS.general)
+
+// IMAGES_FOLDER — flat images directory (domain-fact constant, cf. TIMELINE_TRANSITIONS_FOLDER)
+project.imagesDir       // "<root>/images"         (IMAGES_FOLDER)
 ```
 
-The exact folder names come from the exported mapping tables. Do not hardcode
-the strings — read them from `C3_SECTION_FOLDERS` / `C3_ROOT_FILE_FOLDERS` if
-you need them outside the handle.
+The exact folder names come from the exported mapping tables and constants. Do
+not hardcode the strings — read them from `C3_SECTION_FOLDERS`,
+`C3_ROOT_FILE_FOLDERS`, or `IMAGES_FOLDER` if you need them outside the handle.
 
 ## Presence checks
 
 ```ts
+// Named JSON sections
 project.hasEventSheets(): boolean
 project.hasLayouts(): boolean
 project.hasObjectTypes(): boolean
 project.hasFamilies(): boolean
+project.hasTimelines(): boolean
+project.hasFlowcharts(): boolean
+project.hasModels3d(): boolean
+
+// Binary / file asset sections
 project.hasScripts(): boolean
+project.hasSounds(): boolean
+project.hasMusic(): boolean
+project.hasVideos(): boolean
+project.hasFonts(): boolean
+project.hasIcons(): boolean
+project.hasFiles(): boolean
+project.hasImages(): boolean
 ```
 
-Each call evaluates `existsSync` fresh on the corresponding path field. Results
-reflect current disk state and are not cached; call them at the point you need
-to branch on presence.
+Every path field has a corresponding `has*()` method. Each call evaluates
+`existsSync` fresh on the corresponding path field. Results reflect current disk
+state and are not cached; call them at the point you need to branch on presence.
 
 ## Manifest access
 
@@ -97,11 +127,18 @@ console.log(m.layouts.items);    // ["Main", "Battle", …]
 
 ## File finders
 
+Finders exist for the traversable `.json` name sections. Binary asset directories
+(images, sounds, music, videos, fonts, icons, files) expose a path field and a
+`has*()` check only — no `findAll*`.
+
 ```ts
 project.findAllEventSheets(sub?: string): string[]
 project.findAllLayouts(sub?: string): string[]
 project.findAllObjectTypes(sub?: string): string[]
 project.findAllFamilies(sub?: string): string[]
+project.findAllTimelines(sub?: string): string[]
+project.findAllFlowcharts(sub?: string): string[]
+project.findAllModels3d(sub?: string): string[]
 project.findAllScripts(sub?: string): string[]
 ```
 
@@ -123,6 +160,9 @@ project.findAllEventSheets("Common");
 
 // All object types under objectTypes/tiles/:
 project.findAllObjectTypes("tiles");
+
+// All timelines:
+project.findAllTimelines();
 ```
 
 **Delegation and filtering:**
@@ -133,6 +173,9 @@ project.findAllObjectTypes("tiles");
 | `findAllLayouts` | `find_all_layouts_path` | non-editor-local files (all extensions) |
 | `findAllObjectTypes` | `find_all_objectTypes_path` | non-editor-local files (all extensions) |
 | `findAllFamilies` | `find_all_files_path` | `.json` non-editor-local files |
+| `findAllTimelines` | `find_all_files_path` | `.json` non-editor-local files |
+| `findAllFlowcharts` | `find_all_files_path` | `.json` non-editor-local files |
+| `findAllModels3d` | `find_all_files_path` | `.json` non-editor-local files |
 | `findAllScripts` | `find_all_files_path` | `.ts` source files only — excludes `.d.ts` declaration files (all of which live under `ts-defs/`) |
 
 `findAllScripts` returns only `.ts` source files. The generated `ts-defs/`
