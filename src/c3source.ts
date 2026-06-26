@@ -1335,6 +1335,13 @@ export const C3_ROOT_FILE_FOLDERS = {
   general: "files",
 } as const;
 
+/**
+ * The special flat folder C3 writes object-type and animation image files into.
+ * Owned here as a C3 domain fact (cf. {@link TIMELINE_TRANSITIONS_FOLDER},
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS}) so downstream does not re-hardcode it.
+ */
+export const IMAGES_FOLDER = "images";
+
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 /**
@@ -1800,7 +1807,7 @@ export function deriveExpectedImageNames(objectType: Record<string, unknown>): s
  * function in a try/catch so such a failure degrades gracefully to "images section omitted".
  */
 export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
-  const imagesDir = path.join(projectDir, "images");
+  const imagesDir = path.join(projectDir, IMAGES_FOLDER);
   if (!existsSync(imagesDir)) return null;
 
   const expectedNames: string[] = [];
@@ -1822,7 +1829,7 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
     actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
   );
 
-  return { section: "images", folder: "images", entries };
+  return { section: "images", folder: IMAGES_FOLDER, entries };
 }
 
 // ─── Piece D: C3Project handle ────────────────────────────────────────────────
