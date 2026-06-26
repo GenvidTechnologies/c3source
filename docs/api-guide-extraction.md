@@ -46,7 +46,7 @@ event's children. Siblings and the rest of the tree continue unaffected. Omittin
 a return value (or returning anything else) allows descent.
 
 ```ts
-import { visitEvents } from "@genvid/c3source";
+import { visitEvents } from "@genvidtech/c3source";
 
 // Print every counting event's number and its json locator.
 visitEvents(sheet.events, (event, ctx) => {
@@ -93,7 +93,7 @@ enclosing block. These two numbers uniquely identify a script action and feed
 `generateFunctionName`:
 
 ```ts
-import { extractScriptsFromSheet, generateFunctionName } from "@genvid/c3source";
+import { extractScriptsFromSheet, generateFunctionName } from "@genvidtech/c3source";
 
 for (const script of extractScriptsFromSheet(sheet)) {
   const name = generateFunctionName(script.sheetName, script.eventIndex, script.actionIndex);
@@ -133,7 +133,7 @@ coordinate information. Use this when you only need the raw script text and do
 not need `eventIndex`, `actionIndex`, `humanPath`, or `scopeVars`.
 
 ```ts
-import { walkScriptActions } from "@genvid/c3source";
+import { walkScriptActions } from "@genvidtech/c3source";
 
 const actions = walkScriptActions(sheet);
 console.log(`${actions.length} script action(s) in ${sheet.name}`);
@@ -170,7 +170,7 @@ canonical event order. For functions `name` is the function name; for custom-ACE
 A short example that renders a signature string from the structured data:
 
 ```ts
-import { extractFunctions } from "@genvid/c3source";
+import { extractFunctions } from "@genvidtech/c3source";
 
 for (const fn of extractFunctions(sheet)) {
   const sig = fn.params.map((p) => `${p.name}: ${p.type}`).join(", ");
@@ -198,7 +198,7 @@ signature. Use this when you drive `visitEvents` directly and need to branch on
 definition events without a switch over `eventType`:
 
 ```ts
-import { visitEvents, isFunctionDefinition } from "@genvid/c3source";
+import { visitEvents, isFunctionDefinition } from "@genvidtech/c3source";
 
 visitEvents(sheet.events, (event) => {
   if (isFunctionDefinition(event)) {
@@ -244,7 +244,7 @@ reads `ace.parameters[nameParamKey]`, returning the string or `null` when
 `parameters` is absent or the value is not a string.
 
 ```ts
-import { visitEvents, hasConditions, hasActions, getEventVarReferenceName } from "@genvid/c3source";
+import { visitEvents, hasConditions, hasActions, getEventVarReferenceName } from "@genvidtech/c3source";
 
 // Collect every event-variable name referenced anywhere in a sheet.
 const referenced: string[] = [];
@@ -284,7 +284,7 @@ include is a non-counting event (its `eventNumber` is `null`), so `jsonPath` is
 its canonical locator within the tree.
 
 ```ts
-import { extractIncludes } from "@genvid/c3source";
+import { extractIncludes } from "@genvidtech/c3source";
 
 for (const ref of extractIncludes(sheet)) {
   console.log(`${sheet.name} → ${ref.includeSheet}  (at ${ref.jsonPath})`);
@@ -357,7 +357,7 @@ downstream need not re-hardcode it; each new C3-load bug that surfaces a
 required-field constraint becomes a one-line rule addition to the table.
 
 ```ts
-import { validateForEditor } from "@genvid/c3source";
+import { validateForEditor } from "@genvidtech/c3source";
 
 const issues = validateForEditor(sheet);
 if (issues.length > 0) {
@@ -372,7 +372,7 @@ To validate every sheet in a project and assert no issues exist (e.g. in a fixtu
 test):
 
 ```ts
-import { find_all_event_sheet_path, readEventSheet, validateForEditor } from "@genvid/c3source";
+import { find_all_event_sheet_path, readEventSheet, validateForEditor } from "@genvidtech/c3source";
 
 const allIssues = find_all_event_sheet_path(projectDir)
   .flatMap((p) => validateForEditor(readEventSheet(p)));

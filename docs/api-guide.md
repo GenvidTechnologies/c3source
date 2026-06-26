@@ -63,8 +63,8 @@ label there (e.g. the sheet name instead of an empty string), drive `walkSids`
 directly:
 
 ```ts
-import { walkSids, formatSidPath, readFileSync } from "@genvid/c3source";
-import type { SidPathSegment } from "@genvid/c3source";
+import { walkSids, formatSidPath, readFileSync } from "@genvidtech/c3source";
+import type { SidPathSegment } from "@genvidtech/c3source";
 
 // Build a sid → label registry for an event sheet, labelling the root sid
 // with the sheet name rather than the empty-string formatSidPath returns.
@@ -132,7 +132,7 @@ re-deriving the skip rule:
 
 ```ts
 import { readdirSync, statSync } from "node:fs";
-import { isEditorLocalPath } from "@genvid/c3source";
+import { isEditorLocalPath } from "@genvidtech/c3source";
 
 function listSourceEntries(dir: string): string[] {
   return readdirSync(dir).filter((name) => !isEditorLocalPath(name));

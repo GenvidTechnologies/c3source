@@ -139,7 +139,7 @@ tolerated and treated as empty. Unmodeled top-level fields pass through
 unchanged.
 
 ```ts
-import { readProjectManifest } from "@genvid/c3source";
+import { readProjectManifest } from "@genvidtech/c3source";
 
 const m = readProjectManifest("./my-game/project.c3proj");
 console.log(m.name);             // "my-game"
@@ -162,7 +162,7 @@ names, etc.). `collectManifestFileNames` returns item `name` fields (filenames
 like `"main.ts"`).
 
 ```ts
-import { readProjectManifest, collectManifestItemNames, collectManifestFileNames } from "@genvid/c3source";
+import { readProjectManifest, collectManifestItemNames, collectManifestFileNames } from "@genvidtech/c3source";
 
 const m = readProjectManifest("./my-game/project.c3proj");
 
@@ -243,7 +243,7 @@ are filtered from the disk side before comparison.
 about drift (warn, fail the build, sync).
 
 ```ts
-import { detectManifestDrift, formatManifestPath } from "@genvid/c3source";
+import { detectManifestDrift, formatManifestPath } from "@genvidtech/c3source";
 
 const drift = detectManifestDrift("./my-game");
 
@@ -318,7 +318,7 @@ correct tree position without re-walking the manifest.
 To inject a pre-parsed manifest (e.g. after modifying it in memory for testing):
 
 ```ts
-import { readProjectManifest, detectManifestDrift } from "@genvid/c3source";
+import { readProjectManifest, detectManifestDrift } from "@genvidtech/c3source";
 
 const m = readProjectManifest("./my-game/project.c3proj");
 // m.layouts.items.push("NewLayout"); // hypothetical modification
