@@ -149,15 +149,24 @@ Two functional areas:
    **C3Project handle** — `openProject(root): C3Project` is a root-bound handle that
    unifies the previously-split API: callers no longer assemble section paths by
    hardcoding `"eventSheets"`/`"layouts"`/etc., because the handle derives all path
-   fields from `C3_SECTION_FOLDERS`/`C3_ROOT_FILE_FOLDERS` at construction (#36).
+   fields from `C3_SECTION_FOLDERS`/`C3_ROOT_FILE_FOLDERS` at construction (#36, #38).
    Construction does **no I/O** — path fields are string joins, `manifest()` reads
-   lazily and caches, `has*()` methods call `existsSync` fresh. `findAll*(sub?)` methods
-   delegate to the existing `find_all_*_path` finders (graceful-empty: return `[]` when
-   the section directory is absent). `findAllFamilies` filters `.json` via
-   `find_all_files_path`; `findAllScripts` filters `.ts` source (excludes `.d.ts` —
+   lazily and caches, `has*()` methods call `existsSync` fresh. The handle covers the
+   **full canonical set of C3 on-disk subfolders**: every key in `C3_SECTION_FOLDERS`
+   (event sheets, layouts, object types, families, timelines, flowcharts, 3D models)
+   and every key in `C3_ROOT_FILE_FOLDERS` (scripts, sounds, music, videos, fonts,
+   icons, files), plus the flat `images/` folder via the exported domain fact
+   `IMAGES_FOLDER = "images"` (cf. `TIMELINE_TRANSITIONS_FOLDER`). Every dir gets a
+   `*Dir` path field and a `has*()` presence check. `findAll*(sub?)` finders exist for
+   the traversable `.json` name sections: event sheets, layouts, object types, families,
+   timelines, flowcharts, and 3D models; all are graceful-empty (return `[]` when the
+   directory is absent). Binary asset dirs (images, sounds, music, videos, fonts, icons,
+   files) expose `*Dir` + `has*()` only — no `findAll*`. `findAllFamilies` filters `.json`
+   via `find_all_files_path`; `findAllScripts` filters `.ts` source (excludes `.d.ts` —
    all generated declaration files live under `ts-defs/`). `detectManifestDrift()` and
    `detectImageDrift()` delegate to the free functions, passing the cached manifest.
-   The exported constant `PROJECT_MANIFEST_FILE = "project.c3proj"` is also new (#36).
+   The exported constants `PROJECT_MANIFEST_FILE = "project.c3proj"` (#36) and
+   `IMAGES_FOLDER` (#38) are also defined here as C3 domain facts.
    The free functions remain exported and unchanged — the handle is additive.
 
 2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
