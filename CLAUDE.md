@@ -39,6 +39,10 @@ npm run test        # mocha + tsx, runs test/**/*.test.ts
 npm run build       # tsc -> dist/ (the published artifact)
 ```
 
+The full validation gate is the **`.genvid-agent.json` `commands.validate`**
+chain (`npm run lint && npm run typecheck && npm run test && npm run build`),
+**not** an npm script — there is no `npm run validate`.
+
 Run a single test file or filter by name:
 
 ```sh
