@@ -36,7 +36,7 @@ It is safe to call `openProject` on a path that does not yet exist.
 ## Opening a project
 
 ```ts
-import { openProject } from "@genvid/c3source";
+import { openProject } from "@genvidtech/c3source";
 
 const project = openProject("/abs/path/to/my-game");
 ```

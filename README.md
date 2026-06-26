@@ -84,7 +84,7 @@ normalizeLineEndings(text: string): string
 ### List all layout files
 
 ```ts
-import { find_all_layouts_path } from "@genvid/c3source";
+import { find_all_layouts_path } from "@genvidtech/c3source";
 
 const paths = find_all_layouts_path("./layouts");
 // ["./layouts/MainMenu.json", "./layouts/Battle/Battle.json", ...]
@@ -93,7 +93,7 @@ const paths = find_all_layouts_path("./layouts");
 ### Walk every instance across all layouts
 
 ```ts
-import { visit_instances_in_layouts } from "@genvid/c3source";
+import { visit_instances_in_layouts } from "@genvidtech/c3source";
 
 const changed = visit_instances_in_layouts("./layouts", (instance, index, layer, fullLayerName) => {
   if (instance.type === "Sprite" && instance.properties.text === "TODO") {
@@ -109,7 +109,7 @@ console.log(`Updated ${changed} instances`);
 
 ```ts
 import { readFileSync } from "node:fs";
-import { type EventSheet, extractScriptsFromSheet } from "@genvid/c3source";
+import { type EventSheet, extractScriptsFromSheet } from "@genvidtech/c3source";
 
 const sheet: EventSheet = JSON.parse(readFileSync("./eventSheets/GamePlay.json", "utf-8"));
 const scripts = extractScriptsFromSheet(sheet);
@@ -123,7 +123,7 @@ for (const s of scripts) {
 ### Format a condition for display
 
 ```ts
-import { formatCondition } from "@genvid/c3source";
+import { formatCondition } from "@genvidtech/c3source";
 
 const label = formatCondition({ id: "on-start-of-layout", objectClass: "System", sid: 1 });
 // "System.on-start-of-layout()"
