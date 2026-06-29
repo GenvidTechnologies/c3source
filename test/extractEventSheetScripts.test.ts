@@ -622,7 +622,7 @@ describe("formatCondition", () => {
       sid: 2,
       parameters: { "first-value": "x", comparison: 0, "second-value": "y" },
     });
-    assert.equal(result, "System.compare-two-values(first-value=x, comparison=0, second-value=y)");
+    assert.equal(result, "System.compare-two-values(first-value=x, comparison=0 (=), second-value=y)");
   });
 
   it("formats an inverted condition", () => {
@@ -654,6 +654,27 @@ describe("formatCondition", () => {
       isInverted: true,
     });
     assert.equal(result, "[DISABLED] NOT Sprite.is-visible()");
+  });
+
+  it("appends comparison symbol for comparison=4 (>)", () => {
+    const result = formatCondition({
+      id: "compare-two-values",
+      objectClass: "System",
+      sid: 6,
+      parameters: { "first-value": "a", comparison: 4, "second-value": "b" },
+    });
+    assert.include(result, "comparison=4 (>)");
+  });
+
+  it("renders comparison=9 raw with no suffix for out-of-range value", () => {
+    const result = formatCondition({
+      id: "compare-two-values",
+      objectClass: "System",
+      sid: 7,
+      parameters: { comparison: 9 },
+    });
+    assert.include(result, "comparison=9");
+    assert.notInclude(result, "comparison=9 (");
   });
 });
 

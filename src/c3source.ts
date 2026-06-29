@@ -552,7 +552,7 @@ export function formatCondition(cond: Condition): string {
   const inverted = cond.isInverted ? "NOT " : "";
   const params = cond.parameters
     ? Object.entries(cond.parameters)
-        .map(([k, v]) => `${k}=${v}`)
+        .map(([k, v]) => `${k}=${v}${comparisonSuffix(k, v)}`)
         .join(", ")
     : "";
   return `${disabled}${inverted}${cond.objectClass}.${cond.id}(${params})`;
@@ -583,10 +583,16 @@ export function formatAction(
   return disabled ? `[DISABLED] ${result}` : result;
 }
 
+function comparisonSuffix(key: string, value: unknown): string {
+  if (key !== "comparison" || typeof value !== "number") return "";
+  const sym = comparisonSymbol(value);
+  return sym ? ` (${sym})` : "";
+}
+
 function formatRecordParams(parameters: Record<string, unknown> | undefined): string {
   if (!parameters) return "";
   return Object.entries(parameters)
-    .map(([k, v]) => `${k}=${normalizeLineEndings(String(v))}`)
+    .map(([k, v]) => `${k}=${normalizeLineEndings(String(v))}${comparisonSuffix(k, v)}`)
     .join(", ");
 }
 
