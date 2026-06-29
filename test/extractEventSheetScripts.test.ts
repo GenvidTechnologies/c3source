@@ -1,6 +1,14 @@
 import { describe, it } from "mocha";
 import { assert } from "chai";
-import { type EventSheet, extractScriptsFromSheet, generateFunctionName, formatCondition } from "../src/c3source.js";
+import {
+  type EventSheet,
+  extractScriptsFromSheet,
+  generateFunctionName,
+  formatCondition,
+  formatAction,
+  comparisonSymbol,
+  COMPARISON_OPERATORS,
+} from "../src/c3source.js";
 
 describe("extractScriptsFromSheet", () => {
   it("extracts script actions from a simple block", () => {
@@ -615,7 +623,7 @@ describe("formatCondition", () => {
       sid: 2,
       parameters: { "first-value": "x", comparison: 0, "second-value": "y" },
     });
-    assert.equal(result, "System.compare-two-values(first-value=x, comparison=0, second-value=y)");
+    assert.equal(result, "System.compare-two-values(first-value=x, comparison=0 (=), second-value=y)");
   });
 
   it("formats an inverted condition", () => {
@@ -647,5 +655,81 @@ describe("formatCondition", () => {
       isInverted: true,
     });
     assert.equal(result, "[DISABLED] NOT Sprite.is-visible()");
+  });
+
+  it("appends comparison symbol for comparison=4 (>)", () => {
+    const result = formatCondition({
+      id: "compare-two-values",
+      objectClass: "System",
+      sid: 6,
+      parameters: { "first-value": "a", comparison: 4, "second-value": "b" },
+    });
+    assert.include(result, "comparison=4 (>)");
+  });
+
+  it("renders comparison=9 raw with no suffix for out-of-range value", () => {
+    const result = formatCondition({
+      id: "compare-two-values",
+      objectClass: "System",
+      sid: 7,
+      parameters: { comparison: 9 },
+    });
+    assert.include(result, "comparison=9");
+    assert.notInclude(result, "comparison=9 (");
+  });
+});
+
+describe("formatAction comparison annotation", () => {
+  it("appends the comparison symbol in standard action parameters", () => {
+    const result = formatAction(
+      { id: "set-value", objectClass: "MyPlugin", parameters: { comparison: 3, other: "v" } },
+      "Sheet1",
+      1,
+      1,
+    );
+    assert.include(result, "comparison=3 (≤)");
+  });
+});
+
+describe("comparisonSymbol", () => {
+  it("maps 0 to '='", () => {
+    assert.equal(comparisonSymbol(0), "=");
+  });
+
+  it("maps 1 to '≠'", () => {
+    assert.equal(comparisonSymbol(1), "≠");
+  });
+
+  it("maps 2 to '<'", () => {
+    assert.equal(comparisonSymbol(2), "<");
+  });
+
+  it("maps 3 to '≤'", () => {
+    assert.equal(comparisonSymbol(3), "≤");
+  });
+
+  it("maps 4 to '>'", () => {
+    assert.equal(comparisonSymbol(4), ">");
+  });
+
+  it("maps 5 to '≥'", () => {
+    assert.equal(comparisonSymbol(5), "≥");
+  });
+
+  it("returns undefined for out-of-range value 6", () => {
+    assert.isUndefined(comparisonSymbol(6));
+  });
+
+  it("returns undefined for out-of-range value -1", () => {
+    assert.isUndefined(comparisonSymbol(-1));
+  });
+
+  it("COMPARISON_OPERATORS has exactly 6 entries (0–5)", () => {
+    assert.deepEqual(
+      Object.keys(COMPARISON_OPERATORS)
+        .map(Number)
+        .sort((a, b) => a - b),
+      [0, 1, 2, 3, 4, 5],
+    );
   });
 });
