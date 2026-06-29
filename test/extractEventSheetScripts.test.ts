@@ -1,6 +1,13 @@
 import { describe, it } from "mocha";
 import { assert } from "chai";
-import { type EventSheet, extractScriptsFromSheet, generateFunctionName, formatCondition } from "../src/c3source.js";
+import {
+  type EventSheet,
+  extractScriptsFromSheet,
+  generateFunctionName,
+  formatCondition,
+  comparisonSymbol,
+  COMPARISON_OPERATORS,
+} from "../src/c3source.js";
 
 describe("extractScriptsFromSheet", () => {
   it("extracts script actions from a simple block", () => {
@@ -647,5 +654,48 @@ describe("formatCondition", () => {
       isInverted: true,
     });
     assert.equal(result, "[DISABLED] NOT Sprite.is-visible()");
+  });
+});
+
+describe("comparisonSymbol", () => {
+  it("maps 0 to '='", () => {
+    assert.equal(comparisonSymbol(0), "=");
+  });
+
+  it("maps 1 to '≠'", () => {
+    assert.equal(comparisonSymbol(1), "≠");
+  });
+
+  it("maps 2 to '<'", () => {
+    assert.equal(comparisonSymbol(2), "<");
+  });
+
+  it("maps 3 to '≤'", () => {
+    assert.equal(comparisonSymbol(3), "≤");
+  });
+
+  it("maps 4 to '>'", () => {
+    assert.equal(comparisonSymbol(4), ">");
+  });
+
+  it("maps 5 to '≥'", () => {
+    assert.equal(comparisonSymbol(5), "≥");
+  });
+
+  it("returns undefined for out-of-range value 6", () => {
+    assert.isUndefined(comparisonSymbol(6));
+  });
+
+  it("returns undefined for out-of-range value -1", () => {
+    assert.isUndefined(comparisonSymbol(-1));
+  });
+
+  it("COMPARISON_OPERATORS has exactly 6 entries (0–5)", () => {
+    assert.deepEqual(
+      Object.keys(COMPARISON_OPERATORS)
+        .map(Number)
+        .sort((a, b) => a - b),
+      [0, 1, 2, 3, 4, 5],
+    );
   });
 });

@@ -492,13 +492,7 @@ export interface CommentEvent {
 }
 
 export type EventSheetEvent =
-  | EventSheetVariable
-  | BlockEvent
-  | FunctionBlockEvent
-  | CustomAceBlockEvent
-  | GroupEvent
-  | IncludeEvent
-  | CommentEvent;
+  EventSheetVariable | BlockEvent | FunctionBlockEvent | CustomAceBlockEvent | GroupEvent | IncludeEvent | CommentEvent;
 
 export interface EventSheet {
   name: string;
@@ -965,6 +959,32 @@ export function getEventVarReferenceName(ace: Condition | ScriptAction | Record<
   if (!parameters) return null;
   const value = parameters[ref.nameParamKey];
   return typeof value === "string" ? value : null;
+}
+
+/**
+ * C3's fixed "Comparison" combo order (r487), as a numeric index → operator symbol map.
+ * C3 serializes the `comparison` parameter of compare ACEs as a bare integer 0–5:
+ *   0 = "="  (Equal),          1 = "≠"  (Not equal),
+ *   2 = "<"  (Less than),      3 = "≤"  (Less or equal),
+ *   4 = ">"  (Greater than),   5 = "≥"  (Greater or equal).
+ * This is the canonical, version-pinned source of truth owned here so downstream
+ * need not re-hardcode the magic numbers (cf. {@link EVENTVAR_REFERENCE_ACES}).
+ */
+export const COMPARISON_OPERATORS: Record<number, string> = {
+  0: "=",
+  1: "≠",
+  2: "<",
+  3: "≤",
+  4: ">",
+  5: "≥",
+};
+
+/**
+ * Returns the operator symbol for a C3 `comparison` parameter value (0–5),
+ * or `undefined` for out-of-range values.
+ */
+export function comparisonSymbol(n: number): string | undefined {
+  return COMPARISON_OPERATORS[n];
 }
 
 // ─── Editor-strictness validator ─────────────────────────────────────────────
