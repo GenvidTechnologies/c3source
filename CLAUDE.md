@@ -254,6 +254,13 @@ Prettier: `printWidth` 120, spaces in code. **JSON files use tabs**, no bracket
 spacing (mirrors C3 serialization). ESLint extends `prettier` and deliberately
 disables `no-unused-vars` and `no-explicit-any`.
 
+Prettier formatting is **not enforced** by any check: `npm run lint` is
+eslint-only, and `eslint-config-prettier` merely *disables* eslint rules that
+would conflict with Prettier — there is no `prettier` dependency and no
+`--check` step anywhere. So formatting drift (e.g. a multi-line union collapsed
+to one line) passes lint/typecheck/test/build untouched; **review is the only
+formatting gate** — match the surrounding style by hand rather than relying on CI.
+
 ## CI & Publishing
 
 CI runs on **GitHub Actions** (Node 22). `.github/workflows/ci.yml` runs on pull
