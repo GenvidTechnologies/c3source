@@ -492,7 +492,13 @@ export interface CommentEvent {
 }
 
 export type EventSheetEvent =
-  EventSheetVariable | BlockEvent | FunctionBlockEvent | CustomAceBlockEvent | GroupEvent | IncludeEvent | CommentEvent;
+  | EventSheetVariable
+  | BlockEvent
+  | FunctionBlockEvent
+  | CustomAceBlockEvent
+  | GroupEvent
+  | IncludeEvent
+  | CommentEvent;
 
 export interface EventSheet {
   name: string;

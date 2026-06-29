@@ -233,6 +233,16 @@ Two functional areas:
    resolved C3 import failures). Seed rules: `eventvar-comment-required`
    (`variable` → `.comment`) and `group-description-required` (`group` →
    `.description`) (#33).
+   **Comparison operators** — `COMPARISON_OPERATORS: Record<number, string>` is
+   the exported C3 domain fact mapping each bare `comparison` ACE parameter value
+   to its operator symbol: `0`=`=`, `1`=`≠`, `2`=`<`, `3`=`≤`, `4`=`>`, `5`=`≥`,
+   version-pinned to C3 r487. `comparisonSymbol(n): string | undefined` looks up
+   the symbol, returning `undefined` for out-of-range values. The DSL renderer
+   (`formatCondition`/`formatRecordParams`) annotates a `comparison` param with the
+   symbol alongside the numeric value (e.g. `comparison=4 (>)`), keeping the number
+   as the round-trippable source form; out-of-range or non-numeric values render raw.
+   Owned here so downstream need not re-hardcode the magic numbers (#39); keyed on
+   param name, no `objectClass` gate.
 
 All file writes serialize JSON with **tab indentation** to match C3's format,
 and text from expressions/comments is run through `normalizeLineEndings` (CRLF

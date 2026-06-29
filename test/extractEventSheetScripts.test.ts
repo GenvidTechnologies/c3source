@@ -5,6 +5,7 @@ import {
   extractScriptsFromSheet,
   generateFunctionName,
   formatCondition,
+  formatAction,
   comparisonSymbol,
   COMPARISON_OPERATORS,
 } from "../src/c3source.js";
@@ -675,6 +676,18 @@ describe("formatCondition", () => {
     });
     assert.include(result, "comparison=9");
     assert.notInclude(result, "comparison=9 (");
+  });
+});
+
+describe("formatAction comparison annotation", () => {
+  it("appends the comparison symbol in standard action parameters", () => {
+    const result = formatAction(
+      { id: "set-value", objectClass: "MyPlugin", parameters: { comparison: 3, other: "v" } },
+      "Sheet1",
+      1,
+      1,
+    );
+    assert.include(result, "comparison=3 (≤)");
   });
 });
 
