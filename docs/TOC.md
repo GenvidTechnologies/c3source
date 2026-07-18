@@ -13,3 +13,18 @@ Each entry should be a one-line description. Only list docs that exist.
 - `api-guide-manifest.md` — project manifest model, drift detection types, walk primitives, and 0.x migration (#19 #21)
 - `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation (#36)
 - `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, validateForEditor/EDITOR_FIELD_RULES
+
+## Decision Records
+
+Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.md`](decisions/README.md). Backfilled 2026-07-17 from commit history.
+
+- `decisions/0001-single-module-esm-library.md` — single-module, ESM-only library (`type:module`, NodeNext, `.js` imports)
+- `decisions/0002-canonical-event-numbering.md` — one canonical event-numbering counter in `visitEvents` (#3)
+- `decisions/0003-github-actions-oidc-publishing.md` — CI/publish via GitHub Actions + npm + OIDC trusted publishing (#6)
+- `decisions/0004-dist-entry-points-no-publishconfig.md` — package entry points at `dist/`, not `src/*.ts` via `publishConfig` (#8)
+- `decisions/0005-single-canonical-traversal-walk.md` — one canonical recursive walk per traversal; collectors/finders/visitors are thin consumers (#10 #14 #16)
+- `decisions/0006-editor-local-classifier.md` — single canonical editor-local classifier; skip C3 r487 `uistate/` (#12 #19)
+- `decisions/0007-coordinate-bearing-returns.md` — structured, coordinate-bearing returns over bare values (#21)
+- `decisions/0008-c3-domain-fact-tables.md` — C3 domain facts owned as exported tables (#26 #28 #29 #33 #39)
+- `decisions/0009-editor-strict-validation.md` — lenient parse types + separate editor-strictness validation (#33)
+- `decisions/0010-c3project-root-handle.md` — `C3Project`/`openProject` root handle; derive paths from mapping tables, no I/O at construction (#36 #38)
