@@ -23,9 +23,16 @@ keeps a stale `plan.md` from ever leaking onto `main` and misleading a later
 session into reading the wrong plan. The durable record of a design or
 decision is the **GitHub issue or PR** (post the spec as an issue comment or in
 the PR body, where it survives the squash) — and the PR body should be a concise
-summary linking to real docs, not a paste of the design spec. Never cite an
-unpushed local branch or commit hash in external communication (issue/PR
-comments) — link to something the reader can actually open, or push first.
+summary linking to real docs, not a paste of the design spec. For
+**architecture and trade-off decisions** specifically, the durable in-repo
+record is an **ADR under `docs/decisions/`** (MADR-lite, authored via
+`/gvt-dev:create-adr` and indexed in `docs/TOC.md` under *Decision Records*):
+the ADR's **Compromise** section preserves the rejected-alternatives rationale a
+squashed PR body would otherwise lose, complementing — not replacing — the
+issue/PR record. ADRs 0001–0010 were backfilled from commit history on
+2026-07-17. Never cite an unpushed local branch or commit hash in external
+communication (issue/PR comments) — link to something the reader can actually
+open, or push first.
 
 ## Commands
 
@@ -39,7 +46,7 @@ npm run test        # mocha + tsx, runs test/**/*.test.ts
 npm run build       # tsc -> dist/ (the published artifact)
 ```
 
-The full validation gate is the **`.genvid-agent.json` `commands.validate`**
+The full validation gate is the **`.gvt-agent.json` `commands.validate`**
 chain (`npm run lint && npm run typecheck && npm run test && npm run build`),
 **not** an npm script — there is no `npm run validate`.
 
