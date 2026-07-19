@@ -10,6 +10,7 @@ For SID traversal and editor-local classification see [api-guide.md](api-guide.m
 - [Function discovery: `extractFunctions`](#function-discovery-extractfunctions)
 - [Type guard: `isFunctionDefinition`](#type-guard-isfunctiondefinition)
 - [Event-variable references: `isEventVarReference` / `getEventVarReferenceName`](#event-variable-references-iseventvarreference--geteventvarreferencename)
+- [Expression references: `extractExpressionReferences`](#expression-references-extractexpressionreferences)
 - [Include edges: `extractIncludes`](#include-edges-extractincludes)
 - [Editor-strictness validation: `validateForEditor`](#editor-strictness-validation-validateforeditor)
 
@@ -265,6 +266,119 @@ variable name is referenced here". Mapping a referenced name to its declaration
 — including lexical shadowing, where a local variable shadows a same-named
 global — is presentation/analysis logic that belongs in the consumer (a
 `variable` event at the sheet root is global; nested, it is local).
+
+---
+
+## Expression references: `extractExpressionReferences`
+
+```ts
+extractExpressionReferences(expr: string): ExpressionToken[]
+
+type ExpressionTokenKind = "reference" | "systemFunction" | "variable";
+
+interface ExpressionTokenBase {
+  kind: ExpressionTokenKind;
+  start: number;          // character span [start, end) within `expr`
+  end: number;
+  parentIndex?: number;   // array index of the nearest enclosing call token; absent at top level
+}
+
+interface ExpressionReferenceToken extends ExpressionTokenBase {
+  kind: "reference";
+  objectName: string;
+  behaviorName?: string;  // present for Object.Behavior.member
+  memberName: string;
+  isCall: boolean;        // true for member(...) call form
+  argCount?: number;      // top-level arg count in this token's own (...), present when isCall
+}
+
+interface SystemFunctionToken extends ExpressionTokenBase {
+  kind: "systemFunction";
+  name: string;
+  argCount?: number;      // top-level arg count in this token's own (...)
+}
+
+interface VariableToken extends ExpressionTokenBase {
+  kind: "variable";
+  name: string;
+}
+```
+
+Sibling to [`isEventVarReference`](#event-variable-references-iseventvarreference--geteventvarreferencename):
+where that classifier answers "does this ACE reference an event variable",
+`extractExpressionReferences` answers "what does this raw expression *string*
+reference" — the parameter values that hold expressions (as opposed to the
+System-ACE parameters that hold a bare variable name) are unstructured C3
+expression text, and this is the tokenizer over that text.
+
+**Token kinds**, in source order (ascending `start`):
+
+- **`reference`** — an object/family/behavior member reference:
+  `Object.member` (bare) or `Object.Behavior.member`, either as a bare
+  property access or a call (`member(...)`, `isCall: true`).
+- **`systemFunction`** — a no-prefix call: `int(...)`, `random(...)`,
+  `len(...)`.
+- **`variable`** — any other bare identifier: a local variable, a function
+  parameter, or a C3 keyword. `extractExpressionReferences` does not attempt
+  to resolve which — that is scope-resolution work, same as
+  `getEventVarReferenceName`'s "scope resolution is the caller's job" note
+  above.
+
+**Contract.**
+
+- **Never throws.** Malformed input — an unterminated string, a trailing
+  `Sprite.`, unbalanced parens, an empty string — degrades to a partial or
+  empty result rather than raising.
+- **String-literal aware.** C3's double-quote string form (`"…"`, with `""`
+  as the doubled-quote escape for an embedded quote) is skipped as scan
+  content, so a `Name.member`-shaped substring inside a string literal is
+  never reported as a reference.
+- **Nothing nested is dropped.** A reference or system-function call nested
+  inside another call, or joined by an operator (`&`, `+`, …), is still
+  reported — the flat return array is simply longer, in source order.
+- **Nesting metadata.** `parentIndex` is the array index of the nearest
+  enclosing call token (a `reference` with `isCall: true`, or a
+  `systemFunction`), tracked via a paren-frame stack so it correctly skips
+  over plain grouping parens; it is absent for a top-level token.
+  `argCount` is the top-level argument count of a call token's own `(...)`
+  (commas inside a nested call never inflate the outer count), present only
+  when the token is a call.
+
+**Worked example.**
+
+```ts
+import { extractExpressionReferences } from "@genvidtech/c3source";
+
+extractExpressionReferences("int(Clock.Elapsed) & Player.Platform.VectorX");
+// [
+//   { kind: "systemFunction", name: "int",
+//     start: 0, end: 3, argCount: 1 },                       // parentIndex absent (top-level)
+//   { kind: "reference", objectName: "Clock", memberName: "Elapsed",
+//     isCall: false, start: 4, end: 17, parentIndex: 0 },     // nested in int(...)
+//   { kind: "reference", objectName: "Player", behaviorName: "Platform", memberName: "VectorX",
+//     isCall: false, start: 21, end: 44 },                    // parentIndex absent (top-level, joined by &)
+// ]
+```
+
+The `int(...)` call's `argCount` is `1` because its own `(...)` contains one
+top-level argument (`Clock.Elapsed`); `Clock.Elapsed`'s `parentIndex: 0`
+points back at that call. `Player.Platform.VectorX` is joined by `&`
+(operator concatenation) rather than nested inside a call, so it has no
+`parentIndex` and — being a bare property access, not a call — no
+`argCount`.
+
+**Out of scope.** `extractExpressionReferences` is grammar-level only:
+
+- It does **not** resolve `objectName`/`behaviorName`/`memberName` to actual
+  plugin, behavior, or ACE ids — that requires the project's object-type
+  model, which the tokenizer never loads.
+- It does **not** decide which action/condition parameters hold expression
+  text in the first place (versus a bare number, a combo index, or a plain
+  string) — that is an ACE-parameter-type decision the consumer makes before
+  calling it.
+- It does **not** iterate event sheets — call it per parameter value the
+  consumer has already located, typically by walking a sheet with
+  [`visitEvents`](#core-walk-visitevents).
 
 ---
 
