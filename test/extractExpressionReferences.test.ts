@@ -122,4 +122,97 @@ describe("extractExpressionReferences", () => {
     expect(() => extractExpressionReferences("")).to.not.throw();
     expect(extractExpressionReferences("")).to.have.length(0);
   });
+
+  it("links a call's argument to its parent and reports the call's argCount", () => {
+    const tokens = extractExpressionReferences("Sprite.SetX(Player.X)");
+    expect(tokens).to.have.length(2);
+    const [setX, playerX] = tokens as ExpressionReferenceToken[];
+    expect(setX.isCall).to.be.true;
+    expect(setX.argCount).to.equal(1);
+    expect(setX.parentIndex).to.be.undefined;
+    expect(playerX.isCall).to.be.false;
+    expect(playerX.argCount).to.be.undefined;
+    expect(playerX.parentIndex).to.equal(0);
+  });
+
+  it("parents a reference inside a system-function call and leaves an unrelated reference unparented", () => {
+    const tokens = extractExpressionReferences("int(Clock.Elapsed) & Player.Platform.VectorX");
+    expect(tokens).to.have.length(3);
+    const [intFn, clockElapsed, playerVectorX] = tokens as [
+      SystemFunctionToken,
+      ExpressionReferenceToken,
+      ExpressionReferenceToken,
+    ];
+    expect(intFn.argCount).to.equal(1);
+    expect(intFn.parentIndex).to.be.undefined;
+    expect(clockElapsed.parentIndex).to.equal(0);
+    expect(playerVectorX.parentIndex).to.be.undefined;
+  });
+
+  it("nests parentIndex/argCount correctly across nested system-function calls", () => {
+    const tokens = extractExpressionReferences("int(random(Sprite.X))");
+    expect(tokens).to.have.length(3);
+    const [intFn, randomFn, spriteX] = tokens as [SystemFunctionToken, SystemFunctionToken, ExpressionReferenceToken];
+    expect(intFn.argCount).to.equal(1);
+    expect(intFn.parentIndex).to.be.undefined;
+    expect(randomFn.argCount).to.equal(1);
+    expect(randomFn.parentIndex).to.equal(0);
+    expect(spriteX.parentIndex).to.equal(1);
+  });
+
+  it("counts multiple top-level arguments and parents every one to the call", () => {
+    const tokens = extractExpressionReferences("max(Sprite.X, Sprite.Y, 3)");
+    expect(tokens).to.have.length(3);
+    const [maxFn, spriteX, spriteY] = tokens as [
+      SystemFunctionToken,
+      ExpressionReferenceToken,
+      ExpressionReferenceToken,
+    ];
+    expect(maxFn.argCount).to.equal(3);
+    expect(spriteX.parentIndex).to.equal(0);
+    expect(spriteY.parentIndex).to.equal(0);
+  });
+
+  it("reports argCount 0 for a zero-argument call, for both call kinds", () => {
+    const refTokens = extractExpressionReferences("Sprite.PickedCount()");
+    expect(refTokens).to.have.length(1);
+    const refToken = refTokens[0] as ExpressionReferenceToken;
+    expect(refToken.isCall).to.be.true;
+    expect(refToken.argCount).to.equal(0);
+
+    const fnTokens = extractExpressionReferences("foo()");
+    expect(fnTokens).to.have.length(1);
+    expect((fnTokens[0] as SystemFunctionToken).argCount).to.equal(0);
+  });
+
+  it("leaves argCount undefined for a non-call reference and for a bare variable", () => {
+    const propToken = extractExpressionReferences("Sprite.PickedCount")[0] as ExpressionReferenceToken;
+    expect(propToken.isCall).to.be.false;
+    expect(propToken.argCount).to.be.undefined;
+
+    const varToken = extractExpressionReferences("myLocalVar")[0] as VariableToken;
+    expect(varToken).to.not.have.property("argCount");
+  });
+
+  it("never throws on unbalanced parens and still gives the open call a best-effort argCount", () => {
+    expect(() => extractExpressionReferences("int(Sprite.X")).to.not.throw();
+    const tokens = extractExpressionReferences("int(Sprite.X");
+    expect(tokens).to.have.length(2);
+    const [intFn] = tokens as [SystemFunctionToken, ExpressionReferenceToken];
+    expect(intFn.argCount).to.equal(1);
+  });
+
+  it("does not let commas nested in an inner call inflate the outer call's argCount", () => {
+    const tokens = extractExpressionReferences("max(min(Sprite.X, Sprite.Y), 0)");
+    expect(tokens).to.have.length(4);
+    const [maxFn, minFn] = tokens as [
+      SystemFunctionToken,
+      SystemFunctionToken,
+      ExpressionReferenceToken,
+      ExpressionReferenceToken,
+    ];
+    expect(maxFn.argCount).to.equal(2);
+    expect(minFn.argCount).to.equal(2);
+    expect(minFn.parentIndex).to.equal(0);
+  });
 });

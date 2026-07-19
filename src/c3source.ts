@@ -981,8 +981,9 @@ interface ExpressionTokenBase {
   /** Character span [start, end) within the input expression string. */
   start: number;
   end: number;
-  /** Index (into the returned array) of the enclosing call token whose argument
-   *  list contains this token; absent at top level. Populated in a later task. */
+  /** Index (into the returned array) of the nearest enclosing call token — a `reference` with
+   *  `isCall: true`, or a `systemFunction` — whose `(...)` argument list lexically contains this
+   *  token; absent at top level. */
   parentIndex?: number;
 }
 
@@ -994,7 +995,7 @@ export interface ExpressionReferenceToken extends ExpressionTokenBase {
   memberName: string;
   /** True for call form `member(...)`; false for a bare property access. */
   isCall: boolean;
-  /** Top-level argument count when `isCall`; absent otherwise. Populated in a later task. */
+  /** Top-level argument count in this token's own `(...)` when `isCall`; absent otherwise. */
   argCount?: number;
 }
 
@@ -1002,7 +1003,7 @@ export interface ExpressionReferenceToken extends ExpressionTokenBase {
 export interface SystemFunctionToken extends ExpressionTokenBase {
   kind: "systemFunction";
   name: string;
-  /** Populated in a later task. */
+  /** Top-level argument count in this token's own `(...)`. */
   argCount?: number;
 }
 
@@ -1048,15 +1049,50 @@ function isIdentStartChar(c: string): boolean {
  * This function **never throws**: malformed input (an unterminated string, a trailing `Sprite.`,
  * unbalanced parens, an empty string) degrades to a partial or empty result rather than raising.
  *
- * `parentIndex` (linking a nested token to its enclosing call) and `argCount` (top-level
- * argument count of a call token) are declared on the token types now for a stable surface,
- * but are left `undefined` by this function — a later nesting-aware pass populates them by
- * tracking a paren-frame stack.
+ * Nesting metadata is tracked with a general paren-frame stack (one frame per open `(`, whether
+ * or not it belongs to a call): a frame opened by a call token (`systemFunction`, or `reference`
+ * with `isCall: true`) carries that token's array index; a plain grouping paren's frame carries
+ * none. Every token pushed while the stack is non-empty gets `parentIndex` set to the nearest
+ * enclosing frame that *does* carry a token index (skipping intervening plain-group frames), so
+ * a reference nested inside `foo((a + Bar.X))` still parents to `foo`. On the matching `)`, a
+ * call frame's `argCount` is finalized from the source slice between its `(` and `)`: `0` when
+ * that slice is blank, else `1 +` the number of top-level commas seen directly inside it (a `,`
+ * only increments the frame that is on top of the stack at the time, so commas nested in an
+ * inner call/group never inflate an outer frame's count). Unbalanced parens never throw: any
+ * frames still open at end-of-input are finalized best-effort against the remaining tail.
  */
 export function extractExpressionReferences(expr: string): ExpressionToken[] {
   const tokens: ExpressionToken[] = [];
   const len = expr.length;
   let i = 0;
+
+  interface ParenFrame {
+    /** Index into `tokens` of the call token this frame's `(...)` belongs to; absent for a plain grouping paren. */
+    tokenIndex?: number;
+    /** Position of the frame's opening `(` in `expr`. */
+    openPos: number;
+    /** Count of top-level `,` seen directly inside this frame (not in a nested frame). */
+    commaCount: number;
+  }
+  const parenStack: ParenFrame[] = [];
+
+  /** Index (into `tokens`) of the nearest enclosing call frame, skipping plain-group frames; `undefined` at top level. */
+  const nearestCallIndex = (): number | undefined => {
+    for (let k = parenStack.length - 1; k >= 0; k--) {
+      const idx = parenStack[k].tokenIndex;
+      if (idx !== undefined) return idx;
+    }
+    return undefined;
+  };
+
+  /** Finalizes a call frame's `argCount` (best-effort — also used for unbalanced end-of-input frames). */
+  const closeFrame = (frame: ParenFrame, closePos: number): void => {
+    if (frame.tokenIndex === undefined) return;
+    const token = tokens[frame.tokenIndex];
+    if (token.kind !== "reference" && token.kind !== "systemFunction") return;
+    const content = expr.slice(frame.openPos + 1, closePos);
+    token.argCount = content.trim() === "" ? 0 : frame.commaCount + 1;
+  };
 
   const readIdentifier = (pos: number): { name: string; end: number } => {
     let j = pos + 1;
@@ -1114,6 +1150,7 @@ export function extractExpressionReferences(expr: string): ExpressionToken[] {
         const memberSeg = segments[segments.length - 1];
         const behaviorName = segments.length === 3 ? segments[1].name : undefined;
         const isCall = expr[memberSeg.end] === "(";
+        const parentIndex = nearestCallIndex();
         const token: ExpressionReferenceToken = {
           kind: "reference",
           start,
@@ -1123,22 +1160,63 @@ export function extractExpressionReferences(expr: string): ExpressionToken[] {
           isCall,
         };
         if (behaviorName !== undefined) token.behaviorName = behaviorName;
+        if (parentIndex !== undefined) token.parentIndex = parentIndex;
         tokens.push(token);
-        i = memberSeg.end;
+        if (isCall) {
+          parenStack.push({ tokenIndex: tokens.length - 1, openPos: memberSeg.end, commaCount: 0 });
+          i = memberSeg.end + 1;
+        } else {
+          i = memberSeg.end;
+        }
         continue;
       }
 
+      const parentIndex = nearestCallIndex();
       if (expr[first.end] === "(") {
-        tokens.push({ kind: "systemFunction", name: first.name, start, end: first.end });
+        const token: SystemFunctionToken = { kind: "systemFunction", name: first.name, start, end: first.end };
+        if (parentIndex !== undefined) token.parentIndex = parentIndex;
+        tokens.push(token);
+        parenStack.push({ tokenIndex: tokens.length - 1, openPos: first.end, commaCount: 0 });
+        i = first.end + 1;
       } else {
-        tokens.push({ kind: "variable", name: first.name, start, end: first.end });
+        const token: VariableToken = { kind: "variable", name: first.name, start, end: first.end };
+        if (parentIndex !== undefined) token.parentIndex = parentIndex;
+        tokens.push(token);
+        i = first.end;
       }
-      i = first.end;
+      continue;
+    }
+
+    if (c === "(") {
+      // A plain grouping paren (not immediately following a call token, which is consumed
+      // above): still tracked so nested content — and matching ")" — resolve correctly.
+      parenStack.push({ openPos: i, commaCount: 0 });
+      i += 1;
+      continue;
+    }
+
+    if (c === ")") {
+      const frame = parenStack.pop();
+      if (frame) closeFrame(frame, i);
+      i += 1;
+      continue;
+    }
+
+    if (c === ",") {
+      if (parenStack.length > 0) parenStack[parenStack.length - 1].commaCount += 1;
+      i += 1;
       continue;
     }
 
     // Operators, punctuation, whitespace: not source for any token, skip one char.
     i += 1;
+  }
+
+  // Unbalanced parens: any frames still open at end-of-input are finalized best-effort
+  // against the remaining tail rather than left with an undefined argCount.
+  while (parenStack.length > 0) {
+    const frame = parenStack.pop();
+    if (frame) closeFrame(frame, len);
   }
 
   return tokens;
