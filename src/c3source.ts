@@ -973,6 +973,177 @@ export function getEventVarReferenceName(ace: Condition | ScriptAction | Record<
   return typeof value === "string" ? value : null;
 }
 
+/** Shared span/linkage fields for every {@link ExpressionToken} variant. */
+export type ExpressionTokenKind = "reference" | "systemFunction" | "variable";
+
+interface ExpressionTokenBase {
+  kind: ExpressionTokenKind;
+  /** Character span [start, end) within the input expression string. */
+  start: number;
+  end: number;
+  /** Index (into the returned array) of the enclosing call token whose argument
+   *  list contains this token; absent at top level. Populated in a later task. */
+  parentIndex?: number;
+}
+
+/** An object/family/behavior member reference: `Object.member`, `Object.Behavior.member`, or their call forms. */
+export interface ExpressionReferenceToken extends ExpressionTokenBase {
+  kind: "reference";
+  objectName: string;
+  behaviorName?: string;
+  memberName: string;
+  /** True for call form `member(...)`; false for a bare property access. */
+  isCall: boolean;
+  /** Top-level argument count when `isCall`; absent otherwise. Populated in a later task. */
+  argCount?: number;
+}
+
+/** A no-prefix system function call: `int(...)`, `random(...)`, `len(...)`, … */
+export interface SystemFunctionToken extends ExpressionTokenBase {
+  kind: "systemFunction";
+  name: string;
+  /** Populated in a later task. */
+  argCount?: number;
+}
+
+/** A bare identifier that is neither object-prefixed nor a call — a local/parameter
+ *  variable or keyword; further classification is the consumer's job. */
+export interface VariableToken extends ExpressionTokenBase {
+  kind: "variable";
+  name: string;
+}
+
+export type ExpressionToken = ExpressionReferenceToken | SystemFunctionToken | VariableToken;
+
+const IDENT_START_RE = /[A-Za-z_]/;
+const IDENT_PART_RE = /[A-Za-z0-9_]/;
+const DIGIT_RE = /[0-9]/;
+const NUMBER_RE = /^\d+(\.\d+)?([eE][+-]?\d+)?/;
+
+/** True when `c` (a single character, or `""` past the end of input) can start an identifier. */
+function isIdentStartChar(c: string): boolean {
+  return IDENT_START_RE.test(c);
+}
+
+/**
+ * Single-pass, best-effort tokenizer over a raw C3 expression string (an action/condition
+ * parameter value, not a DSL-rendered string). Recognizes three token kinds in source order
+ * (ascending `start`):
+ *
+ * - **`reference`** — `Object.member` or `Object.Behavior.member`, bare or in call form
+ *   (`member(...)`). Deeper dotted chains (`Name.a.b.c`, dictionary/array indexing) are
+ *   tolerated: the leading 2- or 3-segment shape is extracted as the token and the scan
+ *   resumes right after it, so trailing segments are just scanned as ordinary text (never a
+ *   crash, never a swallowed remainder).
+ * - **`systemFunction`** — a bare identifier immediately followed by `(` with no preceding
+ *   `.` (e.g. `int(`, `random(`, `len(`).
+ * - **`variable`** — any other bare identifier (local var, parameter, or keyword;
+ *   c3source does not attempt to resolve declaration scope here).
+ *
+ * String literals are C3's double-quote form (`"…"`) with `""` as the doubled-quote escape
+ * for an embedded quote; a single quote is never a string delimiter. Any `Name.member`-shaped
+ * text inside a string literal is skipped — it is not source, so it never yields a token.
+ * Numbers and whitespace/punctuation are skipped without producing tokens.
+ *
+ * This function **never throws**: malformed input (an unterminated string, a trailing `Sprite.`,
+ * unbalanced parens, an empty string) degrades to a partial or empty result rather than raising.
+ *
+ * `parentIndex` (linking a nested token to its enclosing call) and `argCount` (top-level
+ * argument count of a call token) are declared on the token types now for a stable surface,
+ * but are left `undefined` by this function — a later nesting-aware pass populates them by
+ * tracking a paren-frame stack.
+ */
+export function extractExpressionReferences(expr: string): ExpressionToken[] {
+  const tokens: ExpressionToken[] = [];
+  const len = expr.length;
+  let i = 0;
+
+  const readIdentifier = (pos: number): { name: string; end: number } => {
+    let j = pos + 1;
+    while (j < len && IDENT_PART_RE.test(expr[j])) j++;
+    return { name: expr.slice(pos, j), end: j };
+  };
+
+  while (i < len) {
+    const c = expr[i];
+
+    if (c === '"') {
+      // String literal: scan to the closing quote, treating "" as an escaped embedded quote.
+      // Unterminated strings (malformed input) just run to end-of-input.
+      let j = i + 1;
+      while (j < len) {
+        if (expr[j] === '"') {
+          if (expr[j + 1] === '"') {
+            j += 2;
+            continue;
+          }
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      i = j;
+      continue;
+    }
+
+    if (DIGIT_RE.test(c)) {
+      const m = NUMBER_RE.exec(expr.slice(i));
+      i += m ? m[0].length : 1;
+      continue;
+    }
+
+    if (isIdentStartChar(c)) {
+      const first = readIdentifier(i);
+      const start = i;
+
+      // Dot-chain? Only enter reference parsing if a real identifier follows the dot
+      // (bare trailing "." as in malformed "Sprite." falls through to the variable case).
+      if (expr[first.end] === "." && isIdentStartChar(expr[first.end + 1] ?? "")) {
+        const segments: Array<{ name: string; end: number }> = [{ name: first.name, end: first.end }];
+        let pos = first.end;
+        // Cap at 3 segments (Object.member / Object.Behavior.member): the leading
+        // recognizable shape. Any further ".x" chain is left for the outer loop to
+        // re-scan as ordinary text, never crashing and never swallowed silently.
+        while (segments.length < 3 && expr[pos] === "." && isIdentStartChar(expr[pos + 1] ?? "")) {
+          const seg = readIdentifier(pos + 1);
+          segments.push({ name: seg.name, end: seg.end });
+          pos = seg.end;
+        }
+
+        const objectName = first.name;
+        const memberSeg = segments[segments.length - 1];
+        const behaviorName = segments.length === 3 ? segments[1].name : undefined;
+        const isCall = expr[memberSeg.end] === "(";
+        const token: ExpressionReferenceToken = {
+          kind: "reference",
+          start,
+          end: memberSeg.end,
+          objectName,
+          memberName: memberSeg.name,
+          isCall,
+        };
+        if (behaviorName !== undefined) token.behaviorName = behaviorName;
+        tokens.push(token);
+        i = memberSeg.end;
+        continue;
+      }
+
+      if (expr[first.end] === "(") {
+        tokens.push({ kind: "systemFunction", name: first.name, start, end: first.end });
+      } else {
+        tokens.push({ kind: "variable", name: first.name, start, end: first.end });
+      }
+      i = first.end;
+      continue;
+    }
+
+    // Operators, punctuation, whitespace: not source for any token, skip one char.
+    i += 1;
+  }
+
+  return tokens;
+}
+
 /**
  * C3's fixed "Comparison" combo order (r487), as a numeric index → operator symbol map.
  * C3 serializes the `comparison` parameter of compare ACEs as a bare integer 0–5:
