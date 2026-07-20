@@ -1,6 +1,6 @@
 # 0001. Single-module, ESM-only library
 
-- **Status:** accepted
+- **Status:** superseded (module-layout only) by [ADR 0012](0012-per-area-module-split.md); the ESM/NodeNext decision below remains in effect
 - **Date:** 2026-04-03
 - **Issue:** — (initial release)
 

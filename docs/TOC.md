@@ -18,7 +18,7 @@ Each entry should be a one-line description. Only list docs that exist.
 
 Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.md`](decisions/README.md). Backfilled 2026-07-17 from commit history.
 
-- `decisions/0001-single-module-esm-library.md` — single-module, ESM-only library (`type:module`, NodeNext, `.js` imports)
+- `decisions/0001-single-module-esm-library.md` — single-module, ESM-only library (`type:module`, NodeNext, `.js` imports); module-layout superseded by 0012
 - `decisions/0002-canonical-event-numbering.md` — one canonical event-numbering counter in `visitEvents` (#3)
 - `decisions/0003-github-actions-oidc-publishing.md` — CI/publish via GitHub Actions + npm + OIDC trusted publishing (#6)
 - `decisions/0004-dist-entry-points-no-publishconfig.md` — package entry points at `dist/`, not `src/*.ts` via `publishConfig` (#8)
@@ -29,3 +29,4 @@ Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.
 - `decisions/0009-editor-strict-validation.md` — lenient parse types + separate editor-strictness validation (#33)
 - `decisions/0010-c3project-root-handle.md` — `C3Project`/`openProject` root handle; derive paths from mapping tables, no I/O at construction (#36 #38)
 - `decisions/0011-c3-expression-tokenizer.md` — C3-expression tokenizer for reference extraction; flat source-ordered `ExpressionToken[]` (#43)
+- `decisions/0012-per-area-module-split.md` — split `c3source.ts` into `layouts.ts`/`eventSheets.ts`/`manifest.ts`/`project.ts` behind an internal barrel, supersedes 0001's module-layout (#47)
