@@ -288,6 +288,14 @@ would conflict with Prettier — there is no `prettier` dependency and no
 to one line) passes lint/typecheck/test/build untouched; **review is the only
 formatting gate** — match the surrounding style by hand rather than relying on CI.
 
+**Never run `prettier` / `prettier --write` (or `npx prettier`) here.** Because
+no local prettier config is wired to the checks, it falls back to Prettier's
+defaults (printWidth 80, bracket spacing) — *not* this repo's `printWidth` 120 /
+no-bracket-spacing conventions — so it rewrites unrelated code: it collapses the
+intentional multi-line unions and re-spaces brackets across the whole file,
+producing drift hunks you then must hand-revert. Format by hand to match the
+surrounding style instead.
+
 ## CI & Publishing
 
 CI runs on **GitHub Actions** (Node 22). `.github/workflows/ci.yml` runs on pull
