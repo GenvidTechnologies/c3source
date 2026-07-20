@@ -86,6 +86,18 @@ every consumer (this was issue #8, fixed in 0.3.1). `scripts/verify-package.mjs`
 runs in `prepack` and fails the pack if any entry point is missing or falls
 outside `files`.
 
+A second, **dev-only** verification script sits alongside it:
+`scripts/api-surface.mjs` (added #47, not wired to CI) dumps the **public export
+surface** — every name reachable from the built `dist/index.d.ts` via the TS
+checker (`getExportsOfModule`, following `export *` chains + alias re-exports),
+one sorted `name | flags | canonicalized-declaration-text` line each. Diff two
+builds' dumps to prove a change keeps the API **byte-identical**: this was how
+the #47 module split (`src/c3source.ts` → per-area modules) was verified, and it
+is the check to reach for on any future API-preserving refactor or release.
+Crucially it captures the type-only exports (interfaces/type aliases) that a
+runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
+value-vs-type pair.
+
 Two functional areas:
 
 1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip
