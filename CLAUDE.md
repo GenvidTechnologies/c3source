@@ -64,10 +64,18 @@ log freely.
 
 ## Architecture
 
-Nearly all logic lives in a single module, `src/c3source.ts`; `src/index.ts`
-just re-exports it (`export * from "./c3source.js"`). The `.js` extension in the
-import is required — the project is ESM (`"type": "module"`, `NodeNext`
-resolution). The package `main`/`types`/`exports` point at the built
+Logic is split across four per-area modules — `src/layouts.ts`,
+`src/eventSheets.ts`, `src/manifest.ts`, `src/project.ts` — imported in an
+acyclic DAG (`layouts` is the leaf; `eventSheets` and `manifest` import only
+`layouts`; `project` imports all three). `src/c3source.ts` is now a thin
+internal re-export barrel over the four (`export *` from each, in that
+order); `src/index.ts` is unchanged and still re-exports it (`export * from
+"./c3source.js"`), so the public API surface did not move. See [ADR
+0012](docs/decisions/0012-per-area-module-split.md) for the split rationale
+(it supersedes the module-layout half of [ADR
+0001](docs/decisions/0001-single-module-esm-library.md)). The `.js`
+extension on intra-package imports is required — the project is ESM
+(`"type": "module"`, `NodeNext` resolution). The package `main`/`types`/`exports` point at the built
 `dist/*.js` and `dist/*.d.ts` — the same artifacts the `files` allowlist
 ships — so a consumer resolves exactly what gets published. (`prepack` builds
 `dist/` before any `npm pack`/`npm publish`.) Do **not** reintroduce the old
@@ -78,9 +86,21 @@ every consumer (this was issue #8, fixed in 0.3.1). `scripts/verify-package.mjs`
 runs in `prepack` and fails the pack if any entry point is missing or falls
 outside `files`.
 
+A second, **dev-only** verification script sits alongside it:
+`scripts/api-surface.mjs` (added #47, not wired to CI) dumps the **public export
+surface** — every name reachable from the built `dist/index.d.ts` via the TS
+checker (`getExportsOfModule`, following `export *` chains + alias re-exports),
+one sorted `name | flags | canonicalized-declaration-text` line each. Diff two
+builds' dumps to prove a change keeps the API **byte-identical**: this was how
+the #47 module split (`src/c3source.ts` → per-area modules) was verified, and it
+is the check to reach for on any future API-preserving refactor or release.
+Crucially it captures the type-only exports (interfaces/type aliases) that a
+runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
+value-vs-type pair.
+
 Two functional areas:
 
-1. **Layout traversal** — recursive `find_all_*_path` collectors (skip
+1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip
    `.uistate.json` files and never descend into `uistate/` subfolders, which
    C3 r487+ writes alongside layouts/object-types/event-sheets) plus visitor
    walkers. The **one canonical definition** of "editor-local vs C3 source" is
@@ -111,7 +131,7 @@ Two functional areas:
    (read → parse → visit → write-if-count>0). The walk is **fully recursive**
    through `subLayers` (an earlier version descended only one level), so
    consumers see nested layers a shallow walk previously skipped.
-   **Project manifest** — the `project.c3proj` file in the project root (folder
+   **Project manifest** (in `src/manifest.ts`) — the `project.c3proj` file in the project root (folder
    format only; not the single-file archive) is modeled by `C3ProjectManifest`
    and parsed strictly by `parseProjectManifest(json)`/`readProjectManifest(path)`.
    Mapping tables `C3_SECTION_FOLDERS` and `C3_ROOT_FILE_FOLDERS` map manifest
@@ -157,7 +177,7 @@ Two functional areas:
    unknown format) — there is no `.png` fallback (#29). Because the manifest keys object types on
    **names**, not filenames, a fixture's image format can be varied (change `fileType` + rename
    the on-disk image) without churning any manifest-membership test.
-   **C3Project handle** — `openProject(root): C3Project` is a root-bound handle that
+   **C3Project handle** (in `src/project.ts`) — `openProject(root): C3Project` is a root-bound handle that
    unifies the previously-split API: callers no longer assemble section paths by
    hardcoding `"eventSheets"`/`"layouts"`/etc., because the handle derives all path
    fields from `C3_SECTION_FOLDERS`/`C3_ROOT_FILE_FOLDERS` at construction (#36, #38).
@@ -180,7 +200,7 @@ Two functional areas:
    `IMAGES_FOLDER` (#38) are also defined here as C3 domain facts.
    The free functions remain exported and unchanged — the handle is additive.
 
-2. **Event sheet extraction** — `extractScriptsFromSheet` does a depth-first
+2. **Event sheet extraction** (in `src/eventSheets.ts`) — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,
    function-blocks, and custom-ace-blocks each increment the counter;
    variables, comments, and includes do not). The canonical counter lives in
