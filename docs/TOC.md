@@ -12,7 +12,7 @@ Each entry should be a one-line description. Only list docs that exist.
 - `api-guide.md` — usage reference for SID traversal and editor-local classification; links to manifest/drift doc
 - `api-guide-manifest.md` — project manifest model, drift detection types, walk primitives, and 0.x migration (#19 #21)
 - `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation (#36)
-- `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, validateForEditor/EDITOR_FIELD_RULES
+- `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
 
 ## Decision Records
 
@@ -28,3 +28,4 @@ Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.
 - `decisions/0008-c3-domain-fact-tables.md` — C3 domain facts owned as exported tables (#26 #28 #29 #33 #39)
 - `decisions/0009-editor-strict-validation.md` — lenient parse types + separate editor-strictness validation (#33)
 - `decisions/0010-c3project-root-handle.md` — `C3Project`/`openProject` root handle; derive paths from mapping tables, no I/O at construction (#36 #38)
+- `decisions/0011-c3-expression-tokenizer.md` — C3-expression tokenizer for reference extraction; flat source-ordered `ExpressionToken[]` (#43)

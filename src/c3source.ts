@@ -973,6 +973,255 @@ export function getEventVarReferenceName(ace: Condition | ScriptAction | Record<
   return typeof value === "string" ? value : null;
 }
 
+/** Shared span/linkage fields for every {@link ExpressionToken} variant. */
+export type ExpressionTokenKind = "reference" | "systemFunction" | "variable";
+
+interface ExpressionTokenBase {
+  kind: ExpressionTokenKind;
+  /** Character span [start, end) within the input expression string. */
+  start: number;
+  end: number;
+  /** Index (into the returned array) of the nearest enclosing call token — a `reference` with
+   *  `isCall: true`, or a `systemFunction` — whose `(...)` argument list lexically contains this
+   *  token; absent at top level. */
+  parentIndex?: number;
+}
+
+/** An object/family/behavior member reference: `Object.member`, `Object.Behavior.member`, or their call forms. */
+export interface ExpressionReferenceToken extends ExpressionTokenBase {
+  kind: "reference";
+  objectName: string;
+  behaviorName?: string;
+  memberName: string;
+  /** True for call form `member(...)`; false for a bare property access. */
+  isCall: boolean;
+  /** Top-level argument count in this token's own `(...)` when `isCall`; absent otherwise. */
+  argCount?: number;
+}
+
+/** A no-prefix system function call: `int(...)`, `random(...)`, `len(...)`, … */
+export interface SystemFunctionToken extends ExpressionTokenBase {
+  kind: "systemFunction";
+  name: string;
+  /** Top-level argument count in this token's own `(...)`. */
+  argCount?: number;
+}
+
+/** A bare identifier that is neither object-prefixed nor a call — a local/parameter
+ *  variable or keyword; further classification is the consumer's job. */
+export interface VariableToken extends ExpressionTokenBase {
+  kind: "variable";
+  name: string;
+}
+
+export type ExpressionToken = ExpressionReferenceToken | SystemFunctionToken | VariableToken;
+
+const IDENT_START_RE = /[A-Za-z_]/;
+const IDENT_PART_RE = /[A-Za-z0-9_]/;
+const DIGIT_RE = /[0-9]/;
+const NUMBER_RE = /^\d+(\.\d+)?([eE][+-]?\d+)?/;
+
+/** True when `c` (a single character, or `""` past the end of input) can start an identifier. */
+function isIdentStartChar(c: string): boolean {
+  return IDENT_START_RE.test(c);
+}
+
+/**
+ * Single-pass, best-effort tokenizer over a raw C3 expression string (an action/condition
+ * parameter value, not a DSL-rendered string). Recognizes three token kinds in source order
+ * (ascending `start`):
+ *
+ * - **`reference`** — `Object.member` or `Object.Behavior.member`, bare or in call form
+ *   (`member(...)`). Deeper dotted chains (`Name.a.b.c`, dictionary/array indexing) are
+ *   tolerated: the leading 2- or 3-segment shape is extracted as the token and the scan
+ *   resumes right after it, so trailing segments are just scanned as ordinary text (never a
+ *   crash, never a swallowed remainder).
+ * - **`systemFunction`** — a bare identifier immediately followed by `(` with no preceding
+ *   `.` (e.g. `int(`, `random(`, `len(`).
+ * - **`variable`** — any other bare identifier (local var, parameter, or keyword;
+ *   c3source does not attempt to resolve declaration scope here).
+ *
+ * String literals are C3's double-quote form (`"…"`) with `""` as the doubled-quote escape
+ * for an embedded quote; a single quote is never a string delimiter. Any `Name.member`-shaped
+ * text inside a string literal is skipped — it is not source, so it never yields a token.
+ * Numbers and whitespace/punctuation are skipped without producing tokens.
+ *
+ * This function **never throws**: malformed input (an unterminated string, a trailing `Sprite.`,
+ * unbalanced parens, an empty string) degrades to a partial or empty result rather than raising.
+ *
+ * Nesting metadata is tracked with a general paren-frame stack (one frame per open `(`, whether
+ * or not it belongs to a call): a frame opened by a call token (`systemFunction`, or `reference`
+ * with `isCall: true`) carries that token's array index; a plain grouping paren's frame carries
+ * none. Every token pushed while the stack is non-empty gets `parentIndex` set to the nearest
+ * enclosing frame that *does* carry a token index (skipping intervening plain-group frames), so
+ * a reference nested inside `foo((a + Bar.X))` still parents to `foo`. On the matching `)`, a
+ * call frame's `argCount` is finalized from the source slice between its `(` and `)`: `0` when
+ * that slice is blank, else `1 +` the number of top-level commas seen directly inside it (a `,`
+ * only increments the frame that is on top of the stack at the time, so commas nested in an
+ * inner call/group never inflate an outer frame's count). Unbalanced parens never throw: any
+ * frames still open at end-of-input are finalized best-effort against the remaining tail.
+ */
+export function extractExpressionReferences(expr: string): ExpressionToken[] {
+  const tokens: ExpressionToken[] = [];
+  const len = expr.length;
+  let i = 0;
+
+  interface ParenFrame {
+    /** Index into `tokens` of the call token this frame's `(...)` belongs to; absent for a plain grouping paren. */
+    tokenIndex?: number;
+    /** Position of the frame's opening `(` in `expr`. */
+    openPos: number;
+    /** Count of top-level `,` seen directly inside this frame (not in a nested frame). */
+    commaCount: number;
+  }
+  const parenStack: ParenFrame[] = [];
+
+  /** Index (into `tokens`) of the nearest enclosing call frame, skipping plain-group frames; `undefined` at top level. */
+  const nearestCallIndex = (): number | undefined => {
+    for (let k = parenStack.length - 1; k >= 0; k--) {
+      const idx = parenStack[k].tokenIndex;
+      if (idx !== undefined) return idx;
+    }
+    return undefined;
+  };
+
+  /** Finalizes a call frame's `argCount` (best-effort — also used for unbalanced end-of-input frames). */
+  const closeFrame = (frame: ParenFrame, closePos: number): void => {
+    if (frame.tokenIndex === undefined) return;
+    const token = tokens[frame.tokenIndex];
+    if (token.kind !== "reference" && token.kind !== "systemFunction") return;
+    const content = expr.slice(frame.openPos + 1, closePos);
+    token.argCount = content.trim() === "" ? 0 : frame.commaCount + 1;
+  };
+
+  const readIdentifier = (pos: number): { name: string; end: number } => {
+    let j = pos + 1;
+    while (j < len && IDENT_PART_RE.test(expr[j])) j++;
+    return { name: expr.slice(pos, j), end: j };
+  };
+
+  while (i < len) {
+    const c = expr[i];
+
+    if (c === '"') {
+      // String literal: scan to the closing quote, treating "" as an escaped embedded quote.
+      // Unterminated strings (malformed input) just run to end-of-input.
+      let j = i + 1;
+      while (j < len) {
+        if (expr[j] === '"') {
+          if (expr[j + 1] === '"') {
+            j += 2;
+            continue;
+          }
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      i = j;
+      continue;
+    }
+
+    if (DIGIT_RE.test(c)) {
+      const m = NUMBER_RE.exec(expr.slice(i));
+      i += m ? m[0].length : 1;
+      continue;
+    }
+
+    if (isIdentStartChar(c)) {
+      const first = readIdentifier(i);
+      const start = i;
+
+      // Dot-chain? Only enter reference parsing if a real identifier follows the dot
+      // (bare trailing "." as in malformed "Sprite." falls through to the variable case).
+      if (expr[first.end] === "." && isIdentStartChar(expr[first.end + 1] ?? "")) {
+        const segments: Array<{ name: string; end: number }> = [{ name: first.name, end: first.end }];
+        let pos = first.end;
+        // Cap at 3 segments (Object.member / Object.Behavior.member): the leading
+        // recognizable shape. Any further ".x" chain is left for the outer loop to
+        // re-scan as ordinary text, never crashing and never swallowed silently.
+        while (segments.length < 3 && expr[pos] === "." && isIdentStartChar(expr[pos + 1] ?? "")) {
+          const seg = readIdentifier(pos + 1);
+          segments.push({ name: seg.name, end: seg.end });
+          pos = seg.end;
+        }
+
+        const objectName = first.name;
+        const memberSeg = segments[segments.length - 1];
+        const behaviorName = segments.length === 3 ? segments[1].name : undefined;
+        const isCall = expr[memberSeg.end] === "(";
+        const parentIndex = nearestCallIndex();
+        const token: ExpressionReferenceToken = {
+          kind: "reference",
+          start,
+          end: memberSeg.end,
+          objectName,
+          memberName: memberSeg.name,
+          isCall,
+        };
+        if (behaviorName !== undefined) token.behaviorName = behaviorName;
+        if (parentIndex !== undefined) token.parentIndex = parentIndex;
+        tokens.push(token);
+        if (isCall) {
+          parenStack.push({ tokenIndex: tokens.length - 1, openPos: memberSeg.end, commaCount: 0 });
+          i = memberSeg.end + 1;
+        } else {
+          i = memberSeg.end;
+        }
+        continue;
+      }
+
+      const parentIndex = nearestCallIndex();
+      if (expr[first.end] === "(") {
+        const token: SystemFunctionToken = { kind: "systemFunction", name: first.name, start, end: first.end };
+        if (parentIndex !== undefined) token.parentIndex = parentIndex;
+        tokens.push(token);
+        parenStack.push({ tokenIndex: tokens.length - 1, openPos: first.end, commaCount: 0 });
+        i = first.end + 1;
+      } else {
+        const token: VariableToken = { kind: "variable", name: first.name, start, end: first.end };
+        if (parentIndex !== undefined) token.parentIndex = parentIndex;
+        tokens.push(token);
+        i = first.end;
+      }
+      continue;
+    }
+
+    if (c === "(") {
+      // A plain grouping paren (not immediately following a call token, which is consumed
+      // above): still tracked so nested content — and matching ")" — resolve correctly.
+      parenStack.push({ openPos: i, commaCount: 0 });
+      i += 1;
+      continue;
+    }
+
+    if (c === ")") {
+      const frame = parenStack.pop();
+      if (frame) closeFrame(frame, i);
+      i += 1;
+      continue;
+    }
+
+    if (c === ",") {
+      if (parenStack.length > 0) parenStack[parenStack.length - 1].commaCount += 1;
+      i += 1;
+      continue;
+    }
+
+    // Operators, punctuation, whitespace: not source for any token, skip one char.
+    i += 1;
+  }
+
+  // Unbalanced parens: any frames still open at end-of-input are finalized best-effort
+  // against the remaining tail rather than left with an undefined argCount.
+  while (parenStack.length > 0) {
+    const frame = parenStack.pop();
+    if (frame) closeFrame(frame, len);
+  }
+
+  return tokens;
+}
+
 /**
  * C3's fixed "Comparison" combo order (r487), as a numeric index → operator symbol map.
  * C3 serializes the `comparison` parameter of compare ACEs as a bare integer 0–5:

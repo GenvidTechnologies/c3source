@@ -250,6 +250,26 @@ Two functional areas:
    as the round-trippable source form; out-of-range or non-numeric values render raw.
    Owned here so downstream need not re-hardcode the magic numbers (#39); keyed on
    param name, no `objectClass` gate.
+   **Expression references** — `extractExpressionReferences(expr: string): ExpressionToken[]`
+   is a single-pass, stateful tokenizer over a raw C3 expression string (an
+   action/condition parameter value, not a DSL-rendered string), sibling to the
+   event-variable-reference classifiers above. It returns a flat, source-ordered
+   discriminated union `ExpressionToken = ExpressionReferenceToken |
+   SystemFunctionToken | VariableToken` (`kind: "reference" | "systemFunction" |
+   "variable"`), tracking nesting with a general paren-frame stack — one frame per
+   open `(`, whether or not it belongs to a call — so every token gets a
+   `parentIndex` pointing at the nearest enclosing call token and every call token
+   gets a best-effort `argCount` from its own `(...)`. Like the editor-strictness
+   rules, it is **never-throws, best-effort**: string literals (C3's `"…"` form
+   with `""` as the doubled-quote escape) are skipped so refs inside quotes are
+   never reported, nested-call and operator-concat refs are never dropped, and
+   malformed input (an unterminated string, a trailing `Sprite.`, unbalanced
+   parens) degrades to a partial or empty result rather than raising. This is C3
+   *domain grammar* owned here so downstream need not re-roll a tokenizer (cf.
+   `EVENTVAR_REFERENCE_ACES` / `isEventVarReference`) (#43). It is grammar-level
+   only — no name→id resolution, no decision about which ACE parameters are
+   expression-typed, and no event-sheet iteration; all three stay the consumer's
+   job (the last is already covered by `visitEvents`).
 
 All file writes serialize JSON with **tab indentation** to match C3's format,
 and text from expressions/comments is run through `normalizeLineEndings` (CRLF
@@ -267,6 +287,14 @@ would conflict with Prettier — there is no `prettier` dependency and no
 `--check` step anywhere. So formatting drift (e.g. a multi-line union collapsed
 to one line) passes lint/typecheck/test/build untouched; **review is the only
 formatting gate** — match the surrounding style by hand rather than relying on CI.
+
+**Never run `prettier` / `prettier --write` (or `npx prettier`) here.** Because
+no local prettier config is wired to the checks, it falls back to Prettier's
+defaults (printWidth 80, bracket spacing) — *not* this repo's `printWidth` 120 /
+no-bracket-spacing conventions — so it rewrites unrelated code: it collapses the
+intentional multi-line unions and re-spaces brackets across the whole file,
+producing drift hunks you then must hand-revert. Format by hand to match the
+surrounding style instead.
 
 ## CI & Publishing
 
