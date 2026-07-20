@@ -1426,6 +1426,33 @@ export function collectSidsWithPaths(node: unknown): Array<{ sid: number; path: 
   return out;
 }
 
+/** Which C3 schema slot a sid was found in. */
+export type SidSlot = "event" | "condition" | "action" | "function-parameter";
+
+/**
+ * Locate a sid within an event sheet, returning the enclosing event and which
+ * slot carried it. Encodes the schema knowledge of which slots hold sids.
+ */
+export function findSid(sheet: EventSheet, sid: number): { node: EventSheetEvent; slot: SidSlot } | null {
+  let result: { node: EventSheetEvent; slot: SidSlot } | null = null;
+  visitEvents(sheet.events, (event) => {
+    if (result) return;
+    if ((event as { sid?: number }).sid === sid) {
+      result = { node: event, slot: "event" };
+    } else if (hasConditions(event) && event.conditions.some((c) => c.sid === sid)) {
+      result = { node: event, slot: "condition" };
+    } else if (hasActions(event) && event.actions.some((a) => (a as { sid?: number }).sid === sid)) {
+      result = { node: event, slot: "action" };
+    } else if (
+      (event.eventType === "function-block" || event.eventType === "custom-ace-block") &&
+      event.functionParameters.some((p) => p.sid === sid)
+    ) {
+      result = { node: event, slot: "function-parameter" };
+    }
+  });
+  return result;
+}
+
 // ─── Piece C: project.c3proj manifest model ──────────────────────────────────
 
 /** A folder of named items (layouts, eventSheets, timelines, …) in the manifest. */
@@ -2428,31 +2455,4 @@ export function openProject(root: string): C3Project {
       return freeDetectImageDrift(root);
     },
   };
-}
-
-/** Which C3 schema slot a sid was found in. */
-export type SidSlot = "event" | "condition" | "action" | "function-parameter";
-
-/**
- * Locate a sid within an event sheet, returning the enclosing event and which
- * slot carried it. Encodes the schema knowledge of which slots hold sids.
- */
-export function findSid(sheet: EventSheet, sid: number): { node: EventSheetEvent; slot: SidSlot } | null {
-  let result: { node: EventSheetEvent; slot: SidSlot } | null = null;
-  visitEvents(sheet.events, (event) => {
-    if (result) return;
-    if ((event as { sid?: number }).sid === sid) {
-      result = { node: event, slot: "event" };
-    } else if (hasConditions(event) && event.conditions.some((c) => c.sid === sid)) {
-      result = { node: event, slot: "condition" };
-    } else if (hasActions(event) && event.actions.some((a) => (a as { sid?: number }).sid === sid)) {
-      result = { node: event, slot: "action" };
-    } else if (
-      (event.eventType === "function-block" || event.eventType === "custom-ace-block") &&
-      event.functionParameters.some((p) => p.sid === sid)
-    ) {
-      result = { node: event, slot: "function-parameter" };
-    }
-  });
-  return result;
 }
