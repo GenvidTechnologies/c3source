@@ -32,3 +32,4 @@ Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.
 - `decisions/0011-c3-expression-tokenizer.md` — C3-expression tokenizer for reference extraction; flat source-ordered `ExpressionToken[]` (#43)
 - `decisions/0012-per-area-module-split.md` — split `c3source.ts` into `layouts.ts`/`eventSheets.ts`/`manifest.ts`/`project.ts` behind an internal barrel, supersedes 0001's module-layout (#47)
 - `decisions/0013-fflate-dependency-c3addon-reader.md` — depend on `fflate` for `.c3addon` zip reading, partially revising 0001's no-runtime-deps stance (#44)
+- `decisions/0014-sdk-submodule-recursive-ci-checkout.md` — keep the Construct Addon SDK submodule read-only; recursive CI checkout via the shared workflow's `submodules` input (#49 #50)
