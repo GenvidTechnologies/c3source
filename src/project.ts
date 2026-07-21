@@ -1,7 +1,15 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { find_all_files_path, find_all_layouts_path, find_all_objectTypes_path, isEditorLocalPath } from "./layouts.js";
+import {
+  Family,
+  ObjectType,
+  find_all_files_path,
+  find_all_layouts_path,
+  find_all_objectTypes_path,
+  isEditorLocalPath,
+} from "./layouts.js";
 import { find_all_eventsheets_path } from "./eventSheets.js";
+import { AddonAttribution, collectAddonAttribution } from "./addons.js";
 import {
   C3ProjectManifest,
   C3_ROOT_FILE_FOLDERS,
@@ -188,6 +196,15 @@ export interface C3Project {
    * Returns `null` if the `images/` directory does not exist.
    */
   detectImageDrift(): SectionDrift | null;
+
+  /**
+   * Derive addon attribution for every object type and family in this project.
+   * Reads and parses each path returned by {@link findAllObjectTypes} / {@link findAllFamilies}
+   * (I/O happens here, lazily, on each call — not cached), then delegates to the free
+   * {@link collectAddonAttribution}. Graceful-empty: if the `objectTypes`/`families` directories
+   * are absent, the underlying finders already return `[]`.
+   */
+  collectAddonAttribution(): AddonAttribution[];
 }
 
 /**
@@ -220,6 +237,7 @@ export function openProject(root: string): C3Project {
   // infinite recursion when the method tries to call `detectManifestDrift(...)`.
   const freeDetectManifestDrift = detectManifestDrift;
   const freeDetectImageDrift = detectImageDrift;
+  const freeCollectAddonAttribution = collectAddonAttribution;
 
   let cachedManifest: C3ProjectManifest | undefined;
 
@@ -328,6 +346,12 @@ export function openProject(root: string): C3Project {
 
     detectImageDrift(): SectionDrift | null {
       return freeDetectImageDrift(root);
+    },
+
+    collectAddonAttribution(): AddonAttribution[] {
+      const objectTypes = this.findAllObjectTypes().map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
+      const families = this.findAllFamilies().map((p) => JSON.parse(readFileSync(p, "utf-8")) as Family);
+      return freeCollectAddonAttribution(objectTypes, families);
     },
   };
 }

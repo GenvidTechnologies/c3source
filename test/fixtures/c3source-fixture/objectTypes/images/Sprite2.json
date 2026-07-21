@@ -5,8 +5,19 @@
 	"isGlobal": false,
 	"editorNewInstanceIsReplica": true,
 	"instanceVariables": [],
-	"behaviorTypes": [],
-	"effectTypes": [],
+	"behaviorTypes": [
+		{
+			"behaviorId": "Fade",
+			"name": "Fade",
+			"sid": 123456789012345
+		}
+	],
+	"effectTypes": [
+		{
+			"effectId": "Grayscale",
+			"name": "Grayscale"
+		}
+	],
 	"animations": {
 		"items": [
 			{
