@@ -64,12 +64,13 @@ log freely.
 
 ## Architecture
 
-Logic is split across four per-area modules — `src/layouts.ts`,
-`src/eventSheets.ts`, `src/manifest.ts`, `src/project.ts` — imported in an
-acyclic DAG (`layouts` is the leaf; `eventSheets` and `manifest` import only
-`layouts`; `project` imports all three). `src/c3source.ts` is now a thin
-internal re-export barrel over the four (`export *` from each, in that
-order); `src/index.ts` is unchanged and still re-exports it (`export * from
+Logic is split across five per-area modules — `src/layouts.ts`,
+`src/eventSheets.ts`, `src/manifest.ts`, `src/addons.ts`, `src/project.ts` —
+imported in an acyclic DAG (`layouts` is the leaf; `eventSheets`, `manifest`,
+and `addons` import only `layouts`; `project` imports all four).
+`src/c3source.ts` is now a thin internal re-export barrel over the five
+(`export *` from each, in DAG order — layouts, eventSheets, manifest, addons,
+project); `src/index.ts` is unchanged and still re-exports it (`export * from
 "./c3source.js"`), so the public API surface did not move. See [ADR
 0012](docs/decisions/0012-per-area-module-split.md) for the split rationale
 (it supersedes the module-layout half of [ADR
@@ -98,7 +99,7 @@ Crucially it captures the type-only exports (interfaces/type aliases) that a
 runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
 value-vs-type pair.
 
-Two functional areas:
+Three functional areas:
 
 1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip
    `.uistate.json` files and never descend into `uistate/` subfolders, which
@@ -290,6 +291,62 @@ Two functional areas:
    only — no name→id resolution, no decision about which ACE parameters are
    expression-typed, and no event-sheet iteration; all three stay the consumer's
    job (the last is already covered by `visitEvents`).
+
+3. **Addon domain layer** (in `src/addons.ts`) — parsing and discovery for
+   Construct's `.c3addon` plugin/behavior/effect packages (#44). It follows
+   the same domain/presentation split as the rest of the library: c3source
+   models and discovers addon data; validation, diffing, and rendering stay
+   the consumer's job. `addons` sits at the same DAG tier as
+   `eventSheets`/`manifest` (imports only `layouts`, for `ObjectType`/`Family`/
+   `find_all_files_path`/`isEditorLocalPath`).
+   **Attribution** — `attributeObjectType(ot)`/`attributeFamily(f)` derive an
+   `AddonAttribution` (`name`, `source: "objectType" | "family"`, `pluginId`,
+   `behaviorIds[]`, `effectIds[]`) purely from an object type's or family's
+   own declared fields: `plugin-id` plus the `behaviorId`/`effectId` of each
+   entry in `behaviorTypes: BehaviorTypeRef[] {behaviorId, name, sid?}` /
+   `effectTypes: EffectTypeRef[] {effectId, name}` (both added to `ObjectType`
+   and the new `Family` in `src/layouts.ts`, pinned from real fixtures as C3
+   domain facts) — no manifest cross-reference, no I/O.
+   `collectAddonAttribution(objectTypes, families)` maps a full set (object
+   types first, then families) and is the primitive the `C3Project` handle's
+   `collectAddonAttribution()` wraps.
+   **`usedAddons`** (in `src/manifest.ts`) — `C3UsedAddon` (`type`, `id`,
+   `name`, `author`, `bundled`, `version?` — optional, observed absent in real
+   fixtures even when `bundleAddons` is true) models one entry of the
+   manifest's optional `usedAddons` list; `getUsedAddons(m)` returns it, or
+   `[]` when the section is absent.
+   **Discovery** — `C3ADDON_EXTENSION = ".c3addon"` and `findAllAddons(dir)`
+   find every `.c3addon` package under a directory, built on the same
+   `find_all_files_path` primitive as the named layout collectors; there is no
+   canonical C3 subfolder for addon-source storage, so it takes a bare
+   directory rather than a project-derived path. The `C3Project` handle's
+   `findAllAddons(sub?)` wraps it against the project root.
+   **Reader** — `readAddonPackage(source): AddonPackage` opens a `.c3addon`
+   package for reading, auto-detecting its on-disk form (an unpacked
+   directory, or the zip archive C3 itself loads) via **fflate — c3source's
+   first runtime dependency** (see [ADR
+   0013](docs/decisions/0013-fflate-dependency-c3addon-reader.md)). Both
+   modes share one `entryNames`/`hasEntry`/`readBytes`/`readText`/`readJson`
+   interface and one BOM-strip + decode path. The domain facts
+   `ADDON_MANIFEST_FILE = "addon.json"` and `ADDON_ACES_FILE = "aces.json"`
+   name the two package entries; `UTF8_BOM`/`stripBom` exist because C3's
+   addon-authoring tooling writes a leading UTF-8 BOM on some package files
+   (observed on `aces.json`, not `addon.json`, in real SDK samples) that
+   readers must tolerate.
+   **ACE model** — `parseAcesModel(json)`/`parseAddonMetadata(json)` are pure
+   parsers behind the reader's pre-read-JSON boundary (they take an
+   already-parsed value, never a path, so they stay testable without
+   `fflate`). `aceIdentity(kind, id)` builds an ACE's canonical `(kind, id)`
+   identity — an action and a condition may legally share an `id` — and
+   `findAce` resolves by that identity, while `findExpression` resolves an
+   expression by its distinct `expressionName` (the PascalCase name used in
+   event-sheet expressions, which need not share a stem with `id`).
+   Real, BOM'd `addon.json`/`aces.json` fixtures come from the [Construct
+   Addon SDK](https://github.com/Scirra/Construct-Addon-SDK), vendored as the
+   `SDK/` git submodule; SDK-gated tests self-skip when it is absent or
+   checked out non-recursively, so CI must check out submodules recursively
+   for that coverage to actually run. See
+   [api-guide-addons.md](docs/api-guide-addons.md) for the full reference.
 
 All file writes serialize JSON with **tab indentation** to match C3's format,
 and text from expressions/comments is run through `normalizeLineEndings` (CRLF
