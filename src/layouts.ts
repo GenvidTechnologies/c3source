@@ -67,10 +67,34 @@ export interface Layout {
   height?: number;
 }
 
+export interface BehaviorTypeRef {
+  behaviorId: string;
+  name: string;
+  sid?: number;
+  [k: string]: unknown;
+}
+
+export interface EffectTypeRef {
+  effectId: string;
+  name: string;
+  [k: string]: unknown;
+}
+
 export interface ObjectType {
   [x: string]: unknown;
   name: string;
   "plugin-id": string;
+  behaviorTypes?: BehaviorTypeRef[];
+  effectTypes?: EffectTypeRef[];
+}
+
+export interface Family {
+  [x: string]: unknown;
+  name: string;
+  "plugin-id": string;
+  members: string[];
+  behaviorTypes?: BehaviorTypeRef[];
+  effectTypes?: EffectTypeRef[];
 }
 
 /** The canonical set of C3-editor-local artifacts that are NOT project source. */
