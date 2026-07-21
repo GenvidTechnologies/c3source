@@ -47,6 +47,17 @@ export interface C3RootFileFolders {
   general: C3FileFolder;
 }
 
+/** A single addon (plugin/behavior/theme) declared in the manifest's `usedAddons` list. */
+export interface C3UsedAddon {
+  type: string;
+  id: string;
+  name: string;
+  author: string;
+  bundled: boolean;
+  version?: string; // OPTIONAL — absent in real fixtures even when bundleAddons is true
+  [k: string]: unknown;
+}
+
 /** The parsed project.c3proj manifest (folder-project format, NOT the single-file .c3p archive). */
 export interface C3ProjectManifest {
   projectFormatVersion: number;
@@ -63,7 +74,9 @@ export interface C3ProjectManifest {
   containers: C3Container[];
   rootFileFolders: C3RootFileFolders;
   properties: Record<string, unknown>;
-  [key: string]: unknown; // forward-compat: usedAddons, viewportWidth, firstLayout, …
+  bundleAddons?: boolean;
+  usedAddons?: C3UsedAddon[];
+  [key: string]: unknown; // forward-compat: viewportWidth, firstLayout, …
 }
 
 /** One section's drift result. Editor-local entries are already filtered out. */
@@ -129,6 +142,16 @@ function assertContainer(v: unknown, where: string): asserts v is C3Container {
     Array.isArray(v.members) && v.members.every((mem) => typeof mem === "string"),
     `${where}.members must be string[]`,
   );
+}
+
+function assertUsedAddon(v: unknown, where: string): asserts v is C3UsedAddon {
+  assert(isRecord(v), `${where} must be an object`);
+  assert(typeof v.type === "string", `${where}.type must be a string`);
+  assert(typeof v.id === "string", `${where}.id must be a string`);
+  assert(typeof v.name === "string", `${where}.name must be a string`);
+  assert(typeof v.author === "string", `${where}.author must be a string`);
+  assert(typeof v.bundled === "boolean", `${where}.bundled must be a boolean`);
+  assert(v.version === undefined || typeof v.version === "string", `${where}.version must be a string when present`);
 }
 
 const NAME_SECTIONS = [
@@ -223,6 +246,10 @@ export function parseProjectManifest(json: unknown): C3ProjectManifest {
     assert(Array.isArray(json.containers), "containers must be an array");
     json.containers.forEach((c, i) => assertContainer(c, `containers[${i}]`));
   }
+  if ("usedAddons" in json) {
+    assert(Array.isArray(json.usedAddons), "usedAddons must be an array");
+    json.usedAddons.forEach((a, i) => assertUsedAddon(a, `usedAddons[${i}]`));
+  }
   return json as unknown as C3ProjectManifest;
 }
 
@@ -247,6 +274,11 @@ export function collectManifestItemNames(folder: C3NameFolder): string[] {
  */
 export function collectManifestFileNames(folder: C3FileFolder): string[] {
   return walkManifestFileTree(folder).map((e) => e.name);
+}
+
+/** The manifest's declared addons, or `[]` when `usedAddons` is absent (an optional section). */
+export function getUsedAddons(m: C3ProjectManifest): C3UsedAddon[] {
+  return m.usedAddons ?? [];
 }
 
 // ─── Path-bearing drift types ─────────────────────────────────────────────────

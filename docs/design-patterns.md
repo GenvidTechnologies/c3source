@@ -235,6 +235,25 @@ fixture is a real C3 project, so it carries more than data):
   #29 regression, where a renamed-PNG fixture passed every test but corrupted the
   export.
 
+When a fidelity fixture comes from an **external source absent in CI** — a git
+submodule (the `SDK/` Construct Addon SDK, #44) or any gitignored/optional slice —
+split coverage into **two tiers**: an always-on tier against a small
+hand-authored fixture committed in-repo (`test/fixtures/addon-sample/`) that
+exercises the core behavior unconditionally, plus a supplementary tier gated on
+the external fixture that adds real-world fidelity. Without the always-on tier a
+CI checkout that omits the source turns the *only* tests for a feature into a
+silent no-op — "0 failing" while nothing ran (the vacuous-pass trap). Two sharp
+edges: (1) the presence gate must check a **specific file inside** the source
+(`sdkFixtureExists("plugin-sdk/…/aces.json")`), not just the directory — a
+non-recursive submodule checkout leaves `SDK/` present-but-**empty**, so a bare
+`existsSync("SDK")` false-positives and the gated tests then *fail* instead of
+skipping; (2) watch the **pending count** locally with the source removed to
+confirm the tier genuinely skips (not fails) and the always-on tier still covers
+core behavior (#44 verified 19 passing / 6 pending with the submodule renamed
+aside). CI should still be wired to fetch the source (`submodules: recursive`,
+tracked in #49) so the fidelity tier actually runs rather than perpetually
+skipping.
+
 Guard schema drift with a **key-parity test**: assert a generated structure's
 key set equals a real export's (see `makeDefaultLayer.test.ts`). This catches C3
 adding/removing fields without pinning brittle values.

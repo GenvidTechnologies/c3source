@@ -1,0 +1,31 @@
+﻿{
+	"custom": {
+		"conditions": [
+			{
+				"id": "is-ready",
+				"scriptName": "IsReady",
+				"params": []
+			}
+		],
+		"actions": [
+			{
+				"id": "do-thing",
+				"scriptName": "DoThing",
+				"params": [
+					{
+						"id": "amount",
+						"type": "number"
+					}
+				]
+			}
+		],
+		"expressions": [
+			{
+				"id": "current-value",
+				"expressionName": "CurrentValue",
+				"returnType": "number",
+				"params": []
+			}
+		]
+	}
+}

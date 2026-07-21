@@ -1,9 +1,10 @@
 import { expect } from "chai";
-import type { EventSheet, Layout } from "../src/c3source.js";
+import type { EventSheet, Layout, ObjectType } from "../src/c3source.js";
 import { fixtureExists, loadFixture } from "./fixtureHelpers.js";
 
 const LAYOUT = "c3source-fixture/layouts/Main Layout.json";
 const SHEET = "c3source-fixture/eventSheets/Event sheet 1.json";
+const SPRITE2 = "c3source-fixture/objectTypes/images/Sprite2.json";
 
 // Ground-truth checks against a real C3 export: confirm the §1 optional
 // fields are spelled and shaped exactly as C3 serializes them. Each block
@@ -45,5 +46,12 @@ describe("§1 field fidelity (real C3 export)", () => {
         expect(cond.disabled).to.be.a("boolean");
       }
     }
+  });
+
+  it("Sprite2 carries a behaviorTypes/effectTypes entry (addon attribution ground truth)", function () {
+    if (!fixtureExists(SPRITE2)) return this.skip();
+    const ot = JSON.parse(loadFixture(SPRITE2)) as ObjectType;
+    expect(ot.behaviorTypes?.[0]?.behaviorId, "behaviorTypes[0].behaviorId").to.equal("Fade");
+    expect(ot.effectTypes?.[0]?.effectId, "effectTypes[0].effectId").to.equal("Grayscale");
   });
 });

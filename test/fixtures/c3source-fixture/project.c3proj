@@ -18,7 +18,7 @@
 			"id": "NinePatch",
 			"name": "9-patch",
 			"author": "Scirra",
-			"bundled": false
+			"bundled": true
 		},
 		{
 			"type": "plugin",

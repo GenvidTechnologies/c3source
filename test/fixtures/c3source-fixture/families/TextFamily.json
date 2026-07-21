@@ -3,8 +3,19 @@
 	"plugin-id": "Text",
 	"sid": 924333557996132,
 	"instanceVariables": [],
-	"behaviorTypes": [],
-	"effectTypes": [],
+	"behaviorTypes": [
+		{
+			"behaviorId": "Timer",
+			"name": "Timer",
+			"sid": 234567890123456
+		}
+	],
+	"effectTypes": [
+		{
+			"effectId": "Tint",
+			"name": "Tint"
+		}
+	],
 	"members": [
 		"Text2",
 		"Text"

@@ -13,6 +13,7 @@ Each entry should be a one-line description. Only list docs that exist.
 - `api-guide-manifest.md` — project manifest model, drift detection types, walk primitives, and 0.x migration (#19 #21)
 - `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation (#36)
 - `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
+- `api-guide-addons.md` — addon domain layer: usedAddons manifest support, addon attribution (behaviorTypes/effectTypes), findAllAddons, readAddonPackage, parseAcesModel/parseAddonMetadata (#44)
 
 ## Decision Records
 
@@ -30,3 +31,4 @@ Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.
 - `decisions/0010-c3project-root-handle.md` — `C3Project`/`openProject` root handle; derive paths from mapping tables, no I/O at construction (#36 #38)
 - `decisions/0011-c3-expression-tokenizer.md` — C3-expression tokenizer for reference extraction; flat source-ordered `ExpressionToken[]` (#43)
 - `decisions/0012-per-area-module-split.md` — split `c3source.ts` into `layouts.ts`/`eventSheets.ts`/`manifest.ts`/`project.ts` behind an internal barrel, supersedes 0001's module-layout (#47)
+- `decisions/0013-fflate-dependency-c3addon-reader.md` — depend on `fflate` for `.c3addon` zip reading, partially revising 0001's no-runtime-deps stance (#44)

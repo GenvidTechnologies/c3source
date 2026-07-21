@@ -1,0 +1,13 @@
+{
+	"is-c3-addon": true,
+	"sdk-version": 2,
+	"type": "plugin",
+	"name": "Sample Test Plugin",
+	"id": "TestCompany_SamplePlugin",
+	"version": "1.0.0.0",
+	"author": "Test Author",
+	"file-list": [
+		"aces.json",
+		"addon.json"
+	]
+}

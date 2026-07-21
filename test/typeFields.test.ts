@@ -2,9 +2,11 @@ import { expect } from "chai";
 import type {
   BlockEvent,
   Condition,
+  Family,
   FunctionBlockEvent,
   Layer,
   Layout,
+  ObjectType,
 } from "../src/c3source.js";
 
 // These tests are primarily compile-time: if the optional fields were not
@@ -68,5 +70,34 @@ describe("§1 optional type fields", () => {
     const cond: Condition = { id: "x", objectClass: "Y", sid: 1 };
     expect(layer.overriden).to.equal(undefined);
     expect(cond.disabled).to.equal(undefined);
+  });
+
+  it("ObjectType accepts behaviorTypes and effectTypes", () => {
+    const objectType = {
+      name: "Sprite",
+      "plugin-id": "Sprite",
+      behaviorTypes: [{ behaviorId: "Sin", name: "Sine", sid: 1 }],
+      effectTypes: [{ effectId: "Glow", name: "Glow" }],
+    } satisfies ObjectType;
+    expect(objectType.behaviorTypes?.[0].behaviorId).to.equal("Sin");
+    expect(objectType.effectTypes?.[0].effectId).to.equal("Glow");
+  });
+
+  it("Family accepts name, plugin-id, members, and optional behaviorTypes/effectTypes", () => {
+    const family = {
+      name: "Enemies",
+      "plugin-id": "Family",
+      members: ["Sprite", "Sprite2"],
+      behaviorTypes: [{ behaviorId: "Sin", name: "Sine" }],
+      effectTypes: [{ effectId: "Glow", name: "Glow" }],
+    } satisfies Family;
+    expect(family.members).to.deep.equal(["Sprite", "Sprite2"]);
+  });
+
+  it("ObjectType and Family typecheck without behaviorTypes/effectTypes", () => {
+    const objectType: ObjectType = { name: "Sprite", "plugin-id": "Sprite" };
+    const family: Family = { name: "Enemies", "plugin-id": "Family", members: [] };
+    expect(objectType.behaviorTypes).to.equal(undefined);
+    expect(family.effectTypes).to.equal(undefined);
   });
 });
