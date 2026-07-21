@@ -9,7 +9,7 @@ import {
   isEditorLocalPath,
 } from "./layouts.js";
 import { find_all_eventsheets_path } from "./eventSheets.js";
-import { AddonAttribution, collectAddonAttribution } from "./addons.js";
+import { AddonAttribution, collectAddonAttribution, findAllAddons } from "./addons.js";
 import {
   C3ProjectManifest,
   C3_ROOT_FILE_FOLDERS,
@@ -205,6 +205,17 @@ export interface C3Project {
    * are absent, the underlying finders already return `[]`.
    */
   collectAddonAttribution(): AddonAttribution[];
+
+  /**
+   * Return all `.c3addon` package paths under `root` (or its `sub` subdirectory).
+   * There is no canonical C3 subfolder for addon-source storage, so — unlike the
+   * other `findAll*` finders — this is scoped from the project `root` itself, not
+   * a dedicated `*Dir` field. Delegates to {@link findAllAddons}. Returns `[]` if
+   * the target directory does not exist.
+   *
+   * @param sub - Optional subdirectory relative to `root` (default `""`).
+   */
+  findAllAddons(sub?: string): string[];
 }
 
 /**
@@ -238,6 +249,7 @@ export function openProject(root: string): C3Project {
   const freeDetectManifestDrift = detectManifestDrift;
   const freeDetectImageDrift = detectImageDrift;
   const freeCollectAddonAttribution = collectAddonAttribution;
+  const freeFindAllAddons = findAllAddons;
 
   let cachedManifest: C3ProjectManifest | undefined;
 
@@ -352,6 +364,10 @@ export function openProject(root: string): C3Project {
       const objectTypes = this.findAllObjectTypes().map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
       const families = this.findAllFamilies().map((p) => JSON.parse(readFileSync(p, "utf-8")) as Family);
       return freeCollectAddonAttribution(objectTypes, families);
+    },
+
+    findAllAddons(sub?: string): string[] {
+      return findInSection(root, sub, freeFindAllAddons);
     },
   };
 }

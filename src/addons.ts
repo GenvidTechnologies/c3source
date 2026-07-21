@@ -1,4 +1,4 @@
-import { BehaviorTypeRef, EffectTypeRef, Family, ObjectType } from "./layouts.js";
+import { BehaviorTypeRef, EffectTypeRef, Family, ObjectType, find_all_files_path, isEditorLocalPath } from "./layouts.js";
 
 // ─── Addon attribution model ───────────────────────────────────────────────
 
@@ -55,4 +55,25 @@ export function attributeFamily(f: Family): AddonAttribution {
  */
 export function collectAddonAttribution(objectTypes: ObjectType[], families: Family[]): AddonAttribution[] {
   return objectTypes.map(attributeObjectType).concat(families.map(attributeFamily));
+}
+
+// ─── .c3addon discovery ────────────────────────────────────────────────────
+
+/**
+ * File extension of a C3 addon package (a zip archive containing an addon's
+ * `addon.json` + assets). C3 r487-pinned fact, owned here as a domain fact
+ * (cf. {@link EVENTVAR_REFERENCE_ACES} in eventSheets.ts) so downstream does
+ * not re-hardcode it.
+ */
+export const C3ADDON_EXTENSION = ".c3addon";
+
+/**
+ * Find all `.c3addon` package files under `dir`, recursively. There is no
+ * canonical C3 subfolder for addon-source storage (unlike layouts/objectTypes/
+ * etc.), so this takes a bare directory rather than a project-derived path.
+ * Built on {@link find_all_files_path} — same pattern as `find_all_objectTypes_path`
+ * etc.: only the extension and the non-editor-local check gate inclusion.
+ */
+export function findAllAddons(dir: string): string[] {
+  return find_all_files_path(dir, (file) => file.endsWith(C3ADDON_EXTENSION) && !isEditorLocalPath(file));
 }
