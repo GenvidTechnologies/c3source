@@ -10,3 +10,6 @@ jobs:
     uses: GenvidTechnologies/public-github-actions/.github/workflows/node-gate.yml@main
     with:
       dry-run: true
+      # Recursive checkout inits the SDK/ submodule (Scirra Construct Addon SDK) so the
+      # SDK-gated .c3addon reader/parser tests run in CI instead of self-skipping (#49).
+      submodules: recursive

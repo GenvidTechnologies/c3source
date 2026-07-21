@@ -129,6 +129,26 @@ const label = formatCondition({ id: "on-start-of-layout", objectClass: "System",
 // "System.on-start-of-layout()"
 ```
 
+## Development
+
+### Running the SDK-gated tests locally
+
+Most tests run against synthetic fixtures under `test/fixtures/` and need no extra setup. The
+`.c3addon` reader/parser tests (`test/addonReader.test.ts`, `test/addonAcesModel.test.ts`) have a
+supplementary tier that reads real, BOM'd samples from the **Scirra Construct Addon SDK**, vendored
+as the `SDK/` git submodule. That tier **self-skips** when the submodule is absent, so a plain clone
+still passes — but to exercise it, initialize the submodule:
+
+```sh
+git clone --recursive git@github.com:GenvidTechnologies/c3source.git   # fresh clone
+# — or, in an existing clone —
+git submodule update --init --recursive
+```
+
+With the submodule present, those two files report **25 passing / 0 pending** (absent: 19 passing /
+6 pending). CI checks them out recursively (via the shared `node-gate` workflow's `submodules`
+input), so the SDK-gated tier runs there unconditionally.
+
 ## Further reading
 
 For usage reference covering SID traversal, editor-local classification, and project manifest parsing/drift detection, see [docs/api-guide.md](docs/api-guide.md).
