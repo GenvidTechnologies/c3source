@@ -8,6 +8,7 @@ that work with C3 folder-project files outside the editor.
 - [Project handle](api-guide-project.md) — openProject(root), C3Project path fields, file finders, drift delegation
 - [Project manifest model and drift detection](api-guide-manifest.md) — parse `project.c3proj`, detect manifest/disk divergence
 - [Event-sheet extraction](api-guide-extraction.md) — visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions
+- [Addon domain layer](api-guide-addons.md) — usedAddons, addon attribution, `.c3addon` discovery + reader, aces.json/addon.json parsing
 
 ---
 
