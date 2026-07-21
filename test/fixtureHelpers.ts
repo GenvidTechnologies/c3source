@@ -1,8 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { zipSync } from "fflate";
 
 const fixturesRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const sdkRoot = path.join(repoRoot, "SDK");
 
 /** Absolute path to a file/dir under test/fixtures/. */
 export function fixturePath(relPath: string): string {
@@ -17,4 +20,33 @@ export function loadFixture(relPath: string): string {
 /** Whether a fixture file/dir exists — used to self-skip fixture-dependent tests. */
 export function fixtureExists(relPath: string): boolean {
   return existsSync(fixturePath(relPath));
+}
+
+/** Absolute path to a file/dir under the SDK/ git submodule. */
+export function sdkPath(relPath: string): string {
+  return path.join(sdkRoot, relPath);
+}
+
+/**
+ * Whether an SDK-scoped file/dir exists — used to self-skip SDK-dependent tests.
+ * MUST check the specific file/dir itself (not just that SDK/ is present): a
+ * non-recursive submodule checkout leaves SDK/ present-but-empty, which a bare
+ * directory check would false-positive.
+ */
+export function sdkFixtureExists(relPath: string): boolean {
+  return existsSync(sdkPath(relPath));
+}
+
+/**
+ * Zip every top-level file in `srcDir` into a `.c3addon`-shaped archive at `destZipPath`.
+ * TEST-ONLY helper for synthesizing a `.c3addon` package from an unpacked sample dir
+ * (top-level is enough for the addon.json/aces.json samples this is used against).
+ */
+export function zipDirToC3addon(srcDir: string, destZipPath: string): void {
+  const entries: Record<string, Uint8Array> = {};
+  for (const name of readdirSync(srcDir)) {
+    const full = path.join(srcDir, name);
+    if (statSync(full).isFile()) entries[name] = readFileSync(full);
+  }
+  writeFileSync(destZipPath, zipSync(entries));
 }
