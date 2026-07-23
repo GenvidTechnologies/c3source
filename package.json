@@ -33,6 +33,8 @@
 		"build": "tsc",
 		"verify-package": "node scripts/verify-package.mjs",
 		"prepack": "npm run build && npm run verify-package",
+		"prep-fixture": "node scripts/prep-fixture.mjs",
+		"pretest": "npm run prep-fixture",
 		"test": "mocha --timeout 5000 --import=tsx --require ./test/setup.ts 'test/**/*.test.ts' --exit",
 		"lint": "eslint --ext .ts --max-warnings 0 src/ test/",
 		"typecheck": "tsc -p tsconfig.test.json --noEmit"

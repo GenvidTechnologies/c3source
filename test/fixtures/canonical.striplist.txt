@@ -1,0 +1,3 @@
+# Paths (relative to the materialized fixture root) to strip from the canonical
+# project after copying. One per line; blank lines and #-comments ignored.
+# Empty for now — c3source-specific deletions are added with the test migration.
