@@ -374,6 +374,19 @@ rather than the run breaking. As of **#54**, all the formerly
 `test/fixtures/c3source-fixture/` has been retired. The submodule pin advanced to
 **v0.2.0** for this migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds
 them to `Event sheet 1`, which `eventVarReference.test.ts` needs.
+**Overlay vs. upstream-enrich — the decision rule:** coverage the golden
+genuinely *should* carry (a real C3 construct a downstream test needs, e.g.
+event-var-reference ACEs) is added **upstream in `construct3-sample`**
+(editor-round-trip → commit → push → new tag → bump the pin), **never** faked
+into `canonical/` — an overlaid, hand-authored event sheet would couple those
+bytes to `canonicalFixture.test.ts`'s `validateForEditor`/drift gate. The
+additive `canonical-overlay/` is reserved for c3source-specific shaping the
+golden **deliberately omits** (e.g. `uistate/` + `*.instancesBar.json`, which
+the golden's own `.gitignore` excludes) so the `isEditorLocalPath` drift-filter
+coverage isn't vacuous. When enriching the golden, verify before pushing to the
+shared submodule (parses, `validateForEditor` == 0 issues, referenced var
+declared + in scope, minimal `git diff --stat`); `construct3-sample`'s remote is
+HTTPS (no SSH-signing prompt), unlike c3source's git+ssh push.
 
 ## Formatting
 
