@@ -17,9 +17,9 @@ import {
   detectImageDrift,
   type C3Project,
 } from "../src/c3source.js";
-import { fixturePath } from "./fixtureHelpers.js";
+import { fixtureProjectPath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("c3source-fixture");
+const FIXTURE_DIR = fixtureProjectPath();
 
 describe("openProject — path fields", () => {
   let proj: C3Project;

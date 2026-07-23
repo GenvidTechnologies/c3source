@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { makeDefaultLayer, type Layer } from "../src/c3source.js";
-import { fixtureExists, loadFixture } from "./fixtureHelpers.js";
+import { fixtureExists, loadFixture, PROJECT_FIXTURE } from "./fixtureHelpers.js";
 
 const REQUIRED_KEYS = [
   "name",
@@ -28,7 +28,7 @@ const REQUIRED_KEYS = [
   "global",
 ];
 
-const FIXTURE_LAYOUT = "c3source-fixture/layouts/Main Layout.json";
+const FIXTURE_LAYOUT = `${PROJECT_FIXTURE}/layouts/Main Layout.json`;
 
 describe("makeDefaultLayer", () => {
   it("sets the given name and empty instances/subLayers", () => {

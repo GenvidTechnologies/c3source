@@ -23,6 +23,23 @@ export function fixtureExists(relPath: string): boolean {
   return existsSync(fixturePath(relPath));
 }
 
+/**
+ * The materialized project-fixture root, relative to test/fixtures/. Single swap
+ * point for the whole suite: flipped from "c3source-fixture" to "canonical" when
+ * the tests migrate onto the canonical golden fixture (#54).
+ */
+export const PROJECT_FIXTURE = "c3source-fixture";
+
+/** Absolute path to a file/dir inside the project fixture (relative to its root). */
+export function fixtureProjectPath(rel = ""): string {
+  return fixturePath(rel ? `${PROJECT_FIXTURE}/${rel}` : PROJECT_FIXTURE);
+}
+
+/** Whether a file/dir inside the project fixture exists — used to self-skip fixture-dependent tests. */
+export function fixtureProjectExists(rel = ""): boolean {
+  return fixtureExists(rel ? `${PROJECT_FIXTURE}/${rel}` : PROJECT_FIXTURE);
+}
+
 /** Absolute path to a file/dir under the SDK/ git submodule. */
 export function sdkPath(relPath: string): string {
   return path.join(sdkRoot, relPath);

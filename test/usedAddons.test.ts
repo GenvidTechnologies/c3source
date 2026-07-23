@@ -9,9 +9,9 @@ import {
   type C3ProjectManifest,
   type C3UsedAddon,
 } from "../src/c3source.js";
-import { fixturePath } from "./fixtureHelpers.js";
+import { fixtureProjectPath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("c3source-fixture");
+const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
 
 describe("usedAddons / getUsedAddons", () => {

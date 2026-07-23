@@ -8,7 +8,7 @@ import {
   hasConditions,
   type EventSheet,
 } from "../src/c3source.js";
-import { loadFixture, fixtureExists } from "./fixtureHelpers.js";
+import { loadFixture, fixtureExists, PROJECT_FIXTURE } from "./fixtureHelpers.js";
 
 // ---------------------------------------------------------------------------
 // Unit tests
@@ -121,7 +121,7 @@ describe("getEventVarReferenceName", () => {
 // ---------------------------------------------------------------------------
 
 describe("getEventVarReferenceName (fixture integration)", () => {
-  const fixturePath = "c3source-fixture/eventSheets/Event sheet 1.json";
+  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Event sheet 1.json`;
 
   before(function () {
     if (!fixtureExists(fixturePath)) {

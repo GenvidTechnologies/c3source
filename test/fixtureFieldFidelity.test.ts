@@ -1,10 +1,10 @@
 import { expect } from "chai";
 import type { EventSheet, Layout, ObjectType } from "../src/c3source.js";
-import { fixtureExists, loadFixture } from "./fixtureHelpers.js";
+import { fixtureExists, loadFixture, PROJECT_FIXTURE } from "./fixtureHelpers.js";
 
-const LAYOUT = "c3source-fixture/layouts/Main Layout.json";
-const SHEET = "c3source-fixture/eventSheets/Event sheet 1.json";
-const SPRITE2 = "c3source-fixture/objectTypes/images/Sprite2.json";
+const LAYOUT = `${PROJECT_FIXTURE}/layouts/Main Layout.json`;
+const SHEET = `${PROJECT_FIXTURE}/eventSheets/Event sheet 1.json`;
+const SPRITE2 = `${PROJECT_FIXTURE}/objectTypes/images/Sprite2.json`;
 
 // Ground-truth checks against a real C3 export: confirm the §1 optional
 // fields are spelled and shaped exactly as C3 serializes them. Each block

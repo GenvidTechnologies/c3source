@@ -10,9 +10,9 @@ import {
   type Family,
   type ObjectType,
 } from "../src/c3source.js";
-import { fixtureExists, fixturePath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("c3source-fixture");
+const FIXTURE_DIR = fixtureProjectPath();
 
 describe("attributeObjectType / attributeFamily (inline literals)", () => {
   it("attributeObjectType derives name/source/pluginId/behaviorIds/effectIds", () => {
@@ -85,19 +85,19 @@ describe("C3Project#collectAddonAttribution (fixture end-to-end)", () => {
   let attributions: AddonAttribution[];
 
   before(function () {
-    if (!fixtureExists("c3source-fixture")) return this.skip();
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
     attributions = proj.collectAddonAttribution();
   });
 
   it("covers both object types and families", function () {
-    if (!fixtureExists("c3source-fixture")) return this.skip();
+    if (!fixtureProjectExists()) return this.skip();
     expect(attributions.some((a) => a.source === "objectType")).to.equal(true);
     expect(attributions.some((a) => a.source === "family")).to.equal(true);
   });
 
   it("the enriched Sprite2 object type appears with pluginId/behaviorIds/effectIds", function () {
-    if (!fixtureExists("c3source-fixture")) return this.skip();
+    if (!fixtureProjectExists()) return this.skip();
     const sprite2 = attributions.find((a) => a.source === "objectType" && a.name === "Sprite2");
     expect(sprite2, "Sprite2 attribution present").to.exist;
     expect(sprite2!.pluginId).to.equal("Sprite");
@@ -106,7 +106,7 @@ describe("C3Project#collectAddonAttribution (fixture end-to-end)", () => {
   });
 
   it("the enriched TextFamily appears with pluginId/behaviorIds/effectIds", function () {
-    if (!fixtureExists("c3source-fixture")) return this.skip();
+    if (!fixtureProjectExists()) return this.skip();
     const textFamily = attributions.find((a) => a.source === "family" && a.name === "TextFamily");
     expect(textFamily, "TextFamily attribution present").to.exist;
     expect(textFamily!.pluginId).to.equal("Text");
