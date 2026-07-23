@@ -9,7 +9,7 @@ import {
   type C3ProjectManifest,
   type C3UsedAddon,
 } from "../src/c3source.js";
-import { fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
@@ -17,7 +17,8 @@ const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
 describe("usedAddons / getUsedAddons", () => {
   let m: C3ProjectManifest;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
     m = readProjectManifest(MANIFEST_PATH);
   });
 

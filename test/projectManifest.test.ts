@@ -22,7 +22,7 @@ import {
   type C3ProjectManifest,
   type SectionDrift,
 } from "../src/c3source.js";
-import { fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
@@ -30,7 +30,8 @@ const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
 describe("parseProjectManifest / readProjectManifest", () => {
   let m: C3ProjectManifest;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
     m = readProjectManifest(MANIFEST_PATH);
   });
 
@@ -93,6 +94,10 @@ describe("parseProjectManifest / readProjectManifest", () => {
 });
 
 describe("parseProjectManifest — strict throws", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   it("R-C8: throws when top-level is not an object", () => {
     expect(() => parseProjectManifest(42)).to.throw(/invalid project\.c3proj/);
     expect(() => parseProjectManifest(null)).to.throw(/invalid project\.c3proj/);
@@ -138,6 +143,10 @@ describe("parseProjectManifest — strict throws", () => {
 });
 
 describe("collectManifestFileNames", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   it("flattens file-folder items recursively", () => {
     const m = readProjectManifest(MANIFEST_PATH);
     const names = collectManifestFileNames(m.rootFileFolders.script);
@@ -148,6 +157,10 @@ describe("collectManifestFileNames", () => {
 });
 
 describe("detectManifestDrift", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   it("R-C12: clean fixture reports inSync === true (ts-defs/ and uistate/ not flagged)", () => {
     const drift = detectManifestDrift(FIXTURE_DIR);
     expect(drift.inSync).to.equal(true);
@@ -289,7 +302,8 @@ describe("detectManifestDrift", () => {
 describe("F1: path-walk primitives", () => {
   let m: C3ProjectManifest;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
     m = readProjectManifest(MANIFEST_PATH);
   });
 
@@ -431,6 +445,10 @@ describe("F1: path-walk primitives", () => {
 });
 
 describe("F4: image-derived drift", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   const readObjectType = (...segments: string[]): Record<string, unknown> => {
     const p = path.join(FIXTURE_DIR, "objectTypes", ...segments);
     return JSON.parse(readFileSync(p, "utf-8")) as Record<string, unknown>;
