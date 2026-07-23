@@ -352,6 +352,26 @@ All file writes serialize JSON with **tab indentation** to match C3's format,
 and text from expressions/comments is run through `normalizeLineEndings` (CRLF
 -> LF) for cross-platform stability.
 
+## Canonical reference fixture (`construct3-sample`)
+
+A **second** git submodule, `construct3-sample/` (pinned to tag `v0.1.0`, added
+#51), is the **canonical golden C3 project** — the single, editor-round-tripped
+source of on-disk shape that c3source and its sibling tools consume instead of
+each hand-maintaining a drifting fixture. c3source is the **validator, not the
+owner** (it runs `validateForEditor`/`detectManifestDrift` over it). See [ADR
+0015](docs/decisions/0015-canonical-c3-reference-fixture.md) for the ownership +
+tag-pinned-submodule mechanism and the rejected alternatives (npm companion,
+vendored copy). This is distinct from — and additive to — the retained Scirra
+`SDK/` submodule (its retirement, #50, was closed won't-do).
+`scripts/prep-fixture.mjs` materializes the golden into the **gitignored**
+`test/fixtures/canonical/` (byte-for-byte copy of `construct3-sample/project/` +
+an additive `test/fixtures/canonical-overlay/` − the `canonical.striplist.txt`
+paths); a `pretest` npm hook runs it before every `npm test`, and it is a
+**guarded no-op** (exit 0) when the submodule is absent, so tests self-skip
+rather than the run breaking. As of #51 only `test/canonicalFixture.test.ts`
+consumes it (a validation gate); migrating the existing `c3source-fixture/`-backed
+tests onto it and retiring that committed fixture is follow-up **#54**.
+
 ## Formatting
 
 Prettier: `printWidth` 120, spaces in code. **JSON files use tabs**, no bracket
