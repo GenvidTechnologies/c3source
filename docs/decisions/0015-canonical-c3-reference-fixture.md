@@ -76,6 +76,12 @@ Migrating c3source's own fixture-backed tests onto the canonical fixture (and
 retiring the committed `test/fixtures/c3source-fixture/`) is a filed
 follow-up, not part of this change.
 
+That follow-up **landed in #54**: all fixture-backed tests now consume the
+materialized `test/fixtures/canonical/`, the committed `test/fixtures/c3source-fixture/`
+was deleted, and the `construct3-sample` submodule pin advanced from `v0.1.0`
+to `v0.2.0` to carry the event-var-reference ACE coverage the migrated tests
+needed.
+
 The Scirra `SDK/` submodule is **retained** (read-only) — its retirement (#50)
 was closed as won't-do; it remains the authoritative upstream for real BOM'd
 `addon.json`/`aces.json` samples and is unaffected by this decision.
