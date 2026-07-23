@@ -26,9 +26,9 @@ export function fixtureExists(relPath: string): boolean {
 /**
  * The materialized project-fixture root, relative to test/fixtures/. Single swap
  * point for the whole suite: flipped from "c3source-fixture" to "canonical" when
- * the tests migrate onto the canonical golden fixture (#54).
+ * the tests migrated onto the canonical golden fixture (#54, done).
  */
-export const PROJECT_FIXTURE = "c3source-fixture";
+export const PROJECT_FIXTURE = "canonical";
 
 /** Absolute path to a file/dir inside the project fixture (relative to its root). */
 export function fixtureProjectPath(rel = ""): string {

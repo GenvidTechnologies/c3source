@@ -51,7 +51,7 @@ describe("§1 field fidelity (real C3 export)", () => {
   it("Sprite2 carries a behaviorTypes/effectTypes entry (addon attribution ground truth)", function () {
     if (!fixtureExists(SPRITE2)) return this.skip();
     const ot = JSON.parse(loadFixture(SPRITE2)) as ObjectType;
-    expect(ot.behaviorTypes?.[0]?.behaviorId, "behaviorTypes[0].behaviorId").to.equal("Fade");
-    expect(ot.effectTypes?.[0]?.effectId, "effectTypes[0].effectId").to.equal("Grayscale");
+    expect(ot.behaviorTypes?.[0]?.behaviorId, "behaviorTypes[0].behaviorId").to.equal("MyCompany_MyBehavior");
+    expect(ot.effectTypes?.[0]?.effectId, "effectTypes[0].effectId").to.equal("burn");
   });
 });

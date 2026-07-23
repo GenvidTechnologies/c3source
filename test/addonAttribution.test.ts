@@ -101,8 +101,8 @@ describe("C3Project#collectAddonAttribution (fixture end-to-end)", () => {
     const sprite2 = attributions.find((a) => a.source === "objectType" && a.name === "Sprite2");
     expect(sprite2, "Sprite2 attribution present").to.exist;
     expect(sprite2!.pluginId).to.equal("Sprite");
-    expect(sprite2!.behaviorIds).to.deep.equal(["Fade"]);
-    expect(sprite2!.effectIds).to.deep.equal(["Grayscale"]);
+    expect(sprite2!.behaviorIds).to.deep.equal(["MyCompany_MyBehavior", "Persist"]);
+    expect(sprite2!.effectIds).to.deep.equal(["burn", "MyCompany_MyEffect"]);
   });
 
   it("the enriched TextFamily appears with pluginId/behaviorIds/effectIds", function () {
@@ -111,6 +111,6 @@ describe("C3Project#collectAddonAttribution (fixture end-to-end)", () => {
     expect(textFamily, "TextFamily attribution present").to.exist;
     expect(textFamily!.pluginId).to.equal("Text");
     expect(textFamily!.behaviorIds).to.deep.equal(["Timer"]);
-    expect(textFamily!.effectIds).to.deep.equal(["Tint"]);
+    expect(textFamily!.effectIds).to.deep.equal(["MyCompany_MyEffect"]);
   });
 });

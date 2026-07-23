@@ -7,11 +7,11 @@ const FIXTURE_DIR = fixtureProjectPath();
 const ADDONS_DIR = fixtureProjectPath("addons");
 
 describe("findAllAddons (free function)", () => {
-  it("finds both a flat and a nested .c3addon file, proving recursion", function () {
+  it("finds .c3addon files nested under two different subdirectories, proving recursion", function () {
     if (!fixtureProjectExists("addons")) return this.skip();
     const found = findAllAddons(ADDONS_DIR).map((p) => p.replace(/\\/g, "/"));
-    expect(found.some((p) => p.endsWith("addons/SomeAddon.c3addon"))).to.equal(true);
-    expect(found.some((p) => p.endsWith("addons/nested/OtherAddon.c3addon"))).to.equal(true);
+    expect(found.some((p) => p.endsWith("addons/behavior/MyCompany_MyBehavior.c3addon"))).to.equal(true);
+    expect(found.some((p) => p.endsWith("addons/effect/MyCompany_MyEffect.c3addon"))).to.equal(true);
   });
 
   it("excludes non-.c3addon files", function () {
@@ -29,11 +29,11 @@ describe("C3Project#findAllAddons", () => {
     proj = openProject(FIXTURE_DIR);
   });
 
-  it("finds both the flat and nested .c3addon files under the addons/ subdirectory", function () {
+  it("finds .c3addon files nested under both the behavior/ and effect/ subdirectories", function () {
     if (!fixtureProjectExists("addons")) return this.skip();
     const found = proj.findAllAddons("addons").map((p) => p.replace(/\\/g, "/"));
-    expect(found.some((p) => p.endsWith("addons/SomeAddon.c3addon"))).to.equal(true);
-    expect(found.some((p) => p.endsWith("addons/nested/OtherAddon.c3addon"))).to.equal(true);
+    expect(found.some((p) => p.endsWith("addons/behavior/MyCompany_MyBehavior.c3addon"))).to.equal(true);
+    expect(found.some((p) => p.endsWith("addons/effect/MyCompany_MyEffect.c3addon"))).to.equal(true);
   });
 
   it("returns [] for a missing subdirectory (graceful-empty)", function () {
