@@ -18,7 +18,7 @@
 // Usage: node scripts/prep-fixture.mjs
 
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -49,6 +49,13 @@ if (existsSync(striplistFile)) {
 		const line = rawLine.trim();
 		if (line === "" || line.startsWith("#")) continue;
 		const target = resolve(outputDir, line);
+		// Guard the destructive rmSync: never let a strip-list entry (e.g. `../foo`)
+		// escape the materialized fixture root.
+		const rel = relative(outputDir, target);
+		if (rel === "" || rel.startsWith("..")) {
+			console.warn(`[prep-fixture] strip-list entry escapes fixture root, skipping: ${line}`);
+			continue;
+		}
 		if (!existsSync(target)) {
 			console.warn(`[prep-fixture] strip-list entry does not exist, skipping: ${line}`);
 			continue;
