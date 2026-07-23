@@ -4,3 +4,7 @@ dist/
 worktrees/
 *.tsbuildinfo
 /plan.md
+
+# Materialized canonical fixture — built by scripts/prep-fixture.mjs from the
+# construct3-sample submodule + overlay; never committed (canonical bytes live upstream).
+/test/fixtures/canonical/

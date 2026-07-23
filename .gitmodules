@@ -1,3 +1,6 @@
 [submodule "SDK"]
 	path = SDK
 	url = https://github.com/Scirra/Construct-Addon-SDK.git
+[submodule "construct3-sample"]
+	path = construct3-sample
+	url = https://github.com/GenvidTechnologies/construct3-sample.git

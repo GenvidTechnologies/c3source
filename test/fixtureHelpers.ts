@@ -6,6 +6,7 @@ import { zipSync } from "fflate";
 const fixturesRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sdkRoot = path.join(repoRoot, "SDK");
+const canonicalRoot = path.join(repoRoot, "construct3-sample");
 
 /** Absolute path to a file/dir under test/fixtures/. */
 export function fixturePath(relPath: string): string {
@@ -35,6 +36,21 @@ export function sdkPath(relPath: string): string {
  */
 export function sdkFixtureExists(relPath: string): boolean {
   return existsSync(sdkPath(relPath));
+}
+
+/** Absolute path to a file/dir under the construct3-sample git submodule (canonical golden project). */
+export function canonicalPath(relPath: string): string {
+  return path.join(canonicalRoot, relPath);
+}
+
+/**
+ * Whether a construct3-sample file/dir exists — used to self-skip canonical-fixture tests.
+ * MUST check the specific file/dir itself (not just that construct3-sample/ is present): a
+ * non-recursive submodule checkout leaves construct3-sample/ present-but-empty, which a bare
+ * directory check would false-positive (mirrors `sdkFixtureExists`).
+ */
+export function canonicalFixtureExists(relPath: string): boolean {
+  return existsSync(canonicalPath(relPath));
 }
 
 /**
