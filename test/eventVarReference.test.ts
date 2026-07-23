@@ -8,7 +8,7 @@ import {
   hasConditions,
   type EventSheet,
 } from "../src/c3source.js";
-import { loadFixture, fixtureExists } from "./fixtureHelpers.js";
+import { loadFixture, fixtureExists, PROJECT_FIXTURE } from "./fixtureHelpers.js";
 
 // ---------------------------------------------------------------------------
 // Unit tests
@@ -121,7 +121,7 @@ describe("getEventVarReferenceName", () => {
 // ---------------------------------------------------------------------------
 
 describe("getEventVarReferenceName (fixture integration)", () => {
-  const fixturePath = "c3source-fixture/eventSheets/Event sheet 1.json";
+  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Event sheet 1.json`;
 
   before(function () {
     if (!fixtureExists(fixturePath)) {
@@ -129,7 +129,7 @@ describe("getEventVarReferenceName (fixture integration)", () => {
     }
   });
 
-  it("resolves exactly 4 event-var references across conditions and actions", () => {
+  it("resolves exactly 2 event-var references across conditions and actions", () => {
     const sheet = JSON.parse(loadFixture(fixturePath)) as EventSheet;
 
     const names: string[] = [];
@@ -148,8 +148,8 @@ describe("getEventVarReferenceName (fixture integration)", () => {
       }
     });
 
-    expect(names).to.have.length(4);
+    expect(names).to.have.length(2);
     // Assert as a sorted array to stay robust against ordering changes
-    expect([...names].sort()).to.deep.equal(["globalVar1", "globalVar1", "localVar1", "localVar1"]);
+    expect([...names].sort()).to.deep.equal(["temp", "temp"]);
   });
 });

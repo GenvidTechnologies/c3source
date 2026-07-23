@@ -22,21 +22,22 @@ import {
   type C3ProjectManifest,
   type SectionDrift,
 } from "../src/c3source.js";
-import { fixturePath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("c3source-fixture");
+const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
 
 describe("parseProjectManifest / readProjectManifest", () => {
   let m: C3ProjectManifest;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
     m = readProjectManifest(MANIFEST_PATH);
   });
 
   it("R-C1: reads name and savedWithRelease from the fixture", () => {
-    expect(m.name).to.equal("c3source-fixture");
-    expect(m.savedWithRelease).to.equal(48702);
+    expect(m.name).to.equal("construct3-sample");
+    expect(m.savedWithRelease).to.equal(49500);
   });
 
   it("R-C2: name-folder typing — layouts.items and eventSheets.items", () => {
@@ -52,7 +53,7 @@ describe("parseProjectManifest / readProjectManifest", () => {
 
   it("R-C4: collectManifestItemNames recurses into subfolders (timelines, incl. unnamed transitions)", () => {
     const names = collectManifestItemNames(m.timelines);
-    // root item, then the unnamed transitions subfolder + its named "Other Eases" child, then "Real subfolder"
+    // root item, then the unnamed transitions subfolder + its named "Others" child, then "Mixing"
     expect(names).to.deep.equal(["Timeline 1", "Matt's Ease", "Matt's Ease2", "Timeline 2"]);
   });
 
@@ -82,9 +83,9 @@ describe("parseProjectManifest / readProjectManifest", () => {
   it("R-C16: populated subfolders carry a name; the unnamed timelines/transitions subfolder has none", () => {
     expect(m.objectTypes.subfolders.map((sf) => sf.name)).to.deep.equal(["global", "images", "tiles"]);
     // C3 serializes the timelines/transitions ("Eases") container as an UNNAMED subfolder;
-    // it must parse cleanly with name === undefined (the sibling "Real subfolder" is named).
+    // it must parse cleanly with name === undefined (the sibling "Mixing" is named).
     expect(m.timelines.subfolders[0].name).to.equal(undefined);
-    expect(m.timelines.subfolders[1].name).to.equal("Real subfolder");
+    expect(m.timelines.subfolders[1].name).to.equal("Mixing");
   });
 
   it("R-C17: containers are typed with a string[] members list", () => {
@@ -93,6 +94,10 @@ describe("parseProjectManifest / readProjectManifest", () => {
 });
 
 describe("parseProjectManifest — strict throws", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   it("R-C8: throws when top-level is not an object", () => {
     expect(() => parseProjectManifest(42)).to.throw(/invalid project\.c3proj/);
     expect(() => parseProjectManifest(null)).to.throw(/invalid project\.c3proj/);
@@ -138,6 +143,10 @@ describe("parseProjectManifest — strict throws", () => {
 });
 
 describe("collectManifestFileNames", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   it("flattens file-folder items recursively", () => {
     const m = readProjectManifest(MANIFEST_PATH);
     const names = collectManifestFileNames(m.rootFileFolders.script);
@@ -148,6 +157,10 @@ describe("collectManifestFileNames", () => {
 });
 
 describe("detectManifestDrift", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   it("R-C12: clean fixture reports inSync === true (ts-defs/ and uistate/ not flagged)", () => {
     const drift = detectManifestDrift(FIXTURE_DIR);
     expect(drift.inSync).to.equal(true);
@@ -289,7 +302,8 @@ describe("detectManifestDrift", () => {
 describe("F1: path-walk primitives", () => {
   let m: C3ProjectManifest;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
     m = readProjectManifest(MANIFEST_PATH);
   });
 
@@ -310,15 +324,15 @@ describe("F1: path-walk primitives", () => {
     expect(text!.path).to.deep.equal([]);
   });
 
-  it("F1-3: walkManifestNameTree yields all 10 objectType items with correct paths", () => {
+  it("F1-3: walkManifestNameTree yields all 12 objectType items with correct paths", () => {
     const items = walkManifestNameTree(m.objectTypes);
-    // root: Text, TextInput, Text2
+    // root: Text, TextInput, Text2, NavButton
     expect(
       items
         .filter((e) => e.path.length === 0)
         .map((e) => e.name)
         .sort(),
-    ).to.deep.equal(["Text", "Text2", "TextInput"]);
+    ).to.deep.equal(["NavButton", "Text", "Text2", "TextInput"]);
     // global subfolder
     expect(items.find((e) => e.name === "JSON")!.path).to.deep.equal(["global"]);
     // images subfolder: 9patch, Sprite, Sprite2, Sprite3
@@ -327,12 +341,12 @@ describe("F1: path-walk primitives", () => {
     // tiles subfolder
     const tileItems = items.filter((e) => e.path.length === 1 && e.path[0] === "tiles").map((e) => e.name);
     expect(tileItems.sort()).to.deep.equal(["JPEGTileBackground", "TiledBackground", "Tilemap"]);
-    expect(items.length).to.equal(11);
+    expect(items.length).to.equal(12);
   });
 
-  it("F1-4: walkDiskNameTree yields the same 11 name/path pairs as manifest (section-root-relative)", () => {
+  it("F1-4: walkDiskNameTree yields the same 12 name/path pairs as manifest (section-root-relative)", () => {
     const diskItems = walkDiskNameTree(path.join(FIXTURE_DIR, "objectTypes"));
-    expect(diskItems.length).to.equal(11);
+    expect(diskItems.length).to.equal(12);
 
     // Paths must be section-root-relative (not absolute)
     for (const item of diskItems) {
@@ -415,7 +429,7 @@ describe("F1: path-walk primitives", () => {
     // With no unnamedSubfolderName, the unnamed transitions subfolder contributes no segment,
     // so its item lands at root and its named child keeps only its own name.
     expect(items!.find((e) => e.name === "Matt's Ease")!.path).to.deep.equal([]);
-    expect(items!.find((e) => e.name === "Matt's Ease2")!.path).to.deep.equal(["Other Eases"]);
+    expect(items!.find((e) => e.name === "Matt's Ease2")!.path).to.deep.equal(["Others"]);
   });
 
   it("F1-8: walkManifestNameTree maps the unnamed timelines subfolder to TIMELINE_TRANSITIONS_FOLDER", () => {
@@ -423,14 +437,18 @@ describe("F1: path-walk primitives", () => {
     // unnamed transitions subfolder now contributes the "transitions" segment...
     expect(items.find((e) => e.name === "Matt's Ease")!.path).to.deep.equal(["transitions"]);
     // ...and its named child nests beneath it.
-    expect(items.find((e) => e.name === "Matt's Ease2")!.path).to.deep.equal(["transitions", "Other Eases"]);
+    expect(items.find((e) => e.name === "Matt's Ease2")!.path).to.deep.equal(["transitions", "Others"]);
     // a real named sibling subfolder is unaffected; root items stay at root.
-    expect(items.find((e) => e.name === "Timeline 2")!.path).to.deep.equal(["Real subfolder"]);
+    expect(items.find((e) => e.name === "Timeline 2")!.path).to.deep.equal(["Mixing"]);
     expect(items.find((e) => e.name === "Timeline 1")!.path).to.deep.equal([]);
   });
 });
 
 describe("F4: image-derived drift", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
   const readObjectType = (...segments: string[]): Record<string, unknown> => {
     const p = path.join(FIXTURE_DIR, "objectTypes", ...segments);
     return JSON.parse(readFileSync(p, "utf-8")) as Record<string, unknown>;

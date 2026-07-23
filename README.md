@@ -10,7 +10,7 @@ Utilities for reading and traversing Construct 3 project source files: layouts, 
 
 > [!IMPORTANT]
 > - **Folder-based projects only.** This library reads and writes the JSON files of a C3 project saved as a **folder** (the "Save as project folder" layout, with separate `layouts/`, `eventSheets/`, `objectTypes/` files). It does **not** handle the single-file `.c3p`/`.c3proj` archive export. The folder project's `project.c3proj` **manifest** (a JSON file in the project root, distinct from the archive) is modeled by `C3ProjectManifest`, parsed strictly by `parseProjectManifest`/`readProjectManifest`, and drift-checked by `detectManifestDrift`.
-> - **Pinned to a specific C3 version.** The types and traversal logic were derived from Construct 3 **r487** (`savedWithRelease: 48700`, `projectFormatVersion: 1`; see `test/fixtures/c3source-fixture/project.c3proj`). Other releases may serialize differently.
+> - **Pinned to a specific C3 version.** The types and traversal logic were derived from Construct 3 **r487** (`savedWithRelease: 48700`, `projectFormatVersion: 1`) and are validated against the canonical `construct3-sample` reference fixture, now at **r495** (`savedWithRelease: 49500`, `projectFormatVersion: 1`; materialized to `test/fixtures/canonical/` from the `construct3-sample` submodule). Other releases may serialize differently.
 > - **Built on undocumented internals.** Construct 3's on-disk format is **not a documented or stable public interface**. These interfaces were reverse-engineered from project output, so a future C3 release can change the shape without notice and **break this library**. Pin your C3 version, and re-validate the fixtures against any new C3 release before upgrading.
 
 ## Exported Types

@@ -9,24 +9,31 @@ import {
   type C3ProjectManifest,
   type C3UsedAddon,
 } from "../src/c3source.js";
-import { fixturePath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("c3source-fixture");
+const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
 
 describe("usedAddons / getUsedAddons", () => {
   let m: C3ProjectManifest;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
     m = readProjectManifest(MANIFEST_PATH);
   });
 
-  it("returns all 7 declared addons from the fixture, with the NinePatch entry bundled", () => {
+  it("returns all 13 declared addons from the fixture, with the custom behavior/effect bundled", () => {
     const addons = getUsedAddons(m);
-    expect(addons.length).to.equal(7);
-    const ninePatch = addons.find((a) => a.id === "NinePatch");
-    expect(ninePatch).to.not.be.undefined;
-    expect(ninePatch!.bundled).to.equal(true);
+    expect(addons.length).to.equal(13);
+    const bundled = addons.filter((a) => a.bundled).map((a) => a.id);
+    expect(bundled.sort()).to.deep.equal(["MyCompany_MyBehavior", "MyCompany_MyEffect"]);
+    const behavior = addons.find((a) => a.id === "MyCompany_MyBehavior");
+    expect(behavior).to.not.be.undefined;
+    expect(behavior!.version).to.equal("1.0.0.0");
+    expect(behavior!.sdkVersion).to.equal(2);
+    const effect = addons.find((a) => a.id === "MyCompany_MyEffect");
+    expect(effect).to.not.be.undefined;
+    expect(effect!.version).to.equal("1.0.0.0");
   });
 
   it("typechecks a synthetic addon with the optional version field set", () => {

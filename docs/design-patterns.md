@@ -197,16 +197,35 @@ already handle the recursive case.
 ## Testing: real-export ground truth + inline legibility
 
 Schema-fidelity facts ("which fields does C3 actually write?", "what are a
-default layer's keys?") are verified against a **real C3 project export**
-committed under `test/fixtures/` (saved from the C3 editor, not hand-written).
-A C3-emitted `.gitignore` inside the export excludes `*.uistate.json` and
-`ts-defs`.
-Fixture-dependent tests self-skip via `fixtureExists(...)`/`this.skip()` so the
-suite stays green as the export grows and so capabilities not yet present in
-the fixture (e.g. a disabled condition) activate automatically once added.
+default layer's keys?") are verified against a **real, editor-round-tripped C3
+project export** — the canonical golden. Since #54 that golden is **not** a
+committed fixture but the tag-pinned `construct3-sample` git submodule (upstream,
+editor-owned); `scripts/prep-fixture.mjs` (a `pretest` hook) materializes it into
+the **gitignored** `test/fixtures/canonical/` — a byte copy of
+`construct3-sample/project/` plus the additive `test/fixtures/canonical-overlay/`
+minus the `canonical.striplist.txt` paths. A C3-emitted `.gitignore` inside the
+golden excludes `*.uistate.json` and `ts-defs`. Tests reach the fixture through
+the single `PROJECT_FIXTURE` constant in `test/fixtureHelpers.ts` (with
+`fixtureProjectPath`/`fixtureProjectExists`), and self-skip via
+`fixtureProjectExists(...)`/`this.skip()` so the suite stays green when the
+submodule is absent (a non-recursive checkout: `prep-fixture` no-ops) and so
+capabilities not yet present in the golden activate automatically once added.
 
-Three hazards come with this strategy when the export is **enriched** (the
-fixture is a real C3 project, so it carries more than data):
+**Enrich the golden upstream, not the overlay.** Coverage the golden genuinely
+*should* carry — a real C3 construct a downstream test needs (e.g. event-var
+reference ACEs) — is added **upstream in `construct3-sample`** (edit in the
+submodule, editor-round-trip, commit, push, cut a new tag, then bump the pin with
+`git add construct3-sample`), never faked into `canonical/`: an overlaid,
+hand-authored event sheet would couple those bytes to `canonicalFixture.test.ts`'s
+`validateForEditor`/drift gate. The overlay is reserved for c3source-specific
+shaping the golden **deliberately omits** — e.g. `uistate/` +
+`*.instancesBar.json`, which the golden's own `.gitignore` excludes — so the
+`isEditorLocalPath` drift-filter coverage isn't vacuous. (#54 added event-var
+coverage the first way, bumping the submodule v0.1.0 → v0.2.0, and restored
+uistate coverage the second way.)
+
+Several hazards come with this strategy when the golden is **enriched** (it is a
+real C3 project, so it carries more than data):
 
 - **Generated code in the fixture breaks the gate.** A real export includes
   C3-generated TypeScript — `scripts/*.ts`, `tsconfig.json`, and a
@@ -214,16 +233,24 @@ fixture is a real C3 project, so it carries more than data):
   `tsc` scan `test/`, so they would fail on it. `test/fixtures/` is therefore
   **excluded from both** (`ignorePatterns` in `.eslintrc.cjs`, `exclude` in
   `tsconfig.test.json`). Fixtures are test *data*, never linted/typechecked.
-- **The self-skip pattern has an inverse hazard.** Renaming or deleting a
-  fixture file silently re-skips its `fixtureExists`-gated tests — a coverage
-  loss that is invisible unless you watch the **pending count** (mocha reports
-  it). After changing fixture filenames, confirm the pending count did not rise;
-  repoint the gated tests to the new names.
-- **Gitignored fixture content is absent in CI.** `*.uistate.json` and `ts-defs`
-  are gitignored, so a test that needs them present (e.g. to prove the `uistate/`
-  / `ts-defs/` skip is real, not vacuous) must `git add -f` a representative
-  slice. Note the suffix patterns are exact: `*.uistate.json` does **not** match
-  the `uistate/` directory's `*.instancesBar.json` files.
+- **The self-skip pattern has an inverse hazard.** A mis-pathed gate, a renamed
+  golden file, or an absent `canonical/` (non-recursive checkout) silently
+  *skips* the gated tests instead of failing — a coverage loss visible only in
+  the **pending count** (mocha reports it). After any fixture swap or pin bump,
+  confirm the pending count did not rise (the baseline is 341 passing / 1
+  pending). **Gate completeness matters:** gate *every* `describe`/`it` that
+  reads the golden, not just `before()` blocks — `this.skip()` in a `before`
+  hook skips all `it()`s in *that* describe, so a describe reading the fixture
+  inline in its `it()`s with no `before()` gate is the gap (#54 had to add gates
+  to four such `projectManifest` describes).
+- **Golden-supplied vs. overlay-supplied editor-local content.** `*.uistate.json`
+  and `ts-defs` are gitignored inside the golden, so they never reach
+  `canonical/` via the byte copy; content a test needs *present* to prove the
+  `uistate/` / `ts-defs/` skip is real (not vacuous) is supplied by the committed
+  **overlay** instead. Note the suffix patterns are exact: `*.uistate.json` does
+  **not** match the `uistate/` directory's `*.instancesBar.json` files, so the
+  overlay carries one of each form to exercise both the suffix and the directory
+  skip.
 - **Fixture images must be real, not faked.** The image-drift tests key only on
   *filenames*, so a placeholder whose bytes don't match its extension and declared
   `fileType` (e.g. a PNG renamed to `.jpg` alongside `fileType: image/jpeg`) passes

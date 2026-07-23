@@ -17,14 +17,15 @@ import {
   detectImageDrift,
   type C3Project,
 } from "../src/c3source.js";
-import { fixturePath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
-const FIXTURE_DIR = fixturePath("c3source-fixture");
+const FIXTURE_DIR = fixtureProjectPath();
 
 describe("openProject — path fields", () => {
   let proj: C3Project;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
   });
 
@@ -58,13 +59,15 @@ describe("openProject — path fields", () => {
 });
 
 describe("openProject — manifest() lazy read", () => {
-  it("OP-8: manifest() deep-equals readProjectManifest(manifestPath)", () => {
+  it("OP-8: manifest() deep-equals readProjectManifest(manifestPath)", function () {
+    if (!fixtureProjectExists()) return this.skip();
     const proj = openProject(FIXTURE_DIR);
     const expected = readProjectManifest(path.join(FIXTURE_DIR, PROJECT_MANIFEST_FILE));
     expect(proj.manifest()).to.deep.equal(expected);
   });
 
-  it("OP-9: manifest() returns the same cached object on repeated calls (referential equality)", () => {
+  it("OP-9: manifest() returns the same cached object on repeated calls (referential equality)", function () {
+    if (!fixtureProjectExists()) return this.skip();
     const proj = openProject(FIXTURE_DIR);
     const first = proj.manifest();
     const second = proj.manifest();
@@ -75,7 +78,8 @@ describe("openProject — manifest() lazy read", () => {
 describe("openProject — has*() methods on the fixture", () => {
   let proj: C3Project;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
   });
 
@@ -145,7 +149,8 @@ describe("openProject — empty temp dir (no I/O at construction)", () => {
 describe("openProject — findAll*() finders", () => {
   let proj: C3Project;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
   });
 
@@ -256,7 +261,8 @@ describe("openProject — findAll*() finders", () => {
 describe("openProject — detectManifestDrift() and detectImageDrift() delegators", () => {
   let proj: C3Project;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
   });
 
@@ -287,7 +293,8 @@ describe("openProject — detectManifestDrift() and detectImageDrift() delegator
 describe("openProject — new *Dir path fields (OP-40 to OP-49)", () => {
   let proj: C3Project;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
   });
 
@@ -389,7 +396,8 @@ describe("openProject — new has*() methods on empty temp dir (OP-50 to OP-59)"
 describe("openProject — new has*() methods on the fixture (OP-60 to OP-63)", () => {
   let proj: C3Project;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
   });
 
@@ -416,7 +424,8 @@ describe("openProject — new has*() methods on the fixture (OP-60 to OP-63)", (
 describe("openProject — new findAll*() methods (OP-64 to OP-72)", () => {
   let proj: C3Project;
 
-  before(() => {
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
     proj = openProject(FIXTURE_DIR);
   });
 

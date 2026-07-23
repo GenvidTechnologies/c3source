@@ -8,20 +8,20 @@ import {
   type EventSheet,
   type EditorValidationIssue,
 } from "../src/c3source.js";
-import { fixturePath, fixtureExists } from "./fixtureHelpers.js";
+import { fixtureProjectPath, fixtureProjectExists } from "./fixtureHelpers.js";
 
-const CANONICAL_ROOT = fixturePath("canonical");
+const CANONICAL_ROOT = fixtureProjectPath();
 
 // Validation gate: proves c3source's own validators (editor-strictness + manifest-drift)
 // accept the materialized canonical golden fixture cleanly. Self-skips when the fixture
 // has not been materialized (submodule absent / prep-fixture not run) — see CLAUDE.md.
 describe("canonical fixture — c3source validators", function () {
   before(function () {
-    if (!fixtureExists("canonical/project.c3proj")) return this.skip();
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
   });
 
   it("validateForEditor reports zero issues across every event sheet", function () {
-    if (!fixtureExists("canonical/project.c3proj")) return this.skip();
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
 
     const proj = openProject(CANONICAL_ROOT);
     const sheetPaths = proj.findAllEventSheets();
@@ -39,7 +39,7 @@ describe("canonical fixture — c3source validators", function () {
   });
 
   it("detectManifestDrift reports the canonical project as in sync", function () {
-    if (!fixtureExists("canonical/project.c3proj")) return this.skip();
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
 
     // Starts as a bare assertion: the golden fixture is expected to be drift-free. If the
     // canonical project legitimately reports some drift (e.g. an image-derived section),
