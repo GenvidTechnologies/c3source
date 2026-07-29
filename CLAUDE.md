@@ -109,10 +109,14 @@ Three functional areas:
    `.uistate.json` files and never descend into `uistate/` subfolders, which
    C3 r487+ writes alongside layouts/object-types/event-sheets) plus visitor
    walkers. The **one canonical definition** of "editor-local vs C3 source" is
-   `isEditorLocalPath(name): boolean` backed by `EDITOR_LOCAL_EXCLUSIONS: {dirs, fileSuffixes}`;
+   `isEditorLocalPath(name): boolean` backed by `EDITOR_LOCAL_EXCLUSIONS: {dirs, fileSuffixes, exactNames}`;
    all four former inline skip sites (the `uistate/` directory check in
    `find_all_files_path` plus the `.uistate.json` suffix checks in the three
-   named collectors) now consume it uniformly (#19). The named collectors are thin wrappers over the exported generic
+   named collectors) now consume it uniformly (#19). This classifier is
+   **provenance-only** — source vs. editor-local — and serialization form is
+   deliberately not a membership criterion (see [ADR
+   0018](docs/decisions/0018-brush-json-minified-source-not-editor-local.md)).
+   The named collectors are thin wrappers over the exported generic
    primitive `find_all_files_path(dir, predicate)` — the single recursive walk
    that owns the recursion, the `uistate/` skip, and the per-level
    `readdirSync().sort()` ordering. It is exported so downstream can discover
@@ -393,7 +397,11 @@ source-JSON write form: **tab-indented, and — the inverse of the usual
 text-file convention — with no trailing newline**. Text from
 expressions/comments is run through `normalizeLineEndings` (CRLF -> LF) for
 cross-platform stability. See [ADR
-0016](docs/decisions/0016-c3-source-json-serialization-form.md).
+0016](docs/decisions/0016-c3-source-json-serialization-form.md). `serialize.ts`
+also owns the one documented exception: `tilemapBrushes/**/*.brush.json` is
+project **source**, not editor-local — just written in a second, minified form
+— per the `C3_MINIFIED_SOURCE_SUFFIXES`/`isMinifiedSourcePath` domain fact and
+[ADR 0018](docs/decisions/0018-brush-json-minified-source-not-editor-local.md).
 
 ## Canonical reference fixture (`construct3-sample`)
 

@@ -237,8 +237,9 @@ convention — with no trailing newline.** This is a C3 domain fact, not a
 c3source style choice: checked against the canonical `construct3-sample`
 fixture, 25 of the 26 non-editor-local `.json`/`.c3proj` files satisfy
 `serializeC3Json(JSON.parse(text)) === text`, and **none** ends with a
-newline. (The one exception, `*.brush.json`, is minified by C3 and out of
-scope — see [ADR 0016](decisions/0016-c3-source-json-serialization-form.md).)
+newline. (The one exception, `*.brush.json`, is project source that C3 writes
+minified — see `isMinifiedSourcePath` in [api-guide.md](api-guide.md#minified-source-classification)
+and [ADR 0018](decisions/0018-brush-json-minified-source-not-editor-local.md).)
 
 ```ts
 import { readProjectManifest, writeProjectManifest } from "@genvidtech/c3source";

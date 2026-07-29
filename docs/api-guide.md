@@ -5,6 +5,7 @@ that work with C3 folder-project files outside the editor.
 
 - [SID traversal](#sid-traversal) — collect and path-label every `sid` in a JSON subtree
 - [Editor-local classification](#editor-local-classification) — filter `uistate/`, `ts-defs/`, generated files
+- [Minified-source classification](#minified-source-classification) — identify project source C3 writes minified (`*.brush.json`)
 - [Project handle](api-guide-project.md) — openProject(root), C3Project path fields, file finders, drift delegation
 - [Project manifest model and drift detection](api-guide-manifest.md) — parse `project.c3proj`, detect manifest/disk divergence
 - [Event-sheet extraction](api-guide-extraction.md) — visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions
@@ -139,11 +140,12 @@ function listSourceEntries(dir: string): string[] {
   return readdirSync(dir).filter((name) => !isEditorLocalPath(name));
 }
 
-// "uistate"               → excluded (directory form)
-// "ts-defs"               → excluded (directory form)
-// "tsconfig.json"         → excluded (exact name)
-// "Layout 1.uistate.json" → excluded (suffix form)
-// "Layout 1.json"         → included
+// "uistate"                → excluded (directory form)
+// "ts-defs"                → excluded (directory form)
+// "tsconfig.json"          → excluded (exact name)
+// "Layout 1.uistate.json"  → excluded (suffix form)
+// "Layout 1.json"          → included
+// "Tilemap.brush.json"     → included (project source, minified — see below)
 ```
 
 `find_all_files_path`, `find_all_layouts_path`, and the other named collectors
@@ -155,3 +157,44 @@ your own `readdirSync` loop rather than going through the collectors.
 If a future C3 release introduces a new editor-local convention, add it to
 `EDITOR_LOCAL_EXCLUSIONS` — every call site inherits the change automatically.
 Do not inline the predicate in new code.
+
+**Deliberately not covered here.** `tilemapBrushes/**/*.brush.json` is *not* an
+editor-local artifact — `isEditorLocalPath` correctly returns `false` for it —
+even though C3 writes it in the same minified byte form as `*.uistate.json`.
+It is project source, just serialized a second way. See [Minified-source
+classification](#minified-source-classification) below.
+
+---
+
+## Minified-source classification
+
+C3 writes almost all project source tab-indented (see [ADR
+0016](decisions/0016-c3-source-json-serialization-form.md)), but
+`tilemapBrushes/**/*.brush.json` is a documented exception: it is hand-authored
+project source — tilemap brush definitions, with no generator that would
+recreate them — that C3 nonetheless writes minified
+(`JSON.stringify(value)`, no indent, no trailing newline). This is orthogonal
+to editor-local classification (above): a file's serialization form does not
+determine its provenance. See [ADR
+0018](decisions/0018-brush-json-minified-source-not-editor-local.md) for the
+full rationale.
+
+### Exports
+
+```ts
+const C3_MINIFIED_SOURCE_SUFFIXES: readonly string[] // [".brush.json"]
+
+function isMinifiedSourcePath(name: string): boolean
+```
+
+`isMinifiedSourcePath` accepts a **bare basename**, matching
+`isEditorLocalPath`'s argument contract, and returns `true` for a known
+minified-source suffix. It answers a narrower question than
+`isEditorLocalPath`: "is this file project source that happens to be
+minified?" — not "is this file minified at all." `*.uistate.json` files are
+also minified on disk, but `isMinifiedSourcePath` returns `false` for them,
+because they are editor-local and therefore out of this predicate's scope
+(`isEditorLocalPath` already classifies them).
+
+Detection only — c3source ships no minified writer. A caller that needs to
+write a `.brush.json` file composes `JSON.stringify(value)` directly.

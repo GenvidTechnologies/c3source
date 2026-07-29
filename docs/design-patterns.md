@@ -89,20 +89,34 @@ duplicating it is exactly how a self-recursion bug once slipped in
 ## One canonical editor-local filter
 
 `isEditorLocalPath(name: string): boolean` is the single definition of
-"editor-local artifact vs C3 source". It checks both the directory form (`name`
-in `EDITOR_LOCAL_EXCLUSIONS.dirs`, currently `["uistate"]`) and the file-suffix
-form (`EDITOR_LOCAL_EXCLUSIONS.fileSuffixes`, currently `[".uistate.json"]`).
-Before this was extracted (#19), the skip logic was inlined at four sites:
-the `uistate/` directory guard in `find_all_files_path` and the `.uistate.json`
-suffix checks in the three named collectors. That duplication was the direct
-path to the bug this replaced: a downstream tool that re-derived the skip rule
-from the collector source could easily miss the directory form, silently
-including `uistate/` children in its walk. All four sites now call
-`isEditorLocalPath`; any future addition to C3's editor-local convention is a
-one-line change in `EDITOR_LOCAL_EXCLUSIONS`.
+"editor-local artifact vs C3 source". It checks the directory form (`name` in
+`EDITOR_LOCAL_EXCLUSIONS.dirs`, currently `["uistate", "ts-defs"]`), the
+file-suffix form (`EDITOR_LOCAL_EXCLUSIONS.fileSuffixes`, currently
+`[".uistate.json"]`), and the exact-name form
+(`EDITOR_LOCAL_EXCLUSIONS.exactNames`, currently `["tsconfig.json"]`, for a
+generated file the editor overwrites on every save rather than a whole
+directory or suffix pattern). Before this was extracted (#19), the skip logic
+was inlined at four sites: the `uistate/` directory guard in
+`find_all_files_path` and the `.uistate.json` suffix checks in the three named
+collectors. That duplication was the direct path to the bug this replaced: a
+downstream tool that re-derived the skip rule from the collector source could
+easily miss the directory form, silently including `uistate/` children in its
+walk. All four sites now call `isEditorLocalPath`; any future addition to C3's
+editor-local convention is a one-line change in `EDITOR_LOCAL_EXCLUSIONS`.
 
 Never inline the skip predicate. Add any new editor-local pattern to
 `EDITOR_LOCAL_EXCLUSIONS` so every site inherits it automatically.
+
+**Provenance, not serialization form.** This classifier answers one question
+only — is a file C3 source or editor-local scratch state? — and a file's
+on-disk byte form is not part of that question: C3 writes some editor-local
+files minified and some tab-indented, and it writes some *source* files
+minified too. `isMinifiedSourcePath` (`src/serialize.ts`) is the sibling
+pattern for that orthogonal axis — a domain-fact table of project-source files
+that happen to use the second, minified serialization form, currently just
+`tilemapBrushes/**/*.brush.json`. See [ADR
+0018](decisions/0018-brush-json-minified-source-not-editor-local.md) for why
+that file is source, not a widening of this table.
 
 ## Traversal-vs-rendering split for SIDs
 

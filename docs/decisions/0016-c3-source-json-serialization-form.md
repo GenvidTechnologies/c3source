@@ -3,6 +3,8 @@
 - **Status:** accepted
 - **Date:** 2026-07-29
 - **Issue:** #57 (sibling: #58)
+- **Amended by:** [ADR 0018](0018-brush-json-minified-source-not-editor-local.md)
+  (#59) — `*.brush.json` is minified project *source*, not an editor-local file
 
 ## Context
 
@@ -74,9 +76,15 @@ it back, that strict re-read throws — turning a successful repair into a crash
 the very next read. Write-through has no such trap: the cache simply becomes
 whatever was actually written, valid or not.
 
-**Explicit non-goal:** the **minified** editor-local form (`*.uistate.json`,
-files under `uistate/`, `*.brush.json`). c3source never writes an editor-local
-file, so owning a serialization form nothing here emits would be speculative.
+**Explicit non-goal:** the **minified editor-local** form (`*.uistate.json`,
+files under `uistate/`). c3source never writes an editor-local file, so owning
+a serialization form nothing here emits would be speculative. `*.brush.json`
+is **not** an instance of this non-goal — it is minified project *source*,
+covered separately by [ADR 0018](0018-brush-json-minified-source-not-editor-local.md)'s
+`isMinifiedSourcePath`. The two forms are orthogonal to provenance, not to each
+other: C3 also writes editor-local `uistate/*.instancesBar.json` files
+tab-indented, so "minified" alone never determines whether a file is source or
+editor-local.
 
 ## Compromise
 
@@ -115,10 +123,13 @@ file, so owning a serialization form nothing here emits would be speculative.
   write), but not itself a validity guarantee. This must be read from the
   JSDoc, not discovered by surprise.
 - One documented corpus exception survives outside this decision's scope:
-  `tilemapBrushes/**/*.brush.json` is minified and is *not* currently covered by
+  `tilemapBrushes/**/*.brush.json` is minified and is *not* covered by
   `isEditorLocalPath`'s `EDITOR_LOCAL_EXCLUSIONS` (the [ADR
-  0006](0006-editor-local-classifier.md) classifier). This is recorded as a
-  follow-up issue against that classifier, deliberately not folded into #57/#58.
+  0006](0006-editor-local-classifier.md) classifier) — and never will be: the
+  file is project source, not editor-local, merely written in a second
+  serialization form. Resolved by [ADR
+  0018](0018-brush-json-minified-source-not-editor-local.md) (#59); the
+  classifier is deliberately unchanged.
 - Writing `project.c3proj` while the project is open in the C3 editor will be
   clobbered by the editor's own next save — c3source cannot fix this; it is a
   documented caveat in `docs/api-guide-manifest.md`'s write section, not a code
