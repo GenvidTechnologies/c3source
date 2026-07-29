@@ -16,11 +16,27 @@ import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 
-/** The one documented brush-serialization exception (#57 design): C3 writes
- *  `*.brush.json` minified, unlike every other project-source JSON file. Excluded
- *  by exact path, not by broadening the editor-local classifier — a `.brush.json`
- *  file genuinely IS project source, it is just minified. */
-const BRUSH_EXCEPTION = path.join(FIXTURE_DIR, "tilemapBrushes", "objectTypes", "tiles", "Tilemap.brush.json");
+/** Fixture-root-relative, POSIX-normalized path, for platform-stable assertions
+ *  and readable failure messages. */
+const rel = (f: string): string => path.relative(FIXTURE_DIR, f).split(path.sep).join("/");
+
+/** The one documented brush-serialization exception (#57 design, resolved #59): C3
+ *  writes `*.brush.json` minified. It IS C3 project source — not editor-local —
+ *  it is just a second, minified serialization form. Excluded by exact path here;
+ *  a general `isMinifiedSourcePath` domain-fact predicate lands in a follow-up task. */
+const MINIFIED_SOURCE_FILES = ["tilemapBrushes/objectTypes/tiles/Tilemap.brush.json"];
+
+/**
+ * Editor-local files that must be present on any materialization of the fixture
+ * (local polluted tree or clean CI checkout), so the classifier coverage below is
+ * not vacuous even though the exact `skipped` set is pollution-sensitive (see the
+ * POLLUTION NOTE in T7).
+ */
+const REQUIRED_EDITOR_LOCAL = [
+  "layouts/Main Layout.uistate.json",
+  "layouts/uistate/Main Layout.instancesBar.json",
+  "scripts/tsconfig.json",
+];
 
 /**
  * Walk `dir` recursively, collecting every `.json`/`.c3proj` file, classified as
@@ -66,26 +82,32 @@ describe("serializeC3Json — canonical fixture corpus round-trip", () => {
   it("T7: every non-editor-local .json/.c3proj file round-trips byte-for-byte, except the documented Tilemap.brush.json exception", () => {
     const { kept, skipped } = collectProjectJsonFiles(FIXTURE_DIR, false);
 
-    // Figures re-derived at implementation time (2026-07-29) against the pinned
-    // construct3-sample submodule: 38 total, 12 skipped as editor-local, 26 kept
-    // (25 round-trip + 1 documented brush.json exception). Asserted explicitly so
-    // a future fixture-pin bump that changes the set is caught, not silently
-    // under-covered.
-    expect(kept.length + skipped.length).to.equal(38);
-    expect(skipped.length).to.equal(12);
-    expect(kept.length).to.equal(26);
+    // POLLUTION NOTE (2026-07-29, #59): scripts/prep-fixture.mjs cpSync's the
+    // construct3-sample submodule's *working tree*, not just its tracked content.
+    // Locally that working tree carries gitignored, editor-local files
+    // (*.uistate.json, uistate/, ts-defs/) that a clean CI checkout does not, so
+    // the corpus totals legitimately differ between environments: locally
+    // total=38/skipped=12/kept=26, on a clean checkout (= CI) total=29/skipped=3/
+    // kept=26. Every one of those polluting files is editor-local by construction
+    // (isEditorLocalPath / the inherited uistate/ directory rule cover them all,
+    // and none of the 56 upstream ts-defs files are .json), so the leak lands
+    // entirely in `skipped` — `kept`, and the non-round-tripping subset discovered
+    // below, are pollution-invariant. Hence: an exact assertion on `kept.length`,
+    // a subset (not exact-count) assertion on `skipped`, and discovery — not a
+    // pre-declared path list sized to one tree — for the round-trip exception.
+    // Making prep-fixture.mjs hermetic (copy tracked content only) is tracked as a
+    // separate follow-up issue, not fixed here.
+    expect(kept.length, "project-source .json/.c3proj corpus size").to.equal(26);
+    expect(skipped.map(rel)).to.include.members(REQUIRED_EDITOR_LOCAL);
 
-    const exceptions = kept.filter((f) => f === BRUSH_EXCEPTION);
-    expect(exceptions.length).to.equal(1);
-
-    const roundtripped = kept.filter((f) => f !== BRUSH_EXCEPTION);
-    expect(roundtripped.length).to.equal(25);
-
-    for (const file of roundtripped) {
+    const nonRoundTripping: string[] = [];
+    for (const file of kept) {
       const text = readFileSync(file, "utf-8");
-      expect(serializeC3Json(JSON.parse(text)), file).to.equal(text);
       expect(text.endsWith("\n"), `${file} must not end with a trailing newline`).to.equal(false);
+      if (serializeC3Json(JSON.parse(text)) !== text) nonRoundTripping.push(rel(file));
     }
+
+    expect(nonRoundTripping.sort()).to.deep.equal(MINIFIED_SOURCE_FILES);
   });
 });
 
