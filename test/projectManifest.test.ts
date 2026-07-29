@@ -20,9 +20,12 @@ import {
   diffNameMaps,
   formatManifestPath,
   type C3ProjectManifest,
+  type C3NameFolder,
+  type C3FileFolder,
+  type ManifestDrift,
   type SectionDrift,
 } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath, makeTempProject } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
@@ -596,5 +599,74 @@ describe("F4: image-derived drift", () => {
     // Manifest drift must still be clean (JPEGTileBackground + LevelMaps wired into project.c3proj)
     const manifestDrift = detectManifestDrift(FIXTURE_DIR);
     expect(manifestDrift.inSync).to.equal(true);
+  });
+});
+
+describe("walkers tolerate a malformed manifest (#58)", () => {
+  // A minimal well-formed skeleton so tests can override just the section under test.
+  const emptyFolder = (): C3NameFolder => ({ items: [], subfolders: [] });
+  const emptyFileFolder = (): C3FileFolder => ({ items: [], subfolders: [] });
+  const rootFileFoldersSkeleton = (): C3ProjectManifest["rootFileFolders"] => ({
+    script: emptyFileFolder(),
+    sound: emptyFileFolder(),
+    music: emptyFileFolder(),
+    video: emptyFileFolder(),
+    font: emptyFileFolder(),
+    icon: emptyFileFolder(),
+    general: emptyFileFolder(),
+  });
+
+  it("T13-1: collectManifestItemNames on a folder with non-array items/subfolders returns [] without throwing", () => {
+    const malformed = { items: 123, subfolders: undefined } as unknown as C3NameFolder;
+    expect(() => collectManifestItemNames(malformed)).to.not.throw();
+    expect(collectManifestItemNames(malformed)).to.deep.equal([]);
+  });
+
+  it("T13-2: collectManifestFileNames on a folder with non-array items/subfolders returns [] without throwing", () => {
+    const malformed = { items: 123, subfolders: undefined } as unknown as C3FileFolder;
+    expect(() => collectManifestFileNames(malformed)).to.not.throw();
+    expect(collectManifestFileNames(malformed)).to.deep.equal([]);
+  });
+
+  it("T13-3: detectManifestDrift tolerates a container with a non-array members field without throwing", () => {
+    const manifest = {
+      objectTypes: emptyFolder(),
+      layouts: emptyFolder(),
+      eventSheets: emptyFolder(),
+      timelines: emptyFolder(),
+      flowcharts: emptyFolder(),
+      families: emptyFolder(),
+      models3d: emptyFolder(),
+      containers: [{ members: "not-an-array" }],
+      rootFileFolders: rootFileFoldersSkeleton(),
+    } as unknown as C3ProjectManifest;
+    const projectDir = makeTempProject(manifest);
+    let drift: ManifestDrift | undefined;
+    expect(() => {
+      drift = detectManifestDrift(projectDir, manifest);
+    }).to.not.throw();
+    expect(drift).to.be.an("object");
+    expect(drift!.sections).to.be.an("array");
+  });
+
+  it("T13-4: detectManifestDrift tolerates a truthy non-object rootFileFolders category without throwing", () => {
+    const manifest = {
+      objectTypes: emptyFolder(),
+      layouts: emptyFolder(),
+      eventSheets: emptyFolder(),
+      timelines: emptyFolder(),
+      flowcharts: emptyFolder(),
+      families: emptyFolder(),
+      models3d: emptyFolder(),
+      containers: [],
+      rootFileFolders: { ...rootFileFoldersSkeleton(), script: "oops" },
+    } as unknown as C3ProjectManifest;
+    const projectDir = makeTempProject(manifest);
+    let drift: ManifestDrift | undefined;
+    expect(() => {
+      drift = detectManifestDrift(projectDir, manifest);
+    }).to.not.throw();
+    expect(drift).to.be.an("object");
+    expect(drift!.sections).to.be.an("array");
   });
 });

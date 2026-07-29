@@ -488,8 +488,8 @@ export function walkManifestNameTree(
   unnamedSubfolderName?: string,
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const name of folder.items) out.push({ name, path: basePath });
-  for (const sub of folder.subfolders) {
+  for (const name of Array.isArray(folder.items) ? folder.items : []) out.push({ name, path: basePath });
+  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
     // Nameless subfolder contributes no segment, UNLESS unnamedSubfolderName names it
     // (the timelines/transitions exception). Not propagated → top-level children only.
     const effectiveName = sub.name ?? unnamedSubfolderName;
@@ -510,8 +510,8 @@ export function walkManifestFileTree(
   basePath: ManifestPathSegment[] = [],
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const entry of folder.items) out.push({ name: entry.name, path: basePath });
-  for (const sub of folder.subfolders) {
+  for (const entry of Array.isArray(folder.items) ? folder.items : []) out.push({ name: entry.name, path: basePath });
+  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
     const childPath = sub.name !== undefined ? [...basePath, sub.name] : basePath;
     out.push(...walkManifestFileTree(sub, childPath));
   }
@@ -709,8 +709,8 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
   if (rff)
     for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
       const folder = rff[cat as keyof C3RootFileFolders];
-      const declared = folder ? walkManifestFileTree(folder) : [];
-      const onDisk = folder
+      const declared = isRecord(folder) ? walkManifestFileTree(folder) : [];
+      const onDisk = isRecord(folder)
         ? walkDiskFileTree(path.join(projectDir, folderName), folder.subfolders)
         : walkDiskFileTree(path.join(projectDir, folderName), []);
       const entries = diffNameMaps(declared, onDisk);
@@ -739,7 +739,7 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
   const objectTypeNames = new Set(m.objectTypes ? walkManifestNameTree(m.objectTypes).map((e) => e.name) : []);
   const entries: DriftEntry[] = [];
   m.containers.forEach((container, i) => {
-    for (const member of container.members)
+    for (const member of Array.isArray(container.members) ? container.members : [])
       if (!objectTypeNames.has(member)) entries.push({ kind: "dangling-ref", name: member, manifestPath: [`#${i}`] });
   });
   return entries;
