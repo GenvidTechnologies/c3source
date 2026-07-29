@@ -1,7 +1,9 @@
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { zipSync } from "fflate";
+import { writeC3JsonFile } from "../src/serialize.js";
 
 const fixturesRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -68,6 +70,25 @@ export function canonicalPath(relPath: string): string {
  */
 export function canonicalFixtureExists(relPath: string): boolean {
   return existsSync(canonicalPath(relPath));
+}
+
+/**
+ * Create a throwaway project directory containing only a `project.c3proj` holding
+ * `manifestJson`, and return its path.
+ *
+ * TEST-ONLY. This is how malformed-manifest inputs are built: `test/fixtures/canonical/`
+ * is the upstream-owned golden fixture (gitignored, materialized from the
+ * `construct3-sample` submodule), so hand-authored broken bytes must never be written
+ * there. Tests either clone-then-mutate the golden in memory, or write a temp project
+ * here.
+ *
+ * The manifest is written with `writeC3JsonFile` rather than a second hand-rolled
+ * tab-indent literal, so temp projects are byte-shaped exactly like real ones.
+ */
+export function makeTempProject(manifestJson: unknown): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "c3source-manifest-"));
+  writeC3JsonFile(path.join(dir, "project.c3proj"), manifestJson);
+  return dir;
 }
 
 /**
