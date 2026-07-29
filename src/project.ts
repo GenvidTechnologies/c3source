@@ -16,11 +16,14 @@ import {
   C3_SECTION_FOLDERS,
   IMAGES_FOLDER,
   ManifestDrift,
+  ManifestReadResult,
   PROJECT_MANIFEST_FILE,
   SectionDrift,
   detectImageDrift,
   detectManifestDrift,
   readProjectManifest,
+  readProjectManifestTolerant,
+  writeProjectManifest,
 } from "./manifest.js";
 
 // ─── Piece D: C3Project handle ────────────────────────────────────────────────
@@ -104,6 +107,68 @@ export interface C3Project {
    * subsequent calls return the cached value without re-reading disk.
    */
   manifest(): C3ProjectManifest;
+
+  /**
+   * Write the manifest back to `manifestPath` in the canonical `project.c3proj` on-disk
+   * form (see {@link serializeProjectManifest} in `./manifest.js`). Does NOT validate —
+   * call `validateProjectManifest(m)` first if you need the gate.
+   *
+   * Called with an explicit `m`: writes `m`, then — only once the write has actually
+   * succeeded — makes `m` the cached manifest, so a subsequent `manifest()` call returns
+   * exactly what was just written without touching disk again.
+   *
+   * Called with no argument: writes the already-cached manifest, reading it strictly
+   * first (via `manifest()`) if nothing has been cached yet, since there has to be
+   * something to write. The cache already IS the value being written in this case, so
+   * there is nothing further to reassign — this is exactly the read-mutate-write cycle
+   * `manifest()`'s by-identity return exists to support: `const m = p.manifest();
+   * m.usedAddons[0].version = "2"; p.writeManifest();`.
+   *
+   * **Order, and why:** serialize, then write the file, then assign the cache — never
+   * reordered. A throw from serialization (e.g. a circular reference introduced by
+   * caller mutation) or from the write itself (a bad path) leaves BOTH the on-disk file
+   * and the in-memory cache untouched — mirroring `manifest()`'s existing "a throw is
+   * not memoized" property.
+   *
+   * **Why this never invalidates the cache on write**, instead of the seemingly more
+   * obvious "write, then drop the cache so the next read is fresh": invalidating would
+   * force the next `manifest()` call to re-read `manifestPath` STRICTLY. If the caller
+   * just repaired a document obtained TOLERANTLY (via `manifestTolerant()`) and wrote it
+   * back, that strict re-read throws — turning a successful repair into a crash on the
+   * very next read. Write-through has no such trap: the cache simply becomes whatever
+   * was written, valid or not.
+   *
+   * **Honest consequence.** If `m` came from `manifestTolerant()` and still carries
+   * unrepaired shape violations, writing it leaves the cache holding that same
+   * unvalidated document — a later `manifest()` call returns it without validating. This
+   * is coherent (cache == disk == exactly what the caller chose to write) and it is the
+   * caller's own document to begin with, but `manifest()` after
+   * `writeManifest(tolerantManifest)` is not itself a validity guarantee.
+   *
+   * @param m - The manifest to write. Defaults to the already-cached manifest.
+   */
+  writeManifest(m?: C3ProjectManifest): void;
+
+  /**
+   * Read the manifest tolerantly — always fresh from disk, NEVER touching the cached
+   * manifest (neither populating nor consuming it). Delegates to
+   * {@link readProjectManifestTolerant}.
+   *
+   * This cache isolation is deliberate: caching the tolerant read's `manifest` here would
+   * let a later `manifest()` call silently return an unvalidated document instead of
+   * validating strictly, defeating the point of keeping the two reads separate.
+   */
+  manifestTolerant(): ManifestReadResult;
+
+  /**
+   * Discard the cached manifest and re-read `manifestPath` STRICTLY from disk via
+   * {@link readProjectManifest}, caching and returning the fresh result.
+   *
+   * This is the invalidation path the handle otherwise lacks — useful when something
+   * outside this handle (an external editor, C3 itself, another tool in the same build)
+   * may have changed the file since it was last cached.
+   */
+  reloadManifest(): C3ProjectManifest;
 
   /**
    * Return all event sheet paths under `eventSheetsDir` (or its `sub` subdirectory).
@@ -299,6 +364,31 @@ export function openProject(root: string): C3Project {
       if (cachedManifest === undefined) {
         cachedManifest = readProjectManifest(manifestPath);
       }
+      return cachedManifest;
+    },
+
+    writeManifest(m?: C3ProjectManifest): void {
+      // writeProjectManifest is the free function from ./manifest.js — same shadowing
+      // hazard the alias block above (lines ~245-252) exists for. This method is NOT
+      // named writeProjectManifest so no alias is needed here, but a future rename to
+      // match the free function's name must add one first, or this recurses infinitely.
+      const toWrite = m ?? this.manifest();
+      writeProjectManifest(manifestPath, toWrite);
+      cachedManifest = toWrite;
+    },
+
+    manifestTolerant(): ManifestReadResult {
+      // readProjectManifestTolerant is the free function from ./manifest.js — see the
+      // naming note on writeManifest above; no alias needed for the same reason. Deliberately
+      // does NOT touch cachedManifest (neither read nor write) — see the cache-isolation
+      // note on the interface member.
+      return readProjectManifestTolerant(manifestPath);
+    },
+
+    reloadManifest(): C3ProjectManifest {
+      // readProjectManifest is the free function from ./manifest.js — see the naming
+      // note on writeManifest above; no alias needed for the same reason.
+      cachedManifest = readProjectManifest(manifestPath);
       return cachedManifest;
     },
 

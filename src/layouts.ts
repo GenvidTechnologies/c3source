@@ -1,5 +1,6 @@
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { writeC3JsonFile } from "./serialize.js";
 
 /**
  * Normalize line endings to LF (\n) for consistent output across platforms.
@@ -202,10 +203,11 @@ function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): num
   const content = readFileSync(layout_path, "utf-8");
   const layout = JSON.parse(content) as Layout;
   // The in-memory visitLayout owns the one traversal; the file wrapper only
-  // adds read/parse and the write-when-changed rule (tab indent to match C3).
+  // adds read/parse and the write-when-changed rule (writeC3JsonFile owns the
+  // canonical C3 project-source form: tab indent, no trailing newline).
   const changed = layout.layers ? visitLayout(layout, visitor) : 0;
   if (changed > 0) {
-    writeFileSync(layout_path, JSON.stringify(layout, undefined, "\t"));
+    writeC3JsonFile(layout_path, layout);
   }
   return changed;
 }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { find_all_files_path, isEditorLocalPath } from "./layouts.js";
+import { serializeC3Json, writeC3JsonFile } from "./serialize.js";
 
 // ─── Piece C: project.c3proj manifest model ──────────────────────────────────
 
@@ -102,56 +103,249 @@ export interface ManifestDrift {
 
 // ─── Private guards ───────────────────────────────────────────────────────────
 
-function assert(cond: unknown, msg: string): asserts cond {
-  if (!cond) throw new Error(`invalid project.c3proj: ${msg}`);
-}
-
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function assertOptionalName(v: Record<string, unknown>, where: string): void {
-  assert(v.name === undefined || typeof v.name === "string", `${where}.name must be a string when present`);
+/**
+ * One shape violation collected by {@link validateProjectManifest}. `path` is a
+ * dotted/indexed locator (e.g. `"layouts.items"`, `"usedAddons[0]"`, `""` for the root)
+ * that mirrors the `where` string the old throw-first asserts embedded in their message.
+ * `message` is the exact text `parseProjectManifest` throws AFTER the
+ * `"invalid project.c3proj: "` prefix — a hard compatibility surface (see
+ * `test/projectManifest.test.ts` / `test/usedAddons.test.ts`).
+ */
+export interface ManifestValidationIssue {
+  path: string;
+  rule: ManifestShapeRuleId;
+  message: string;
 }
 
-function assertNameFolder(v: unknown, where: string): asserts v is C3NameFolder {
-  assert(isRecord(v), `${where} must be an object`);
-  assert(Array.isArray(v.items) && v.items.every((i) => typeof i === "string"), `${where}.items must be string[]`);
-  assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
-  assertOptionalName(v, where);
-  v.subfolders.forEach((sf, i) => assertNameFolder(sf, `${where}.subfolders[${i}]`));
+/** Discriminates every distinct shape rule {@link validateProjectManifest} can report. */
+export type ManifestShapeRuleId =
+  | "top-level-object"
+  | "name-string"
+  | "runtime-string"
+  | "project-format-version-number"
+  | "saved-with-release-number"
+  | "name-folder-object"
+  | "name-folder-items"
+  | "name-folder-subfolders"
+  | "folder-name-string"
+  | "root-file-folders-object"
+  | "file-folder-object"
+  | "file-folder-items"
+  | "file-folder-subfolders"
+  | "file-entry-object"
+  | "file-entry-name"
+  | "file-entry-type"
+  | "file-entry-sid"
+  | "containers-array"
+  | "container-object"
+  | "container-members"
+  | "used-addons-array"
+  | "used-addon-object"
+  | "used-addon-type"
+  | "used-addon-id"
+  | "used-addon-name"
+  | "used-addon-author"
+  | "used-addon-bundled"
+  | "used-addon-version";
+
+function collectNameFolderIssues(v: unknown, where: string, issues: ManifestValidationIssue[]): void {
+  if (!isRecord(v)) {
+    issues.push({ path: where, rule: "name-folder-object", message: `${where} must be an object` });
+    return;
+  }
+  if (!(Array.isArray(v.items) && v.items.every((i) => typeof i === "string")))
+    issues.push({ path: `${where}.items`, rule: "name-folder-items", message: `${where}.items must be string[]` });
+  if (!Array.isArray(v.subfolders))
+    issues.push({
+      path: `${where}.subfolders`,
+      rule: "name-folder-subfolders",
+      message: `${where}.subfolders must be an array`,
+    });
+  // name is checked LAST (matches the pre-refactor assertNameFolder order) — do not reorder,
+  // see the emission-order invariant note on collectManifestIssues.
+  if (!(v.name === undefined || typeof v.name === "string"))
+    issues.push({
+      path: `${where}.name`,
+      rule: "folder-name-string",
+      message: `${where}.name must be a string when present`,
+    });
+  if (Array.isArray(v.subfolders))
+    v.subfolders.forEach((sf, i) => collectNameFolderIssues(sf, `${where}.subfolders[${i}]`, issues));
 }
 
-function assertFileFolder(v: unknown, where: string): asserts v is C3FileFolder {
-  assert(isRecord(v), `${where} must be an object`);
-  assert(Array.isArray(v.items), `${where}.items must be an array`);
-  v.items.forEach((it, i) => {
-    assert(isRecord(it), `${where}.items[${i}] must be an object`);
-    assert(typeof it.name === "string", `${where}.items[${i}].name must be a string`);
-    assert(typeof it.type === "string", `${where}.items[${i}].type must be a string`);
-    assert(typeof it.sid === "number", `${where}.items[${i}].sid must be a number`);
-  });
-  assert(Array.isArray(v.subfolders), `${where}.subfolders must be an array`);
-  assertOptionalName(v, where);
-  v.subfolders.forEach((sf, i) => assertFileFolder(sf, `${where}.subfolders[${i}]`));
+function collectFileFolderIssues(v: unknown, where: string, issues: ManifestValidationIssue[]): void {
+  if (!isRecord(v)) {
+    issues.push({ path: where, rule: "file-folder-object", message: `${where} must be an object` });
+    return;
+  }
+  if (!Array.isArray(v.items)) {
+    issues.push({ path: `${where}.items`, rule: "file-folder-items", message: `${where}.items must be an array` });
+  } else {
+    v.items.forEach((it, i) => {
+      const itWhere = `${where}.items[${i}]`;
+      if (!isRecord(it)) {
+        issues.push({ path: itWhere, rule: "file-entry-object", message: `${itWhere} must be an object` });
+        return;
+      }
+      if (typeof it.name !== "string")
+        issues.push({ path: `${itWhere}.name`, rule: "file-entry-name", message: `${itWhere}.name must be a string` });
+      if (typeof it.type !== "string")
+        issues.push({ path: `${itWhere}.type`, rule: "file-entry-type", message: `${itWhere}.type must be a string` });
+      if (typeof it.sid !== "number")
+        issues.push({ path: `${itWhere}.sid`, rule: "file-entry-sid", message: `${itWhere}.sid must be a number` });
+    });
+  }
+  if (!Array.isArray(v.subfolders))
+    issues.push({
+      path: `${where}.subfolders`,
+      rule: "file-folder-subfolders",
+      message: `${where}.subfolders must be an array`,
+    });
+  // name is checked LAST (matches the pre-refactor assertFileFolder order via assertOptionalName).
+  if (!(v.name === undefined || typeof v.name === "string"))
+    issues.push({
+      path: `${where}.name`,
+      rule: "folder-name-string",
+      message: `${where}.name must be a string when present`,
+    });
+  if (Array.isArray(v.subfolders))
+    v.subfolders.forEach((sf, i) => collectFileFolderIssues(sf, `${where}.subfolders[${i}]`, issues));
 }
 
-function assertContainer(v: unknown, where: string): asserts v is C3Container {
-  assert(isRecord(v), `${where} must be an object`);
-  assert(
-    Array.isArray(v.members) && v.members.every((mem) => typeof mem === "string"),
-    `${where}.members must be string[]`,
-  );
+function collectContainerIssues(v: unknown, where: string, issues: ManifestValidationIssue[]): void {
+  if (!isRecord(v)) {
+    issues.push({ path: where, rule: "container-object", message: `${where} must be an object` });
+    return;
+  }
+  if (!(Array.isArray(v.members) && v.members.every((mem) => typeof mem === "string")))
+    issues.push({ path: `${where}.members`, rule: "container-members", message: `${where}.members must be string[]` });
 }
 
-function assertUsedAddon(v: unknown, where: string): asserts v is C3UsedAddon {
-  assert(isRecord(v), `${where} must be an object`);
-  assert(typeof v.type === "string", `${where}.type must be a string`);
-  assert(typeof v.id === "string", `${where}.id must be a string`);
-  assert(typeof v.name === "string", `${where}.name must be a string`);
-  assert(typeof v.author === "string", `${where}.author must be a string`);
-  assert(typeof v.bundled === "boolean", `${where}.bundled must be a boolean`);
-  assert(v.version === undefined || typeof v.version === "string", `${where}.version must be a string when present`);
+function collectUsedAddonIssues(v: unknown, where: string, issues: ManifestValidationIssue[]): void {
+  if (!isRecord(v)) {
+    issues.push({ path: where, rule: "used-addon-object", message: `${where} must be an object` });
+    return;
+  }
+  if (typeof v.type !== "string")
+    issues.push({ path: `${where}.type`, rule: "used-addon-type", message: `${where}.type must be a string` });
+  if (typeof v.id !== "string")
+    issues.push({ path: `${where}.id`, rule: "used-addon-id", message: `${where}.id must be a string` });
+  if (typeof v.name !== "string")
+    issues.push({ path: `${where}.name`, rule: "used-addon-name", message: `${where}.name must be a string` });
+  if (typeof v.author !== "string")
+    issues.push({ path: `${where}.author`, rule: "used-addon-author", message: `${where}.author must be a string` });
+  if (typeof v.bundled !== "boolean")
+    issues.push({
+      path: `${where}.bundled`,
+      rule: "used-addon-bundled",
+      message: `${where}.bundled must be a boolean`,
+    });
+  if (!(v.version === undefined || typeof v.version === "string"))
+    issues.push({
+      path: `${where}.version`,
+      rule: "used-addon-version",
+      message: `${where}.version must be a string when present`,
+    });
+}
+
+/**
+ * Walk a raw JSON value and collect every project.c3proj shape violation, NEVER throwing.
+ *
+ * EMISSION-ORDER INVARIANT (do not reorder without re-auditing `parseProjectManifest`'s
+ * strict callers): `issues[0]` must always be the SAME violation the pre-refactor
+ * sequential `assert*` family would have thrown first, for every input — not just the
+ * pinned test cases. Concretely: top-level `isRecord` → `name` → `runtime` →
+ * `projectFormatVersion` → `savedWithRelease`, then `NAME_SECTIONS` in array order, then
+ * `rootFileFolders` in `Object.keys(C3_ROOT_FILE_FOLDERS)` order, then `containers`, then
+ * `usedAddons`. Within a name/file-folder node: `isRecord` → `items` → `subfolders` →
+ * `name` LAST → recurse subfolders by index — the old `assertNameFolder`/`assertFileFolder`
+ * checked `name` AFTER items/subfolders; do not "tidy" that into checking `name` first, or
+ * a doubly-malformed input silently throws a different message than before.
+ *
+ * `parseProjectManifest` is the strict caller that depends on this: it throws using only
+ * `issues[0]`, so a reordering here changes which message a malformed manifest reports.
+ *
+ * Every recursive step is gated on its corresponding array/record check having already
+ * passed (e.g. `subfolders` is only walked when `Array.isArray(v.subfolders)`), because —
+ * unlike a throw-first assert — this collector keeps walking past a failed check and must
+ * never crash with a raw TypeError, for any input whatsoever.
+ */
+function collectManifestIssues(json: unknown): ManifestValidationIssue[] {
+  const issues: ManifestValidationIssue[] = [];
+
+  if (!isRecord(json)) {
+    issues.push({ path: "", rule: "top-level-object", message: "top-level value must be an object" });
+    return issues;
+  }
+  if (typeof json.name !== "string")
+    issues.push({ path: "name", rule: "name-string", message: "name must be a string" });
+  if (typeof json.runtime !== "string")
+    issues.push({ path: "runtime", rule: "runtime-string", message: "runtime must be a string" });
+  if (typeof json.projectFormatVersion !== "number")
+    issues.push({
+      path: "projectFormatVersion",
+      rule: "project-format-version-number",
+      message: "projectFormatVersion must be a number",
+    });
+  if (typeof json.savedWithRelease !== "number")
+    issues.push({
+      path: "savedWithRelease",
+      rule: "saved-with-release-number",
+      message: "savedWithRelease must be a number",
+    });
+
+  for (const sec of NAME_SECTIONS) if (sec in json) collectNameFolderIssues(json[sec], sec, issues);
+
+  if ("rootFileFolders" in json) {
+    const rff = json.rootFileFolders;
+    if (!isRecord(rff)) {
+      issues.push({
+        path: "rootFileFolders",
+        rule: "root-file-folders-object",
+        message: "rootFileFolders must be an object",
+      });
+    } else {
+      for (const cat of Object.keys(C3_ROOT_FILE_FOLDERS))
+        if (cat in rff) collectFileFolderIssues(rff[cat], `rootFileFolders.${cat}`, issues);
+    }
+  }
+
+  if ("containers" in json) {
+    if (!Array.isArray(json.containers)) {
+      issues.push({ path: "containers", rule: "containers-array", message: "containers must be an array" });
+    } else {
+      json.containers.forEach((c, i) => collectContainerIssues(c, `containers[${i}]`, issues));
+    }
+  }
+
+  if ("usedAddons" in json) {
+    if (!Array.isArray(json.usedAddons)) {
+      issues.push({ path: "usedAddons", rule: "used-addons-array", message: "usedAddons must be an array" });
+    } else {
+      json.usedAddons.forEach((a, i) => collectUsedAddonIssues(a, `usedAddons[${i}]`, issues));
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * Validate a raw JSON value against the `project.c3proj` shape rules, returning every
+ * violation found. Detection-only: it NEVER throws, and returns `[]` for a well-formed
+ * manifest (cf. `validateForEditor` in `src/eventSheets.ts` — the same detect-don't-throw
+ * pattern one level up the stack).
+ *
+ * A one-line wrapper over {@link collectManifestIssues}: by construction it cannot
+ * diverge from the strict path {@link parseProjectManifest} uses (`issues[0]` is exactly
+ * what the strict parser throws), which is the entire point of keeping the shape rules in
+ * one collector.
+ */
+export function validateProjectManifest(json: unknown): ManifestValidationIssue[] {
+  return collectManifestIssues(json);
 }
 
 const NAME_SECTIONS = [
@@ -230,32 +424,106 @@ export const IMAGES_FOLDER = "images";
  * Unmodeled top-level fields pass through.
  */
 export function parseProjectManifest(json: unknown): C3ProjectManifest {
-  assert(isRecord(json), "top-level value must be an object");
-  assert(typeof json.name === "string", "name must be a string");
-  assert(typeof json.runtime === "string", "runtime must be a string");
-  assert(typeof json.projectFormatVersion === "number", "projectFormatVersion must be a number");
-  assert(typeof json.savedWithRelease === "number", "savedWithRelease must be a number");
-  for (const sec of NAME_SECTIONS) if (sec in json) assertNameFolder(json[sec], sec);
-  if ("rootFileFolders" in json) {
-    const rff = json.rootFileFolders;
-    assert(isRecord(rff), "rootFileFolders must be an object");
-    for (const cat of Object.keys(C3_ROOT_FILE_FOLDERS))
-      if (cat in rff) assertFileFolder(rff[cat], `rootFileFolders.${cat}`);
-  }
-  if ("containers" in json) {
-    assert(Array.isArray(json.containers), "containers must be an array");
-    json.containers.forEach((c, i) => assertContainer(c, `containers[${i}]`));
-  }
-  if ("usedAddons" in json) {
-    assert(Array.isArray(json.usedAddons), "usedAddons must be an array");
-    json.usedAddons.forEach((a, i) => assertUsedAddon(a, `usedAddons[${i}]`));
-  }
+  const issues = collectManifestIssues(json);
+  if (issues.length > 0) throw new Error(`invalid project.c3proj: ${issues[0].message}`);
   return json as unknown as C3ProjectManifest;
 }
 
 /** Read and parse a project.c3proj file. Source-folder disk content is NOT consulted. */
 export function readProjectManifest(manifestPath: string): C3ProjectManifest {
   return parseProjectManifest(JSON.parse(readFileSync(manifestPath, "utf-8")));
+}
+
+// ─── Tolerant reader ──────────────────────────────────────────────────────────
+
+/**
+ * Result of {@link parseProjectManifestTolerant} / {@link readProjectManifestTolerant}:
+ * the manifest paired with every shape violation `validateProjectManifest` found in it.
+ */
+export interface ManifestReadResult {
+  /** The document itself — the SAME object passed in / parsed, never a clone or projection. */
+  manifest: C3ProjectManifest;
+  issues: ManifestValidationIssue[];
+}
+
+/**
+ * Parse a raw JSON value as a C3ProjectManifest WITHOUT throwing on shape violations —
+ * the tolerant counterpart to {@link parseProjectManifest}. Intended for read-only and
+ * repair paths: the manifests most in need of repair are precisely the ones most likely
+ * to be field-level incomplete (a missing `savedWithRelease`, a `usedAddons` entry missing
+ * `author`), and a strict reader that refuses to open them has the wrong failure mode
+ * there. Strict (`parseProjectManifest`) remains the default; this is an opt-in, not a
+ * loosening of it. For standalone detection without a document, see
+ * {@link validateProjectManifest}. Callers that want to tolerate only SOME rules can filter
+ * `issues` by `rule` (e.g. ignore `"saved-with-release-number"` but still act on everything
+ * else) — a "tolerant except these rules" pattern.
+ *
+ * There is exactly ONE documented throw here: a non-object top level (`42`, `null`, `[]`,
+ * …) still throws `invalid project.c3proj: top-level value must be an object`, matching
+ * `parseProjectManifest`'s message exactly. There is no document to hand back in that case,
+ * and returning `{} as C3ProjectManifest` would be a lie — tolerance is about field-level
+ * shape, not "is this a manifest at all".
+ *
+ * The returned `manifest` is the SAME object passed in — no clone, no spread — so a caller
+ * that mutates it in place and later calls `serializeProjectManifest`/`writeProjectManifest`
+ * keeps the byte-fidelity guarantee those functions document.
+ */
+export function parseProjectManifestTolerant(json: unknown): ManifestReadResult {
+  if (!isRecord(json)) throw new Error("invalid project.c3proj: top-level value must be an object");
+  return { manifest: json as unknown as C3ProjectManifest, issues: collectManifestIssues(json) };
+}
+
+/**
+ * Read and JSON.parse a project.c3proj file, then delegate to
+ * {@link parseProjectManifestTolerant}. Source-folder disk content is NOT consulted.
+ *
+ * I/O errors (e.g. `ENOENT`) and `SyntaxError` from a malformed JSON file propagate
+ * UNCHANGED — the second documented throw exception here, deliberately not wrapped: these
+ * are I/O and syntax failures, not shape failures, and tolerance is scoped to shape only. A
+ * caller that wants to own them composes `parseProjectManifestTolerant(JSON.parse(text))`
+ * itself.
+ */
+export function readProjectManifestTolerant(manifestPath: string): ManifestReadResult {
+  return parseProjectManifestTolerant(JSON.parse(readFileSync(manifestPath, "utf-8")));
+}
+
+// ─── Serializer ───────────────────────────────────────────────────────────────
+
+/**
+ * Serialize a manifest to the canonical `project.c3proj` on-disk form: tab-indented,
+ * with NO trailing newline (see {@link serializeC3Json}).
+ *
+ * Does NOT validate — call `validateProjectManifest(m)` first if you need the gate.
+ *
+ * Returned as a **string**, separately from {@link writeProjectManifest}, because a
+ * caller that needs different write mechanics — an atomic rename, suppressing a file
+ * watcher during the write, or a policy that preserves whatever trailing newline the
+ * original file happened to have — composes that on top of this string. That policy is
+ * caller-side and deliberately NOT built in here.
+ *
+ * **Byte-fidelity caveat.** Round-tripping a manifest byte-for-byte depends on
+ * {@link parseProjectManifest} having returned the parsed object BY IDENTITY and the
+ * caller mutating it IN PLACE. Rebuilding the manifest via nested object spreads (e.g.
+ * `{ ...m, layouts: { ...m.layouts, items: [...] } }`) reorders keys and loses any
+ * unmodeled field not explicitly copied — it will not reproduce the original bytes.
+ */
+export function serializeProjectManifest(m: C3ProjectManifest): string {
+  return serializeC3Json(m);
+}
+
+/**
+ * Write a manifest to `manifestPath` in the canonical `project.c3proj` on-disk form
+ * (see {@link serializeProjectManifest}), utf-8.
+ *
+ * Does NOT validate — call `validateProjectManifest(m)` first if you need the gate.
+ *
+ * **Byte-fidelity caveat.** As with {@link serializeProjectManifest}: round-tripping
+ * byte-for-byte depends on the manifest object having been mutated IN PLACE from a
+ * `parseProjectManifest`/`readProjectManifest` result, not rebuilt via object spreads,
+ * which reorders keys and drops unmodeled fields.
+ */
+export function writeProjectManifest(manifestPath: string, m: C3ProjectManifest): void {
+  writeC3JsonFile(manifestPath, m);
 }
 
 // ─── Flatteners ───────────────────────────────────────────────────────────────
@@ -325,8 +593,8 @@ export function walkManifestNameTree(
   unnamedSubfolderName?: string,
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const name of folder.items) out.push({ name, path: basePath });
-  for (const sub of folder.subfolders) {
+  for (const name of Array.isArray(folder.items) ? folder.items : []) out.push({ name, path: basePath });
+  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
     // Nameless subfolder contributes no segment, UNLESS unnamedSubfolderName names it
     // (the timelines/transitions exception). Not propagated → top-level children only.
     const effectiveName = sub.name ?? unnamedSubfolderName;
@@ -347,8 +615,8 @@ export function walkManifestFileTree(
   basePath: ManifestPathSegment[] = [],
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const entry of folder.items) out.push({ name: entry.name, path: basePath });
-  for (const sub of folder.subfolders) {
+  for (const entry of Array.isArray(folder.items) ? folder.items : []) out.push({ name: entry.name, path: basePath });
+  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
     const childPath = sub.name !== undefined ? [...basePath, sub.name] : basePath;
     out.push(...walkManifestFileTree(sub, childPath));
   }
@@ -546,8 +814,8 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
   if (rff)
     for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
       const folder = rff[cat as keyof C3RootFileFolders];
-      const declared = folder ? walkManifestFileTree(folder) : [];
-      const onDisk = folder
+      const declared = isRecord(folder) ? walkManifestFileTree(folder) : [];
+      const onDisk = isRecord(folder)
         ? walkDiskFileTree(path.join(projectDir, folderName), folder.subfolders)
         : walkDiskFileTree(path.join(projectDir, folderName), []);
       const entries = diffNameMaps(declared, onDisk);
@@ -576,7 +844,7 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
   const objectTypeNames = new Set(m.objectTypes ? walkManifestNameTree(m.objectTypes).map((e) => e.name) : []);
   const entries: DriftEntry[] = [];
   m.containers.forEach((container, i) => {
-    for (const member of container.members)
+    for (const member of Array.isArray(container.members) ? container.members : [])
       if (!objectTypeNames.has(member)) entries.push({ kind: "dangling-ref", name: member, manifestPath: [`#${i}`] });
   });
   return entries;

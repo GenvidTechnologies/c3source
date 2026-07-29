@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   parseProjectManifest,
   readProjectManifest,
+  validateProjectManifest,
   collectManifestItemNames,
   collectManifestFileNames,
   detectManifestDrift,
@@ -20,9 +21,14 @@ import {
   diffNameMaps,
   formatManifestPath,
   type C3ProjectManifest,
+  type C3NameFolder,
+  type C3FileFolder,
+  type ManifestDrift,
   type SectionDrift,
+  type ManifestShapeRuleId,
+  type ManifestValidationIssue,
 } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath, makeTempProject } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
@@ -596,5 +602,198 @@ describe("F4: image-derived drift", () => {
     // Manifest drift must still be clean (JPEGTileBackground + LevelMaps wired into project.c3proj)
     const manifestDrift = detectManifestDrift(FIXTURE_DIR);
     expect(manifestDrift.inSync).to.equal(true);
+  });
+});
+
+describe("walkers tolerate a malformed manifest (#58)", () => {
+  // A minimal well-formed skeleton so tests can override just the section under test.
+  const emptyFolder = (): C3NameFolder => ({ items: [], subfolders: [] });
+  const emptyFileFolder = (): C3FileFolder => ({ items: [], subfolders: [] });
+  const rootFileFoldersSkeleton = (): C3ProjectManifest["rootFileFolders"] => ({
+    script: emptyFileFolder(),
+    sound: emptyFileFolder(),
+    music: emptyFileFolder(),
+    video: emptyFileFolder(),
+    font: emptyFileFolder(),
+    icon: emptyFileFolder(),
+    general: emptyFileFolder(),
+  });
+
+  it("T13-1: collectManifestItemNames on a folder with non-array items/subfolders returns [] without throwing", () => {
+    const malformed = { items: 123, subfolders: undefined } as unknown as C3NameFolder;
+    expect(() => collectManifestItemNames(malformed)).to.not.throw();
+    expect(collectManifestItemNames(malformed)).to.deep.equal([]);
+  });
+
+  it("T13-2: collectManifestFileNames on a folder with non-array items/subfolders returns [] without throwing", () => {
+    const malformed = { items: 123, subfolders: undefined } as unknown as C3FileFolder;
+    expect(() => collectManifestFileNames(malformed)).to.not.throw();
+    expect(collectManifestFileNames(malformed)).to.deep.equal([]);
+  });
+
+  it("T13-3: detectManifestDrift tolerates a container with a non-array members field without throwing", () => {
+    const manifest = {
+      objectTypes: emptyFolder(),
+      layouts: emptyFolder(),
+      eventSheets: emptyFolder(),
+      timelines: emptyFolder(),
+      flowcharts: emptyFolder(),
+      families: emptyFolder(),
+      models3d: emptyFolder(),
+      containers: [{ members: "not-an-array" }],
+      rootFileFolders: rootFileFoldersSkeleton(),
+    } as unknown as C3ProjectManifest;
+    const projectDir = makeTempProject(manifest);
+    let drift: ManifestDrift | undefined;
+    expect(() => {
+      drift = detectManifestDrift(projectDir, manifest);
+    }).to.not.throw();
+    expect(drift).to.be.an("object");
+    expect(drift!.sections).to.be.an("array");
+  });
+
+  it("T13-4: detectManifestDrift tolerates a truthy non-object rootFileFolders category without throwing", () => {
+    const manifest = {
+      objectTypes: emptyFolder(),
+      layouts: emptyFolder(),
+      eventSheets: emptyFolder(),
+      timelines: emptyFolder(),
+      flowcharts: emptyFolder(),
+      families: emptyFolder(),
+      models3d: emptyFolder(),
+      containers: [],
+      rootFileFolders: { ...rootFileFoldersSkeleton(), script: "oops" },
+    } as unknown as C3ProjectManifest;
+    const projectDir = makeTempProject(manifest);
+    let drift: ManifestDrift | undefined;
+    expect(() => {
+      drift = detectManifestDrift(projectDir, manifest);
+    }).to.not.throw();
+    expect(drift).to.be.an("object");
+    expect(drift!.sections).to.be.an("array");
+  });
+});
+
+describe("validateProjectManifest — shape validation (#58)", () => {
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
+  /** Every literal member of ManifestShapeRuleId, kept as a runtime value for T12's membership check. */
+  const ALL_RULE_IDS: readonly ManifestShapeRuleId[] = [
+    "top-level-object",
+    "name-string",
+    "runtime-string",
+    "project-format-version-number",
+    "saved-with-release-number",
+    "name-folder-object",
+    "name-folder-items",
+    "name-folder-subfolders",
+    "folder-name-string",
+    "root-file-folders-object",
+    "file-folder-object",
+    "file-folder-items",
+    "file-folder-subfolders",
+    "file-entry-object",
+    "file-entry-name",
+    "file-entry-type",
+    "file-entry-sid",
+    "containers-array",
+    "container-object",
+    "container-members",
+    "used-addons-array",
+    "used-addon-object",
+    "used-addon-type",
+    "used-addon-id",
+    "used-addon-name",
+    "used-addon-author",
+    "used-addon-bundled",
+    "used-addon-version",
+  ];
+
+  /** T3 table: one entry per malformed clone. `mutate` mutates a fresh parse of the fixture in place. */
+  const T3_CASES: Array<{ label: string; mutate: (bad: Record<string, any>) => void }> = [
+    // Reused from the existing R-C9/R-C10/R-C18/R-C19 strict tests.
+    { label: "R-C9 reuse: layouts.items not string[]", mutate: (bad) => (bad.layouts.items = [123]) },
+    {
+      label: "R-C10 reuse: a file entry's sid is not a number",
+      mutate: (bad) => (bad.rootFileFolders.script.items[0].sid = "x"),
+    },
+    {
+      label: "R-C18 reuse: a subfolder name is present but not a string",
+      mutate: (bad) => (bad.objectTypes.subfolders[0].name = 123),
+    },
+    {
+      label: "R-C19 reuse: a container's members are not all strings",
+      mutate: (bad) => (bad.containers[0].members = ["ok", 7]),
+    },
+    // New: file-folder shape not yet covered by an existing strict test.
+    { label: "rootFileFolders is not an object", mutate: (bad) => (bad.rootFileFolders = "oops") },
+    { label: "rootFileFolders.script is not an object", mutate: (bad) => (bad.rootFileFolders.script = "oops") },
+    {
+      label: "rootFileFolders.script.items is not an array",
+      mutate: (bad) => (bad.rootFileFolders.script.items = "oops"),
+    },
+    {
+      label: "rootFileFolders.script.subfolders is not an array",
+      mutate: (bad) => (bad.rootFileFolders.script.subfolders = "oops"),
+    },
+    {
+      label: "a rootFileFolders.script file entry is not an object",
+      mutate: (bad) => (bad.rootFileFolders.script.items[0] = "oops"),
+    },
+    // New: container shape.
+    { label: "containers is not an array", mutate: (bad) => (bad.containers = "oops") },
+    { label: "a containers entry is not an object", mutate: (bad) => (bad.containers[0] = "oops") },
+    // New: used-addon shape.
+    { label: "usedAddons is not an array", mutate: (bad) => (bad.usedAddons = "oops") },
+    { label: "a usedAddons entry is not an object", mutate: (bad) => (bad.usedAddons[0] = "oops") },
+    {
+      label: "usedAddons[0].bundled is not a boolean",
+      mutate: (bad) => (bad.usedAddons[0].bundled = "yes"),
+    },
+  ];
+
+  it(`T3: ${T3_CASES.length} malformed clones — parseProjectManifest's throw message equals the prefix plus validateProjectManifest(bad)[0].message`, () => {
+    expect(T3_CASES.length).to.be.at.least(12);
+    for (const { label, mutate } of T3_CASES) {
+      const bad = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+      mutate(bad);
+      const issues = validateProjectManifest(bad);
+      expect(issues.length, label).to.be.greaterThan(0);
+      let thrown: unknown;
+      try {
+        parseProjectManifest(bad);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown, label).to.be.instanceOf(Error);
+      expect((thrown as Error).message, label).to.equal(`invalid project.c3proj: ${issues[0].message}`);
+    }
+  });
+
+  it("T4: two simultaneous violations emit issues in the pinned NAME_SECTIONS-before-usedAddons order", () => {
+    const bad = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+    bad.layouts.items = [123]; // name-folder-items, via layouts (first NAME_SECTIONS entry)
+    bad.usedAddons[0].bundled = "yes"; // used-addon-bundled, emitted last (usedAddons is checked last)
+
+    const issues = validateProjectManifest(bad);
+    expect(issues.map((i) => i.rule)).to.deep.equal(["name-folder-items", "used-addon-bundled"]);
+
+    expect(() => parseProjectManifest(bad)).to.throw(/layouts\.items must be string\[\]/);
+  });
+
+  it("T12: every issue across every T3 case satisfies the path/message and rule-membership invariants", () => {
+    const allIssues: ManifestValidationIssue[] = [];
+    for (const { mutate } of T3_CASES) {
+      const bad = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+      mutate(bad);
+      allIssues.push(...validateProjectManifest(bad));
+    }
+    expect(allIssues.length).to.be.greaterThan(0);
+    for (const issue of allIssues) {
+      expect(issue.path === "" || issue.message.startsWith(issue.path), JSON.stringify(issue)).to.equal(true);
+      expect(ALL_RULE_IDS.includes(issue.rule), JSON.stringify(issue)).to.equal(true);
+    }
   });
 });

@@ -8,10 +8,10 @@ Each entry should be a one-line description. Only list docs that exist.
 ## Project context
 
 - `../CLAUDE.md` — overview, commands, architecture, formatting & CI conventions
-- `design-patterns.md` — reusable patterns (single-source event counter, thin file-walker wrappers, real-export-vs-inline test strategy)
+- `design-patterns.md` — reusable patterns (single-source event counter, thin file-walker wrappers, real-export-vs-inline test strategy, collect-then-throw-first validation)
 - `api-guide.md` — usage reference for SID traversal and editor-local classification; links to manifest/drift doc
-- `api-guide-manifest.md` — project manifest model, drift detection types, walk primitives, and 0.x migration (#19 #21)
-- `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation (#36)
+- `api-guide-manifest.md` — project manifest model, strict vs tolerant parsing, shape validation, canonical serialization/writing, drift detection types, walk primitives, and 0.x migration (#19 #21 #57 #58)
+- `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation, manifest write surface + write-through cache rule (#36 #57 #58)
 - `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
 - `api-guide-addons.md` — addon domain layer: usedAddons manifest support, addon attribution (behaviorTypes/effectTypes), findAllAddons, readAddonPackage, parseAcesModel/parseAddonMetadata (#44)
 
@@ -34,3 +34,5 @@ Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.
 - `decisions/0013-fflate-dependency-c3addon-reader.md` — depend on `fflate` for `.c3addon` zip reading, partially revising 0001's no-runtime-deps stance (#44)
 - `decisions/0014-sdk-submodule-recursive-ci-checkout.md` — keep the Construct Addon SDK submodule read-only; recursive CI checkout via the shared workflow's `submodules` input (#49 #50)
 - `decisions/0015-canonical-c3-reference-fixture.md` — adopt standalone `construct3-sample` as the canonical, tag-pinned-submodule C3 reference fixture; c3source validates, it does not own (#51)
+- `decisions/0016-c3-source-json-serialization-form.md` — c3source owns the C3 source-JSON write form (tab indent, no trailing newline); new `src/serialize.ts` leaf, `C3Project` write surface, write-through-never-invalidate cache rule (#57)
+- `decisions/0017-tolerant-manifest-read.md` — lenient `project.c3proj` parse plus collected `ManifestValidationIssue[]`; strict stays default; shared shape-rule collector; write path stays deliberately un-gated (#58)
