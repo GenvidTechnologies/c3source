@@ -18,10 +18,18 @@ cross-reference comment between them — exactly the "duplicated platform fact"
 category [ADR 0008](0008-c3-domain-fact-tables.md) exists to close.
 
 The domain fact was checked against the real corpus before being encoded: of the
-38 `.json`/`.c3proj` files in the canonical `construct3-sample` fixture, 12 are
+29 `.json`/`.c3proj` files in the canonical `construct3-sample` fixture, 3 are
 editor-local (skipped) and 26 are project source; **25 of those 26** satisfy
 `serializeC3Json(JSON.parse(text)) === text`, and **none** ends with a newline.
 The one exception is documented below rather than silently absorbed.
+
+**2026-07-29:** the total/skipped counts above were originally measured against
+a locally polluted checkout — `scripts/prep-fixture.mjs` copies the submodule's
+working tree rather than only its tracked content, so gitignored editor-local
+files present in a developer's checkout leak into the corpus (a hermetic fix is
+tracked as a follow-up issue). Every leaked file is editor-local by
+construction, so the **26**/**25 of those 26** figures above were unaffected
+and needed no correction.
 
 See [ADR 0017](0017-tolerant-manifest-read.md) for the sibling decision this one
 feeds: 0017's conclusion to leave the manifest *write* path unvalidated depends on
