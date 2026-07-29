@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   openProject,
   readProjectManifest,
+  writeC3JsonFile,
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
   PROJECT_MANIFEST_FILE,
@@ -16,8 +17,9 @@ import {
   detectManifestDrift,
   detectImageDrift,
   type C3Project,
+  type C3ProjectManifest,
 } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath, makeTempProject } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 
@@ -490,5 +492,105 @@ describe("openProject — new findAll*() methods (OP-64 to OP-72)", () => {
   it("OP-72: IMAGES_FOLDER is exported as a string with value 'images'", () => {
     expect(typeof IMAGES_FOLDER).to.equal("string");
     expect(IMAGES_FOLDER).to.equal("images");
+  });
+});
+
+// ─── F4: writeManifest / manifestTolerant / reloadManifest (T14-T19) ─────────
+//
+// All of these write real bytes, so they use makeTempProject (P4) rather than the
+// gitignored, upstream-owned test/fixtures/canonical/ — never write malformed or
+// throwaway manifests there.
+
+/** A minimal manifest satisfying every collectManifestIssues-required top-level field. */
+function minimalManifest(name: string): C3ProjectManifest {
+  return {
+    name,
+    runtime: "c3",
+    projectFormatVersion: 1,
+    savedWithRelease: 187,
+  } as unknown as C3ProjectManifest;
+}
+
+describe("openProject — write surface exists and construction stays I/O-free (T14)", () => {
+  it("T14: openProject on a non-existent path does not throw; all three new methods exist; construction touches no disk", () => {
+    const missingRoot = path.join(tmpdir(), `c3source-missing-${Date.now()}`);
+    let proj: C3Project | undefined;
+    expect(() => {
+      proj = openProject(missingRoot);
+    }).to.not.throw();
+    expect(proj!.writeManifest).to.be.a("function");
+    expect(proj!.manifestTolerant).to.be.a("function");
+    expect(proj!.reloadManifest).to.be.a("function");
+  });
+});
+
+describe("openProject — writeManifest() write-through cache (T15, T16, T17)", () => {
+  it("T15: writeManifest() with no argument writes the cached manifest in place; a fresh handle sees the change; original handle keeps referential identity", () => {
+    const root = makeTempProject(minimalManifest("Original"));
+    const proj = openProject(root);
+    const m = proj.manifest();
+    m.name = "Mutated";
+    proj.writeManifest();
+
+    const fresh = openProject(root).manifest();
+    expect(fresh.name).to.equal("Mutated");
+
+    // The original handle's manifest() still returns the exact same object by reference.
+    expect(proj.manifest()).to.equal(m);
+  });
+
+  it("T16: writeManifest(m2) with a different object makes manifest() return m2 by reference", () => {
+    const root = makeTempProject(minimalManifest("First"));
+    const proj = openProject(root);
+    proj.manifest(); // populates the cache with the original parsed object
+
+    const m2 = minimalManifest("Second");
+    proj.writeManifest(m2);
+
+    expect(proj.manifest()).to.equal(m2);
+  });
+
+  it("T17: a failing write (circular reference) throws, and manifest() afterward still returns the pre-write object", () => {
+    const root = makeTempProject(minimalManifest("Stable"));
+    const proj = openProject(root);
+    const original = proj.manifest();
+
+    const circular: Record<string, unknown> = { ...minimalManifest("Circular") };
+    circular.self = circular; // makes JSON.stringify throw during serialization
+
+    expect(() => proj.writeManifest(circular as unknown as C3ProjectManifest)).to.throw();
+    expect(proj.manifest()).to.equal(original);
+  });
+});
+
+describe("openProject — manifestTolerant() cannot poison the strict cache (T18)", () => {
+  it("T18: manifestTolerant() succeeds on a manifest missing savedWithRelease, but manifest() still throws afterward", () => {
+    const bad = { name: "Bad", runtime: "c3", projectFormatVersion: 1 } as unknown as C3ProjectManifest;
+    const root = makeTempProject(bad);
+    const proj = openProject(root);
+
+    let result: ReturnType<C3Project["manifestTolerant"]> | undefined;
+    expect(() => {
+      result = proj.manifestTolerant();
+    }).to.not.throw();
+    expect(result!.issues.map((i) => i.rule)).to.include("saved-with-release-number");
+
+    // The tolerant read must never have populated the strict cache — this call still throws.
+    expect(() => proj.manifest()).to.throw(/invalid project\.c3proj/);
+  });
+});
+
+describe("openProject — reloadManifest() (T19)", () => {
+  it("T19: reloadManifest() picks up an out-of-band rewrite of project.c3proj", () => {
+    const root = makeTempProject(minimalManifest("Before"));
+    const proj = openProject(root);
+    proj.manifest(); // populates the cache with the old value
+
+    // Bypass the handle entirely — simulates an external editor/tool rewriting the file.
+    writeC3JsonFile(path.join(root, PROJECT_MANIFEST_FILE), minimalManifest("After"));
+
+    const reloaded = proj.reloadManifest();
+    expect(reloaded.name).to.equal("After");
+    expect(proj.manifest()).to.equal(reloaded);
   });
 });
