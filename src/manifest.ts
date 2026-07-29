@@ -434,6 +434,59 @@ export function readProjectManifest(manifestPath: string): C3ProjectManifest {
   return parseProjectManifest(JSON.parse(readFileSync(manifestPath, "utf-8")));
 }
 
+// ─── Tolerant reader ──────────────────────────────────────────────────────────
+
+/**
+ * Result of {@link parseProjectManifestTolerant} / {@link readProjectManifestTolerant}:
+ * the manifest paired with every shape violation `validateProjectManifest` found in it.
+ */
+export interface ManifestReadResult {
+  /** The document itself — the SAME object passed in / parsed, never a clone or projection. */
+  manifest: C3ProjectManifest;
+  issues: ManifestValidationIssue[];
+}
+
+/**
+ * Parse a raw JSON value as a C3ProjectManifest WITHOUT throwing on shape violations —
+ * the tolerant counterpart to {@link parseProjectManifest}. Intended for read-only and
+ * repair paths: the manifests most in need of repair are precisely the ones most likely
+ * to be field-level incomplete (a missing `savedWithRelease`, a `usedAddons` entry missing
+ * `author`), and a strict reader that refuses to open them has the wrong failure mode
+ * there. Strict (`parseProjectManifest`) remains the default; this is an opt-in, not a
+ * loosening of it. For standalone detection without a document, see
+ * {@link validateProjectManifest}. Callers that want to tolerate only SOME rules can filter
+ * `issues` by `rule` (e.g. ignore `"saved-with-release-number"` but still act on everything
+ * else) — a "tolerant except these rules" pattern.
+ *
+ * There is exactly ONE documented throw here: a non-object top level (`42`, `null`, `[]`,
+ * …) still throws `invalid project.c3proj: top-level value must be an object`, matching
+ * `parseProjectManifest`'s message exactly. There is no document to hand back in that case,
+ * and returning `{} as C3ProjectManifest` would be a lie — tolerance is about field-level
+ * shape, not "is this a manifest at all".
+ *
+ * The returned `manifest` is the SAME object passed in — no clone, no spread — so a caller
+ * that mutates it in place and later calls `serializeProjectManifest`/`writeProjectManifest`
+ * keeps the byte-fidelity guarantee those functions document.
+ */
+export function parseProjectManifestTolerant(json: unknown): ManifestReadResult {
+  if (!isRecord(json)) throw new Error("invalid project.c3proj: top-level value must be an object");
+  return { manifest: json as unknown as C3ProjectManifest, issues: collectManifestIssues(json) };
+}
+
+/**
+ * Read and JSON.parse a project.c3proj file, then delegate to
+ * {@link parseProjectManifestTolerant}. Source-folder disk content is NOT consulted.
+ *
+ * I/O errors (e.g. `ENOENT`) and `SyntaxError` from a malformed JSON file propagate
+ * UNCHANGED — the second documented throw exception here, deliberately not wrapped: these
+ * are I/O and syntax failures, not shape failures, and tolerance is scoped to shape only. A
+ * caller that wants to own them composes `parseProjectManifestTolerant(JSON.parse(text))`
+ * itself.
+ */
+export function readProjectManifestTolerant(manifestPath: string): ManifestReadResult {
+  return parseProjectManifestTolerant(JSON.parse(readFileSync(manifestPath, "utf-8")));
+}
+
 // ─── Serializer ───────────────────────────────────────────────────────────────
 
 /**
