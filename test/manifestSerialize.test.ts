@@ -7,6 +7,7 @@ import {
   C3_JSON_INDENT,
   serializeC3Json,
   isEditorLocalPath,
+  isMinifiedSourcePath,
   readProjectManifest,
   serializeProjectManifest,
   writeProjectManifest,
@@ -22,8 +23,10 @@ const rel = (f: string): string => path.relative(FIXTURE_DIR, f).split(path.sep)
 
 /** The one documented brush-serialization exception (#57 design, resolved #59): C3
  *  writes `*.brush.json` minified. It IS C3 project source — not editor-local —
- *  it is just a second, minified serialization form. Excluded by exact path here;
- *  a general `isMinifiedSourcePath` domain-fact predicate lands in a follow-up task. */
+ *  it is just a second, minified serialization form. This literal is still the
+ *  expected discovered set (kept for a precise, readable failure diff), but T7
+ *  below now also proves it bidirectionally against the `isMinifiedSourcePath`
+ *  domain fact (`src/serialize.ts`) rather than trusting this list alone. */
 const MINIFIED_SOURCE_FILES = ["tilemapBrushes/objectTypes/tiles/Tilemap.brush.json"];
 
 /**
@@ -105,6 +108,26 @@ describe("serializeC3Json — canonical fixture corpus round-trip", () => {
       const text = readFileSync(file, "utf-8");
       expect(text.endsWith("\n"), `${file} must not end with a trailing newline`).to.equal(false);
       if (serializeC3Json(JSON.parse(text)) !== text) nonRoundTripping.push(rel(file));
+
+      // Direction 2 (#59): every kept file the fact *claims* is minified must really
+      // be byte-exact minified JSON — stronger than merely "differs from the tab
+      // form", so the fact cannot over-claim a file that just happens not to
+      // round-trip for some other reason.
+      if (isMinifiedSourcePath(path.basename(file))) {
+        expect(
+          JSON.stringify(JSON.parse(text)),
+          `${rel(file)} is classified minified-source by isMinifiedSourcePath but is not byte-exact minified JSON`,
+        ).to.equal(text);
+      }
+    }
+
+    // Direction 1 (#59): every discovered non-round-tripping file must be explained
+    // by the domain fact — catches a newly-minified file the fact does not cover.
+    for (const file of nonRoundTripping) {
+      expect(
+        isMinifiedSourcePath(path.basename(file)),
+        `${file} does not round-trip but isMinifiedSourcePath does not classify it as known minified source`,
+      ).to.equal(true);
     }
 
     expect(nonRoundTripping.sort()).to.deep.equal(MINIFIED_SOURCE_FILES);

@@ -28,6 +28,20 @@ describe("isEditorLocalPath", () => {
     expect(isEditorLocalPath("my-tsconfig.json")).to.equal(false);
     expect(isEditorLocalPath("tsconfig.base.json")).to.equal(false);
   });
+
+  // R9 (#59, ADR 0018): executable lock on the rejected design alternative
+  // ("Fork A"). #59 originally proposed widening this classifier's
+  // `fileSuffixes` with ".brush.json" — rejected because this predicate
+  // answers a **provenance** question (is this file C3 source, or editor-local
+  // scratch state?), not a serialization-form question, and brush files *are*
+  // source, merely minified (see `isMinifiedSourcePath` in `src/serialize.ts`).
+  // If a future change reintroduces that widening, this assertion catches it:
+  // every consumer following `docs/api-guide.md`'s documented
+  // `!isEditorLocalPath(name)` filter would then silently drop hand-authored,
+  // non-derivable tilemap brush data instead of treating it as source.
+  it("R9: returns false for a .brush.json file — brush files are minified source, not editor-local (ADR 0018)", () => {
+    expect(isEditorLocalPath("Tilemap.brush.json")).to.equal(false);
+  });
 });
 
 describe("EDITOR_LOCAL_EXCLUSIONS", () => {

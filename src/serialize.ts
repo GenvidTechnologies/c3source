@@ -5,8 +5,8 @@ import { writeFileSync } from "node:fs";
  * single tab character per indent level. Verified against real C3 exports (r487,
  * r495): for every non-editor-local `.json`/`.c3proj` file in the canonical
  * `construct3-sample` fixture, `serializeC3Json(JSON.parse(text)) === text`
- * (25 of 26 — the one exception is `*.brush.json`, which C3 writes minified; see
- * {@link serializeC3Json}).
+ * (25 of 26 — the one exception is `*.brush.json`, a minified-source file; see
+ * {@link isMinifiedSourcePath} and {@link serializeC3Json}).
  */
 export const C3_JSON_INDENT = "\t";
 
@@ -18,13 +18,19 @@ export const C3_JSON_INDENT = "\t";
  * **Evidence.** Verified against real C3 exports (r487, r495): for every
  * non-editor-local JSON file in the canonical fixture (`construct3-sample`),
  * `serializeC3Json(JSON.parse(text)) === text` (25 of 26; the single named
- * exception is `*.brush.json`, which C3 writes **minified** — a documented,
- * not a general, exception).
+ * exception is `*.brush.json`, a documented minified-source file — see
+ * {@link isMinifiedSourcePath}).
  *
  * **Non-goal.** This is NOT the form for C3-**editor-local** files
- * (`*.uistate.json`, files under `uistate/`, `*.brush.json` — see
- * {@link isEditorLocalPath}) — C3 writes those minified. c3source never writes
- * editor-local files, so that form is deliberately un-owned here.
+ * (`*.uistate.json`, files under `uistate/` — the classifier for those lives
+ * in `src/layouts.ts`'s `isEditorLocalPath`, which this leaf module does not
+ * import). C3 writes `*.uistate.json` minified, but provenance and form are
+ * **orthogonal**, not implied by each other in either direction: C3 also
+ * writes editor-local `uistate/*.instancesBar.json` files tab-indented, and it
+ * writes the project-**source** `*.brush.json` files minified (see
+ * {@link isMinifiedSourcePath}). c3source never writes editor-local files, so
+ * their form is deliberately un-owned here regardless of which form a given
+ * editor-local file happens to take.
  *
  * **No BOM.** This serializer never writes one, and C3 does not write one in
  * project source. `src/addons.ts`'s `stripBom`/`UTF8_BOM` exist for a wholly
