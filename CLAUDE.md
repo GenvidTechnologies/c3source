@@ -66,10 +66,10 @@ log freely.
 
 Logic is split across six per-area modules — `src/serialize.ts`,
 `src/layouts.ts`, `src/eventSheets.ts`, `src/manifest.ts`, `src/addons.ts`,
-`src/project.ts` — imported in an acyclic DAG (`serialize` and `layouts` are
-the two leaves — `serialize` imports nothing from the package; `eventSheets`,
-`manifest`, and `addons` import only `layouts`, with `manifest` additionally
-importing `serialize` for its write path; `project` imports all of the above).
+`src/project.ts` — imported in an acyclic DAG. `serialize` is the sole leaf
+(it imports nothing from the package); `layouts` imports only `serialize`;
+`eventSheets` and `addons` import only `layouts`; `manifest` imports `layouts`
+plus `serialize` (for its write path); `project` imports all of the above.
 `src/c3source.ts` is now a thin internal re-export barrel over the six
 (`export *` from each, in DAG order — serialize, layouts, eventSheets,
 manifest, addons, project); `src/index.ts` is unchanged and still re-exports
@@ -78,7 +78,7 @@ See [ADR 0012](docs/decisions/0012-per-area-module-split.md) for the split
 rationale (it supersedes the module-layout half of [ADR
 0001](docs/decisions/0001-single-module-esm-library.md)); [ADR
 0016](docs/decisions/0016-c3-source-json-serialization-form.md) adds
-`serialize` as the newest leaf. The `.js`
+`serialize` beneath `layouts` as the new leaf. The `.js`
 extension on intra-package imports is required — the project is ESM
 (`"type": "module"`, `NodeNext` resolution). The package `main`/`types`/`exports` point at the built
 `dist/*.js` and `dist/*.d.ts` — the same artifacts the `files` allowlist
