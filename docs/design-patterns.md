@@ -194,6 +194,59 @@ release, updating `C3FileFolder.subfolders` in the manifest model (and ensuring
 the manifest file carries the `name` field) is sufficient — both walk functions
 already handle the recursive case.
 
+## Collect-then-throw-first
+
+Two independent validators in this codebase share the same shape: a private
+recursive rule walk collects every violation into a flat list and never
+throws or short-circuits, so a detection-only caller gets *every* issue, not
+just the first one found.
+
+- `EDITOR_FIELD_RULES`/`validateForEditor` (`src/eventSheets.ts`, [ADR
+  0009](decisions/0009-editor-strict-validation.md)) — the C3 editor loader's
+  required-field set. Detection-only today; no strict/throwing sibling is
+  built on it yet.
+- `collectManifestIssues`/`validateProjectManifest` (`src/manifest.ts`, [ADR
+  0017](decisions/0017-tolerant-manifest-read.md)) — `project.c3proj` shape
+  rules. This one goes a step further: the same collector backs *both* a
+  strict, throwing entry point and a tolerant one, and neither can drift from
+  the other because there is only one collector deciding what counts as a
+  violation:
+
+  ```ts
+  export function validateProjectManifest(json: unknown): ManifestValidationIssue[] {
+    return collectManifestIssues(json); // detection-only, never throws
+  }
+
+  export function parseProjectManifest(json: unknown): C3ProjectManifest {
+    const issues = collectManifestIssues(json);
+    if (issues.length > 0) throw new Error(`invalid project.c3proj: ${issues[0].message}`);
+    return json as unknown as C3ProjectManifest;
+  }
+  ```
+
+  `parseProjectManifestTolerant` is the third caller: it returns *all* of
+  `issues` alongside the document instead of throwing on the first one.
+
+**The emission-order invariant.** Because the strict path throws
+`issues[0]`, the collector's walk order is load-bearing, not incidental:
+`issues[0]` must always be the *same* violation a pre-refactor sequential
+`assert*`-style check would have thrown first, for every input — not just the
+pinned test cases. Concretely (for the manifest collector): top-level shape →
+top-level fields in declaration order → each section in table order → each
+node's own fields in a fixed order, with a folder/entry's own `name` checked
+**last** (after its `items`/`subfolders`), matching the old assert order. This
+is easy to "tidy" — e.g. checking `name` first because it reads naturally at
+the top of the node — which would silently change which message a
+doubly-malformed input reports, without failing any test that only checks
+`issues.length` or a single-violation fixture. When adding a new rule to the
+manifest collector, insert it in the position that preserves the existing
+first-violation-for-every-input behavior, and prove it withstands both a
+message-regex test suite passing unedited and an exactly-empty
+`scripts/api-surface.mjs` diff (value-and-type pair) if the change is meant to
+be a pure internal refactor. (`EDITOR_FIELD_RULES` has no throwing consumer
+today, so it has no equivalent invariant to preserve — but it would gain one
+the day a strict wrapper is added.)
+
 ## Testing: real-export ground truth + inline legibility
 
 Schema-fidelity facts ("which fields does C3 actually write?", "what are a

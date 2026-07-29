@@ -112,11 +112,14 @@ state and are not cached; call them at the point you need to branch on presence.
 
 ```ts
 project.manifest(): C3ProjectManifest
+project.writeManifest(m?: C3ProjectManifest): void
+project.manifestTolerant(): ManifestReadResult
+project.reloadManifest(): C3ProjectManifest
 ```
 
-Reads and parses `project.c3proj` on the first call, then returns the same
-cached instance on every subsequent call. Throws on I/O or parse failure (same
-as `readProjectManifest`).
+`manifest()` reads and parses `project.c3proj` on the first call, then returns
+the same cached instance on every subsequent call. Throws on I/O or parse
+failure (same as `readProjectManifest`).
 
 ```ts
 const m = project.manifest();
@@ -124,6 +127,54 @@ console.log(m.name);             // "my-game"
 console.log(m.savedWithRelease); // e.g. 48700
 console.log(m.layouts.items);    // ["Main", "Battle", …]
 ```
+
+**The cache rule: write-through, never invalidate.** `writeManifest(m?)`
+writes `m` (or, called with no argument, the manifest `manifest()` already
+has cached) via `writeProjectManifest`, and only *after* the write has
+actually succeeded does it become the handle's cached manifest:
+
+```ts
+// Read-mutate-write, using the cache directly:
+const m = project.manifest();
+m.usedAddons?.[0] && (m.usedAddons[0].version = "2.0.0");
+project.writeManifest(); // writes the cached m, then re-affirms the cache
+
+// Or write an explicit document:
+project.writeManifest(m); // writes m, then makes m the cached manifest
+```
+
+A throw during serialization or the write itself leaves both the on-disk file
+and the cache untouched — the same "a throw is not memoized" property
+`manifest()` already has. Like `serializeProjectManifest`/`writeProjectManifest`,
+`writeManifest` does **not** validate — see [api-guide-manifest.md —
+Serialization & writing](api-guide-manifest.md#serialization--writing) for the
+validate-first recipe and the dual-writer (close-the-C3-editor) hazard.
+
+The handle deliberately does **not** invalidate its cache on a successful
+write. The seemingly more obvious rule — write, then drop the cache so the
+next `manifest()` re-reads fresh — is a trap for a document obtained
+*tolerantly*: invalidating would force that next read to go through
+`readProjectManifest` **strictly**, so writing back a tolerantly-read,
+partially-repaired manifest would turn a successful repair into a crash on the
+very next `manifest()` call. Write-through avoids this: the cache simply
+becomes whatever was actually written, valid or not. See [ADR
+0016](decisions/0016-c3-source-json-serialization-form.md) for the full
+rationale.
+
+`manifestTolerant()` delegates to `readProjectManifestTolerant` and is
+**cache-isolated in both directions** — it always reads fresh from disk and
+never populates or consumes `manifest()`'s cache. This is deliberate: caching
+the tolerant read's document here would let a later `manifest()` call
+silently hand back an unvalidated document instead of validating strictly,
+defeating the reason the two reads are kept separate. See
+[api-guide-manifest.md — Parsing](api-guide-manifest.md#parsing) for
+`ManifestReadResult`'s shape.
+
+`reloadManifest()` is the cache's one true invalidation path: it discards
+whatever is cached and re-reads `manifestPath` strictly via
+`readProjectManifest`, caching and returning the fresh result. Reach for it
+when something outside this handle — another tool, the C3 editor, a manual
+edit — may have changed `project.c3proj` since it was last cached.
 
 ## File finders
 

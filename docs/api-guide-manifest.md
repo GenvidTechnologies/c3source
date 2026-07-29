@@ -7,6 +7,8 @@ APIs see [api-guide.md](api-guide.md).
 - [Types](#types)
 - [Mapping tables](#mapping-tables)
 - [Parsing](#parsing)
+- [Validation](#validation)
+- [Serialization & writing](#serialization--writing)
 - [Flatteners](#flatteners)
 - [Drift detection](#drift-detection)
 - [Migrating from 0.x](#migrating-from-0x)
@@ -127,16 +129,24 @@ is wrong for your project, open an issue.
 
 ## Parsing
 
-```ts
-parseProjectManifest(json: unknown): C3ProjectManifest
-readProjectManifest(manifestPath: string): C3ProjectManifest
-```
+There are two parse paths, sharing one shape-rule collector under the hood so
+neither can drift from the other (see [ADR
+0017](decisions/0017-tolerant-manifest-read.md)) — pick strict or tolerant per
+call site, not per project:
 
-`readProjectManifest` reads the file at `manifestPath` and delegates to
-`parseProjectManifest`. Both throw `Error("invalid project.c3proj: …")` on
-shape violations. Absent modeled sections (e.g. `layouts` missing entirely) are
-tolerated and treated as empty. Unmodeled top-level fields pass through
-unchanged.
+| | Strict (default) | Tolerant (opt-in) |
+|---|---|---|
+| From a parsed value | `parseProjectManifest(json: unknown): C3ProjectManifest` | `parseProjectManifestTolerant(json: unknown): ManifestReadResult` |
+| From a file path | `readProjectManifest(manifestPath: string): C3ProjectManifest` | `readProjectManifestTolerant(manifestPath: string): ManifestReadResult` |
+| On a shape violation | Throws `Error("invalid project.c3proj: …")` using the **first** violation found | Never throws for a shape violation — returns every violation in `issues` |
+| Absent modeled section (e.g. no `layouts`) | Tolerated, treated as empty (both paths) | Tolerated, treated as empty (both paths) |
+| Unmodeled top-level fields | Pass through unchanged (both paths) | Pass through unchanged (both paths) |
+
+`readProjectManifest`/`readProjectManifestTolerant` read the file at
+`manifestPath` and delegate to their `parse*` counterpart. Strict remains the
+default and unaffected by the tolerant path's existence — every existing
+`parseProjectManifest`/`readProjectManifest` caller keeps throwing exactly the
+same message it always did.
 
 ```ts
 import { readProjectManifest } from "@genvidtech/c3source";
@@ -146,6 +156,124 @@ console.log(m.name);             // "my-game"
 console.log(m.savedWithRelease); // e.g. 48700
 console.log(m.layouts.items);    // ["Main", "Battle", …]
 ```
+
+**Two documented throw exceptions in tolerant mode** — tolerance is scoped to
+*field-level shape*, not "is this a manifest at all", and not I/O:
+
+1. A non-object top level (`42`, `null`, `[]`, …) still throws
+   `invalid project.c3proj: top-level value must be an object` — there is no
+   document to hand back.
+2. `readProjectManifestTolerant` propagates `ENOENT` and `SyntaxError`
+   unchanged, exactly like `readProjectManifest`. A caller that wants to own
+   these composes `parseProjectManifestTolerant(JSON.parse(text))` itself.
+
+```ts
+import { readProjectManifestTolerant } from "@genvidtech/c3source";
+
+const { manifest, issues } = readProjectManifestTolerant("./my-game/project.c3proj");
+if (issues.length > 0) {
+  console.warn(`project.c3proj has ${issues.length} shape issue(s):`, issues);
+}
+console.log(manifest.name); // present even when issues.length > 0
+```
+
+`manifest`/`m.usedAddons[0]`/etc. from either the strict or tolerant path is
+**the same object that was parsed — never cloned or projected**, so mutating
+it in place and passing it to `writeProjectManifest` keeps the round-trip
+byte-fidelity described under [Serialization & writing](#serialization--writing).
+
+## Validation
+
+```ts
+validateProjectManifest(json: unknown): ManifestValidationIssue[]
+```
+
+Detection-only — never throws, and returns `[]` for a well-formed manifest
+(the same detect-don't-throw shape as `validateForEditor` in
+`src/eventSheets.ts`, one level up the stack). It is the standalone building
+block both parse paths above share: `parseProjectManifest` throws using
+`issues[0]`; `parseProjectManifestTolerant` returns all of `issues` alongside
+the document.
+
+```ts
+interface ManifestValidationIssue {
+  path: string;              // e.g. "usedAddons[0].author", "" for the root
+  rule: ManifestShapeRuleId; // discriminates every distinct shape check
+  message: string;           // the exact text parseProjectManifest throws
+                              // after the "invalid project.c3proj: " prefix
+}
+```
+
+`ManifestShapeRuleId` is a string-literal union with one id per shape check
+(e.g. `"saved-with-release-number"`, `"used-addon-author"`, `"file-entry-sid"`)
+— see `src/manifest.ts` for the full list. It is what turns "tolerant" into
+"tolerant *except these rules*": filter `issues` by `rule` to decide which
+violations to act on and which to ignore.
+
+```ts
+import { readProjectManifestTolerant } from "@genvidtech/c3source";
+
+const IGNORED_RULES = new Set(["saved-with-release-number", "used-addon-author"]);
+
+const { manifest, issues } = readProjectManifestTolerant("./my-game/project.c3proj");
+const actionable = issues.filter((i) => !IGNORED_RULES.has(i.rule));
+
+if (actionable.length > 0) {
+  throw new Error(`project.c3proj has unrepairable issues: ${actionable.map((i) => i.message).join("; ")}`);
+}
+// A missing savedWithRelease or usedAddons[].author is tolerated; everything else fails fast.
+```
+
+## Serialization & writing
+
+```ts
+serializeProjectManifest(m: C3ProjectManifest): string
+writeProjectManifest(manifestPath: string, m: C3ProjectManifest): void
+```
+
+Serialize (or serialize-and-write) a manifest in the canonical `project.c3proj`
+on-disk form: **tab-indented, and — the inverse of the usual text-file
+convention — with no trailing newline.** This is a C3 domain fact, not a
+c3source style choice: checked against the canonical `construct3-sample`
+fixture, 25 of the 26 non-editor-local `.json`/`.c3proj` files satisfy
+`serializeC3Json(JSON.parse(text)) === text`, and **none** ends with a
+newline. (The one exception, `*.brush.json`, is minified by C3 and out of
+scope — see [ADR 0016](decisions/0016-c3-source-json-serialization-form.md).)
+
+```ts
+import { readProjectManifest, writeProjectManifest } from "@genvidtech/c3source";
+
+const m = readProjectManifest("./my-game/project.c3proj");
+m.usedAddons?.[0] && (m.usedAddons[0].version = "2.0.0");
+writeProjectManifest("./my-game/project.c3proj", m);
+```
+
+**Does not validate.** Neither function calls `validateProjectManifest` —
+call it yourself first if you need a write-safety gate:
+
+```ts
+const issues = validateProjectManifest(m);
+if (issues.length > 0) throw new Error(`refusing to write an invalid manifest: ${issues[0].message}`);
+writeProjectManifest(manifestPath, m);
+```
+
+This is deliberate, not an oversight: a validating writer would reject exactly
+the repair workflow tolerant reads exist for — writing back a manifest that
+was read tolerantly, partially fixed, and still doesn't fully conform. See
+[ADR 0017](decisions/0017-tolerant-manifest-read.md).
+
+**Byte-fidelity caveat.** Round-tripping a manifest byte-for-byte depends on
+`m` being the **same object, mutated in place**, that a `parse*`/`read*` call
+returned — not a rebuild via nested object spreads. `{ ...m, layouts: {
+...m.layouts, items: [...] } }` reorders keys and drops any unmodeled field
+not explicitly copied; it will not reproduce the original bytes. Prefer
+in-place mutation (`m.layouts.items.push(...)`) when byte-fidelity matters.
+
+> [!WARNING]
+> **Dual-writer hazard.** Close the project in the **C3 editor** before
+> writing `project.c3proj` externally. If the project is open, the editor's
+> own next save clobbers your write — c3source cannot detect or prevent this;
+> it is a caveat of writing a file the editor also owns, not a code defect.
 
 ## Flatteners
 

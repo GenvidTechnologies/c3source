@@ -64,17 +64,21 @@ log freely.
 
 ## Architecture
 
-Logic is split across five per-area modules — `src/layouts.ts`,
-`src/eventSheets.ts`, `src/manifest.ts`, `src/addons.ts`, `src/project.ts` —
-imported in an acyclic DAG (`layouts` is the leaf; `eventSheets`, `manifest`,
-and `addons` import only `layouts`; `project` imports all four).
-`src/c3source.ts` is now a thin internal re-export barrel over the five
-(`export *` from each, in DAG order — layouts, eventSheets, manifest, addons,
-project); `src/index.ts` is unchanged and still re-exports it (`export * from
-"./c3source.js"`), so the public API surface did not move. See [ADR
-0012](docs/decisions/0012-per-area-module-split.md) for the split rationale
-(it supersedes the module-layout half of [ADR
-0001](docs/decisions/0001-single-module-esm-library.md)). The `.js`
+Logic is split across six per-area modules — `src/serialize.ts`,
+`src/layouts.ts`, `src/eventSheets.ts`, `src/manifest.ts`, `src/addons.ts`,
+`src/project.ts` — imported in an acyclic DAG (`serialize` and `layouts` are
+the two leaves — `serialize` imports nothing from the package; `eventSheets`,
+`manifest`, and `addons` import only `layouts`, with `manifest` additionally
+importing `serialize` for its write path; `project` imports all of the above).
+`src/c3source.ts` is now a thin internal re-export barrel over the six
+(`export *` from each, in DAG order — serialize, layouts, eventSheets,
+manifest, addons, project); `src/index.ts` is unchanged and still re-exports
+it (`export * from "./c3source.js"`), so the public API surface did not move.
+See [ADR 0012](docs/decisions/0012-per-area-module-split.md) for the split
+rationale (it supersedes the module-layout half of [ADR
+0001](docs/decisions/0001-single-module-esm-library.md)); [ADR
+0016](docs/decisions/0016-c3-source-json-serialization-form.md) adds
+`serialize` as the newest leaf. The `.js`
 extension on intra-package imports is required — the project is ESM
 (`"type": "module"`, `NodeNext` resolution). The package `main`/`types`/`exports` point at the built
 `dist/*.js` and `dist/*.d.ts` — the same artifacts the `files` allowlist
@@ -135,6 +139,18 @@ Three functional areas:
    **Project manifest** (in `src/manifest.ts`) — the `project.c3proj` file in the project root (folder
    format only; not the single-file archive) is modeled by `C3ProjectManifest`
    and parsed strictly by `parseProjectManifest(json)`/`readProjectManifest(path)`.
+   The tolerant counterpart, `parseProjectManifestTolerant(json)`/
+   `readProjectManifestTolerant(path)`, returns a `ManifestReadResult:
+   {manifest, issues}` instead of throwing on shape violations — `manifest` is
+   the same object by identity (never cloned), `issues` is every violation
+   `validateProjectManifest(json): ManifestValidationIssue[]` (the standalone,
+   never-throwing detector) found. Both the strict and tolerant paths are thin
+   callers of one private collector, so a shape rule is added once and neither
+   path can drift from the other; the serializer (`serializeProjectManifest(m)`
+   / `writeProjectManifest(path, m)`, built on the new `src/serialize.ts` leaf)
+   completes the round trip. See [ADR
+   0017](docs/decisions/0017-tolerant-manifest-read.md) and [ADR
+   0016](docs/decisions/0016-c3-source-json-serialization-form.md).
    Mapping tables `C3_SECTION_FOLDERS` and `C3_ROOT_FILE_FOLDERS` map manifest
    section keys to on-disk folder names. `collectManifestItemNames`/`collectManifestFileNames`
    are thin consumers of the canonical walks `walkManifestNameTree`/`walkManifestFileTree`
@@ -162,8 +178,13 @@ Three functional areas:
    a direct child). `detectManifestDrift` passes it for `section === "timelines"` so a
    timeline-with-transitions project round-trips without false `moved`/`folder-*` drift (#28).
    The model itself stays faithful (the subfolder stays unnamed — the synthetic name lives only
-   in the drift comparison, never written back); c3source owns no manifest writer, so emitting
-   the unnamed form on sync is the consumer's job.
+   in the drift comparison, never written back); c3source now owns the manifest serializer and
+   writer (`serializeProjectManifest`/`writeProjectManifest`, ADR 0016), but emitting the unnamed
+   `timelines/transitions` form correctly **remains the consumer's job**, because the model keeps
+   the subfolder nameless by design. This is *more* load-bearing now that writing is possible: a
+   naive sync that materializes the synthetic name (e.g. writing back `TIMELINE_TRANSITIONS_FOLDER`
+   as an actual `name` field) corrupts the manifest — that was previously a read-only observation,
+   now a real write hazard.
    **Image-derived drift** — `detectImageDrift(projectDir)` is a best-effort sub-detector that
    `detectManifestDrift` appends to its sections (wrapped in try/catch — a throw degrades to
    "images section omitted", never failing core drift). Unlike the manifest walks it **ignores
@@ -200,6 +221,20 @@ Three functional areas:
    The exported constants `PROJECT_MANIFEST_FILE = "project.c3proj"` (#36) and
    `IMAGES_FOLDER` (#38) are also defined here as C3 domain facts.
    The free functions remain exported and unchanged — the handle is additive.
+   **Write surface** (#57, #58) — `writeManifest(m?)` writes `m` (or, with no
+   argument, the already-cached manifest) via `writeProjectManifest`, and only
+   *after* the write succeeds assigns `cachedManifest = m`: a **write-through,
+   never-invalidate** cache rule, not the more obvious write-then-drop-cache.
+   Invalidating would force the next `manifest()` to re-read strictly, which
+   turns a successful repair of a `manifestTolerant()` document into a crash on
+   the very next read — write-through has no such trap. `manifestTolerant()`
+   delegates to `readProjectManifestTolerant`, always reading fresh from disk
+   and touching `cachedManifest` in **neither** direction (isolated on read
+   *and* write), so a tolerant peek can never leak an unvalidated document into
+   `manifest()`'s cache. `reloadManifest()` is the cache's one true invalidation
+   path — it discards `cachedManifest` and re-reads `manifestPath` strictly.
+   See [ADR 0016](docs/decisions/0016-c3-source-json-serialization-form.md) for
+   the write-through rationale.
 
 2. **Event sheet extraction** (in `src/eventSheets.ts`) — `extractScriptsFromSheet` does a depth-first
    walk that mirrors **C3's own event numbering** (groups, blocks,
@@ -348,9 +383,13 @@ Three functional areas:
    for that coverage to actually run. See
    [api-guide-addons.md](docs/api-guide-addons.md) for the full reference.
 
-All file writes serialize JSON with **tab indentation** to match C3's format,
-and text from expressions/comments is run through `normalizeLineEndings` (CRLF
--> LF) for cross-platform stability.
+All file writes go through `src/serialize.ts`'s `serializeC3Json`/
+`writeC3JsonFile` (`C3_JSON_INDENT = "\t"`) — the single owner of the C3
+source-JSON write form: **tab-indented, and — the inverse of the usual
+text-file convention — with no trailing newline**. Text from
+expressions/comments is run through `normalizeLineEndings` (CRLF -> LF) for
+cross-platform stability. See [ADR
+0016](docs/decisions/0016-c3-source-json-serialization-form.md).
 
 ## Canonical reference fixture (`construct3-sample`)
 
