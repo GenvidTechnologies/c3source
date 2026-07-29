@@ -128,4 +128,20 @@ describe("visit_layers_in_layouts (file walker)", () => {
     });
     expect(found).to.include("Main Layout.layer 0");
   });
+
+  it("writes bytes through writeC3JsonFile's canonical form: tab-indented, no trailing newline", () => {
+    const file = path.join(dir, "Layout 1.json");
+    const original: Layout = { name: "L", layers: [{ name: "A" }] };
+    writeFileSync(file, JSON.stringify(original));
+    const count = visit_layers_in_layouts(dir, (layer) => {
+      layer.name = "A-mutated";
+      return 1; // report a change so the write actually fires
+    });
+    expect(count).to.equal(1);
+    const expected: Layout = { name: "L", layers: [{ name: "A-mutated" }] };
+    const rewritten = readFileSync(file, "utf-8");
+    expect(rewritten).to.equal(JSON.stringify(expected, undefined, "\t"));
+    expect(rewritten.endsWith("\n")).to.equal(false);
+    expect(rewritten).to.include("\t");
+  });
 });
