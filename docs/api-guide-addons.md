@@ -206,10 +206,13 @@ unzips eagerly at construction (`fflate`'s `unzipSync` — see
 top-level only (addon.json/aces.json are always top-level, so nested
 zip-internal paths are out of scope). Throws if `source` does not exist.
 
-**BOM handling.** Real C3 addon exports write a leading UTF-8
-byte-order-mark on some package entries (observed on `aces.json`, not on
-`addon.json`, in SDK samples) — a raw `JSON.parse` rejects that leading
-byte. `readText`/`readJson` strip it automatically via:
+**BOM handling.** Some `.c3addon` package entries carry a leading UTF-8
+byte-order-mark (observed on `aces.json`, not on `addon.json`, in the SDK
+samples) — and a raw `JSON.parse` rejects that leading byte. This is not
+something C3 emits: addons are hand-authored by third-party developers, so a
+BOM reflects whichever text editor that author used, and it is unpredictable
+per file and per addon. `readText`/`readJson` therefore strip it
+unconditionally via:
 
 ```ts
 const UTF8_BOM = "﻿";

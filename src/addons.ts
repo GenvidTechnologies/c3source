@@ -84,10 +84,17 @@ export function findAllAddons(dir: string): string[] {
 // ─── .c3addon package reading ───────────────────────────────────────────────
 
 /**
- * The UTF-8 byte-order-mark character. C3's own addon-authoring tooling writes
- * a leading BOM on some (not all) files inside a `.c3addon` package — observed
- * on `aces.json` but not `addon.json` in SDK samples — so readers must tolerate
- * it. C3 r487-pinned fact, owned here (cf. {@link C3ADDON_EXTENSION}).
+ * The UTF-8 byte-order-mark character. Some (not all) files inside a `.c3addon`
+ * package carry a leading BOM — observed on `aces.json` but not `addon.json` in
+ * the Scirra SDK samples — so readers must tolerate it.
+ *
+ * Unlike {@link C3ADDON_EXTENSION}, this is **not** a version-pinned C3 fact.
+ * C3 neither authors nor generates addons: a `.c3addon` is hand-written by a
+ * third-party developer, so the BOM is an artifact of whichever text editor
+ * that author used (several Windows editors add one by default). It is
+ * therefore unpredictable per file and per addon — which is precisely why
+ * every read goes through {@link stripBom} rather than an allowlist of
+ * known-BOM'd entries.
  */
 export const UTF8_BOM = "﻿";
 

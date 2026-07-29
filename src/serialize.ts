@@ -26,10 +26,11 @@ export const C3_JSON_INDENT = "\t";
  * {@link isEditorLocalPath}) — C3 writes those minified. c3source never writes
  * editor-local files, so that form is deliberately un-owned here.
  *
- * **No BOM.** Unlike `src/addons.ts`'s `stripBom`/`UTF8_BOM` — which exist
- * because a *different* C3 tool, the addon-authoring pipeline, sometimes emits
- * a leading UTF-8 BOM on `.c3addon` package entries — this serializer never
- * adds one; that is a distinct producer with a distinct convention.
+ * **No BOM.** This serializer never writes one, and C3 does not write one in
+ * project source. `src/addons.ts`'s `stripBom`/`UTF8_BOM` exist for a wholly
+ * different producer: `.c3addon` packages are hand-authored by third-party
+ * addon developers, so a leading BOM on one of their JSON entries reflects
+ * whichever text editor that author happened to use — not any C3 behavior.
  *
  * **Caller contract.** `value` must be JSON-serializable.
  * `JSON.stringify(undefined)` returns `undefined`, **not a string** — passing

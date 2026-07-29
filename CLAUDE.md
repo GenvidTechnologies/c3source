@@ -364,10 +364,14 @@ Three functional areas:
    modes share one `entryNames`/`hasEntry`/`readBytes`/`readText`/`readJson`
    interface and one BOM-strip + decode path. The domain facts
    `ADDON_MANIFEST_FILE = "addon.json"` and `ADDON_ACES_FILE = "aces.json"`
-   name the two package entries; `UTF8_BOM`/`stripBom` exist because C3's
-   addon-authoring tooling writes a leading UTF-8 BOM on some package files
-   (observed on `aces.json`, not `addon.json`, in real SDK samples) that
-   readers must tolerate.
+   name the two package entries; `UTF8_BOM`/`stripBom` exist because some
+   package files carry a leading UTF-8 BOM (observed on `aces.json`, not
+   `addon.json`, in real SDK samples) that readers must tolerate. That BOM is
+   **not** a C3 behavior and is not version-pinned: C3 neither authors nor
+   generates addons — a `.c3addon` is hand-written by a third-party developer,
+   so the BOM is an artifact of that author's text editor and is unpredictable
+   per file and per addon. Hence stripping unconditionally on every read rather
+   than allowlisting known-BOM'd entries.
    **ACE model** — `parseAcesModel(json)`/`parseAddonMetadata(json)` are pure
    parsers behind the reader's pre-read-JSON boundary (they take an
    already-parsed value, never a path, so they stay testable without
