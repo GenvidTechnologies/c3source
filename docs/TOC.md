@@ -8,10 +8,10 @@ Each entry should be a one-line description. Only list docs that exist.
 ## Project context
 
 - `../CLAUDE.md` — overview, commands, architecture, formatting & CI conventions
-- `design-patterns.md` — reusable patterns (single-source event counter, thin file-walker wrappers, real-export-vs-inline test strategy)
+- `design-patterns.md` — reusable patterns (single-source event counter, thin file-walker wrappers, real-export-vs-inline test strategy, collect-then-throw-first validation)
 - `api-guide.md` — usage reference for SID traversal and editor-local classification; links to manifest/drift doc
-- `api-guide-manifest.md` — project manifest model, drift detection types, walk primitives, and 0.x migration (#19 #21)
-- `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation (#36)
+- `api-guide-manifest.md` — project manifest model, strict vs tolerant parsing, shape validation, canonical serialization/writing, drift detection types, walk primitives, and 0.x migration (#19 #21 #57 #58)
+- `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation, manifest write surface + write-through cache rule (#36 #57 #58)
 - `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
 - `api-guide-addons.md` — addon domain layer: usedAddons manifest support, addon attribution (behaviorTypes/effectTypes), findAllAddons, readAddonPackage, parseAcesModel/parseAddonMetadata (#44)
 
