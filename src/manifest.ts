@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { find_all_files_path, isEditorLocalPath } from "./layouts.js";
+import { serializeC3Json, writeC3JsonFile } from "./serialize.js";
 
 // ─── Piece C: project.c3proj manifest model ──────────────────────────────────
 
@@ -107,24 +108,21 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * One shape violation collected by {@link collectManifestIssues}. `path` is a
+ * One shape violation collected by {@link validateProjectManifest}. `path` is a
  * dotted/indexed locator (e.g. `"layouts.items"`, `"usedAddons[0]"`, `""` for the root)
  * that mirrors the `where` string the old throw-first asserts embedded in their message.
  * `message` is the exact text `parseProjectManifest` throws AFTER the
  * `"invalid project.c3proj: "` prefix — a hard compatibility surface (see
  * `test/projectManifest.test.ts` / `test/usedAddons.test.ts`).
- *
- * PRIVATE for now — not exported until a later step re-introduces it as tolerant-read
- * public surface; this commit is a pure internal refactor with no new public exports.
  */
-interface ManifestValidationIssue {
+export interface ManifestValidationIssue {
   path: string;
   rule: ManifestShapeRuleId;
   message: string;
 }
 
-/** Discriminates every distinct shape rule {@link collectManifestIssues} can report. */
-type ManifestShapeRuleId =
+/** Discriminates every distinct shape rule {@link validateProjectManifest} can report. */
+export type ManifestShapeRuleId =
   | "top-level-object"
   | "name-string"
   | "runtime-string"
@@ -335,6 +333,21 @@ function collectManifestIssues(json: unknown): ManifestValidationIssue[] {
   return issues;
 }
 
+/**
+ * Validate a raw JSON value against the `project.c3proj` shape rules, returning every
+ * violation found. Detection-only: it NEVER throws, and returns `[]` for a well-formed
+ * manifest (cf. `validateForEditor` in `src/eventSheets.ts` — the same detect-don't-throw
+ * pattern one level up the stack).
+ *
+ * A one-line wrapper over {@link collectManifestIssues}: by construction it cannot
+ * diverge from the strict path {@link parseProjectManifest} uses (`issues[0]` is exactly
+ * what the strict parser throws), which is the entire point of keeping the shape rules in
+ * one collector.
+ */
+export function validateProjectManifest(json: unknown): ManifestValidationIssue[] {
+  return collectManifestIssues(json);
+}
+
 const NAME_SECTIONS = [
   "layouts",
   "eventSheets",
@@ -419,6 +432,45 @@ export function parseProjectManifest(json: unknown): C3ProjectManifest {
 /** Read and parse a project.c3proj file. Source-folder disk content is NOT consulted. */
 export function readProjectManifest(manifestPath: string): C3ProjectManifest {
   return parseProjectManifest(JSON.parse(readFileSync(manifestPath, "utf-8")));
+}
+
+// ─── Serializer ───────────────────────────────────────────────────────────────
+
+/**
+ * Serialize a manifest to the canonical `project.c3proj` on-disk form: tab-indented,
+ * with NO trailing newline (see {@link serializeC3Json}).
+ *
+ * Does NOT validate — call `validateProjectManifest(m)` first if you need the gate.
+ *
+ * Returned as a **string**, separately from {@link writeProjectManifest}, because a
+ * caller that needs different write mechanics — an atomic rename, suppressing a file
+ * watcher during the write, or a policy that preserves whatever trailing newline the
+ * original file happened to have — composes that on top of this string. That policy is
+ * caller-side and deliberately NOT built in here.
+ *
+ * **Byte-fidelity caveat.** Round-tripping a manifest byte-for-byte depends on
+ * {@link parseProjectManifest} having returned the parsed object BY IDENTITY and the
+ * caller mutating it IN PLACE. Rebuilding the manifest via nested object spreads (e.g.
+ * `{ ...m, layouts: { ...m.layouts, items: [...] } }`) reorders keys and loses any
+ * unmodeled field not explicitly copied — it will not reproduce the original bytes.
+ */
+export function serializeProjectManifest(m: C3ProjectManifest): string {
+  return serializeC3Json(m);
+}
+
+/**
+ * Write a manifest to `manifestPath` in the canonical `project.c3proj` on-disk form
+ * (see {@link serializeProjectManifest}), utf-8.
+ *
+ * Does NOT validate — call `validateProjectManifest(m)` first if you need the gate.
+ *
+ * **Byte-fidelity caveat.** As with {@link serializeProjectManifest}: round-tripping
+ * byte-for-byte depends on the manifest object having been mutated IN PLACE from a
+ * `parseProjectManifest`/`readProjectManifest` result, not rebuilt via object spreads,
+ * which reorders keys and drops unmodeled fields.
+ */
+export function writeProjectManifest(manifestPath: string, m: C3ProjectManifest): void {
+  writeC3JsonFile(manifestPath, m);
 }
 
 // ─── Flatteners ───────────────────────────────────────────────────────────────

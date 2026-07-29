@@ -1,8 +1,17 @@
 import { describe, it, before } from "mocha";
 import { expect } from "chai";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { C3_JSON_INDENT, serializeC3Json, isEditorLocalPath } from "../src/c3source.js";
+import {
+  C3_JSON_INDENT,
+  serializeC3Json,
+  isEditorLocalPath,
+  readProjectManifest,
+  serializeProjectManifest,
+  writeProjectManifest,
+  type C3ProjectManifest,
+} from "../src/c3source.js";
 import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
@@ -77,5 +86,32 @@ describe("serializeC3Json — canonical fixture corpus round-trip", () => {
       expect(serializeC3Json(JSON.parse(text)), file).to.equal(text);
       expect(text.endsWith("\n"), `${file} must not end with a trailing newline`).to.equal(false);
     }
+  });
+});
+
+describe("serializeProjectManifest / writeProjectManifest (#57)", () => {
+  const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
+
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+  });
+
+  it("T1: serializeProjectManifest(readProjectManifest(P)) reproduces project.c3proj byte-for-byte", () => {
+    const m = readProjectManifest(MANIFEST_PATH);
+    const original = readFileSync(MANIFEST_PATH, "utf-8");
+    expect(serializeProjectManifest(m)).to.equal(original);
+  });
+
+  it("T20: writeProjectManifest writes a byte-exact, no-trailing-newline manifest to a temp path", () => {
+    const base = readProjectManifest(MANIFEST_PATH);
+    const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
+    const tempDir = mkdtempSync(path.join(tmpdir(), "c3source-writeManifest-"));
+    const tempManifestPath = path.join(tempDir, "project.c3proj");
+
+    writeProjectManifest(tempManifestPath, clone);
+
+    const written = readFileSync(tempManifestPath, "utf-8");
+    expect(written).to.equal(serializeProjectManifest(clone));
+    expect(written.endsWith("\n")).to.equal(false);
   });
 });
