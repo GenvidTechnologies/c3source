@@ -436,8 +436,16 @@ golden **deliberately omits** (e.g. `uistate/` + `*.instancesBar.json`, which
 the golden's own `.gitignore` excludes) so the `isEditorLocalPath` drift-filter
 coverage isn't vacuous. When enriching the golden, verify before pushing to the
 shared submodule (parses, `validateForEditor` == 0 issues, referenced var
-declared + in scope, minimal `git diff --stat`); `construct3-sample`'s remote is
-HTTPS (no SSH-signing prompt), unlike c3source's git+ssh push.
+declared + in scope, minimal `git diff --stat`). `construct3-sample`'s remote is
+**SSH** (`git@github.com:GenvidTechnologies/construct3-sample`, set in
+`.gitmodules`), so pushing there goes through the same 1Password SSH-agent path
+as a c3source push and may need the user present to approve — it is no longer
+the "HTTPS, no prompt" exception this section once described. The SCP-style
+`git@github.com:` spelling is deliberate: `actions/checkout` rewrites that form
+to token-authenticated HTTPS for submodule clones, whereas a `git+ssh://` URL is
+not covered by that rewrite and would break CI's recursive checkout — and with it
+every fixture-backed test, which would **self-skip silently** rather than fail
+(watch the `pending` count, not just the green check).
 
 ## Formatting
 
