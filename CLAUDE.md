@@ -416,11 +416,17 @@ tag-pinned-submodule mechanism and the rejected alternatives (npm companion,
 vendored copy). This is distinct from — and additive to — the retained Scirra
 `SDK/` submodule (its retirement, #50, was closed won't-do).
 `scripts/prep-fixture.mjs` materializes the golden into the **gitignored**
-`test/fixtures/canonical/` (byte-for-byte copy of `construct3-sample/project/` +
-an additive `test/fixtures/canonical-overlay/` − the `canonical.striplist.txt`
-paths); a `pretest` npm hook runs it before every `npm test`, and it is a
-**guarded no-op** (exit 0) when the submodule is absent, so tests self-skip
-rather than the run breaking. As of **#54**, all the formerly
+`test/fixtures/canonical/` — a byte-for-byte copy of `construct3-sample/project/`'s
+**tracked HEAD content** (via `git archive`, not a working-tree copy — see [ADR
+0019](docs/decisions/0019-hermetic-fixture-materialization.md) / #64) + an
+additive `test/fixtures/canonical-overlay/` − the `canonical.striplist.txt`
+paths; a `pretest` npm hook runs it before every `npm test`, and it is a
+**guarded no-op** (exit 0) when the submodule is absent or its checked-out
+directory isn't a git repository, so tests self-skip rather than the run
+breaking. Because materialization reads tracked HEAD content, enriching the
+golden now requires a **local commit in the `construct3-sample` submodule**
+before the change appears in the materialized fixture — an uncommitted edit
+there is invisible to the fixture. As of **#54**, all the formerly
 `c3source-fixture/`-backed tests consume the materialized `test/fixtures/canonical/`
 (via the `PROJECT_FIXTURE` constant in `test/fixtureHelpers.ts`), and the committed
 `test/fixtures/c3source-fixture/` has been retired. The pin advanced to **v0.2.0**
