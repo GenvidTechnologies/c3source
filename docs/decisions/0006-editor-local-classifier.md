@@ -37,3 +37,9 @@ New editor-local artifacts extend one table. Downstream code can call
 walks are editor-local filtered). This sits on top of
 [ADR 0005](0005-single-canonical-traversal-walk.md): the walk owns *where* it
 recurses; the classifier owns *what counts as* editor-local.
+
+`isEditorLocalPath` is a **provenance** predicate (source vs. editor-local
+scratch state); a file's serialization form (tab-indented vs. minified) is
+*not* a membership criterion for this table, and never has been — see [ADR
+0018](0018-brush-json-minified-source-not-editor-local.md), which declines to
+widen this classifier for `*.brush.json` on exactly that distinction.

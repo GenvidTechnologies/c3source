@@ -36,3 +36,4 @@ Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.
 - `decisions/0015-canonical-c3-reference-fixture.md` — adopt standalone `construct3-sample` as the canonical, tag-pinned-submodule C3 reference fixture; c3source validates, it does not own (#51)
 - `decisions/0016-c3-source-json-serialization-form.md` — c3source owns the C3 source-JSON write form (tab indent, no trailing newline); new `src/serialize.ts` leaf, `C3Project` write surface, write-through-never-invalidate cache rule (#57)
 - `decisions/0017-tolerant-manifest-read.md` — lenient `project.c3proj` parse plus collected `ManifestValidationIssue[]`; strict stays default; shared shape-rule collector; write path stays deliberately un-gated (#58)
+- `decisions/0018-brush-json-minified-source-not-editor-local.md` — `*.brush.json` is minified project source, not editor-local; `EDITOR_LOCAL_EXCLUSIONS` deliberately unchanged; new `isMinifiedSourcePath` domain fact (#59)
