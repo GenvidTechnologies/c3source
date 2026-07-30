@@ -63,10 +63,15 @@ rmSync(outputDir, { recursive: true, force: true });
 // content. A failure here (e.g. a corrupt/detached submodule checkout) is a
 // hard failure — swallowing it would silently produce an empty fixture,
 // worse than failing loudly.
+// 256 MiB — far above the current archive (~230 KB), sized so fixture growth
+// never needs this re-tuned.
 const archive = execFileSync("git", ["-C", sourceRepo, "archive", "--format=zip", "HEAD", "project"], {
 	encoding: "buffer",
 	maxBuffer: 1 << 28,
 });
+// Entry names are produced by `git` itself from committed content of a pinned,
+// first-party submodule, so the usual zip path-traversal concern (`../`) does
+// not arise here and the join below needs no containment check.
 for (const [name, bytes] of Object.entries(unzipSync(new Uint8Array(archive)))) {
 	if (name.endsWith("/")) continue; // skip directory entries
 	const dest = join(outputDir, name.replace(/^project\//, ""));
