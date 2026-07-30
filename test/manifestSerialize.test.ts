@@ -30,10 +30,10 @@ const rel = (f: string): string => path.relative(FIXTURE_DIR, f).split(path.sep)
 const MINIFIED_SOURCE_FILES = ["tilemapBrushes/objectTypes/tiles/Tilemap.brush.json"];
 
 /**
- * Editor-local files that must be present on any materialization of the fixture
- * (local polluted tree or clean CI checkout), so the classifier coverage below is
- * not vacuous even though the exact `skipped` set is pollution-sensitive (see the
- * POLLUTION NOTE in T7).
+ * Editor-local files that must be present on any materialization of the fixture,
+ * so the classifier coverage below is not vacuous. As of #64 (ADR 0019),
+ * `prep-fixture.mjs` materializes tracked HEAD content only, so this is now the
+ * exact `skipped` set on every machine, not just a required subset (see T7).
  */
 const REQUIRED_EDITOR_LOCAL = [
   "layouts/Main Layout.uistate.json",
@@ -85,23 +85,15 @@ describe("serializeC3Json — canonical fixture corpus round-trip", () => {
   it("T7: every non-editor-local .json/.c3proj file round-trips byte-for-byte, except the documented Tilemap.brush.json exception", () => {
     const { kept, skipped } = collectProjectJsonFiles(FIXTURE_DIR, false);
 
-    // POLLUTION NOTE (2026-07-29, #59): scripts/prep-fixture.mjs cpSync's the
-    // construct3-sample submodule's *working tree*, not just its tracked content.
-    // Locally that working tree carries gitignored, editor-local files
-    // (*.uistate.json, uistate/, ts-defs/) that a clean CI checkout does not, so
-    // the corpus totals legitimately differ between environments: locally
-    // total=38/skipped=12/kept=26, on a clean checkout (= CI) total=29/skipped=3/
-    // kept=26. Every one of those polluting files is editor-local by construction
-    // (isEditorLocalPath / the inherited uistate/ directory rule cover them all,
-    // and none of the 56 upstream ts-defs files are .json), so the leak lands
-    // entirely in `skipped` — `kept`, and the non-round-tripping subset discovered
-    // below, are pollution-invariant. Hence: an exact assertion on `kept.length`,
-    // a subset (not exact-count) assertion on `skipped`, and discovery — not a
-    // pre-declared path list sized to one tree — for the round-trip exception.
-    // Making prep-fixture.mjs hermetic (copy tracked content only) is tracked as a
-    // separate follow-up issue, not fixed here.
+    // Fixture materialization is hermetic as of #64 (ADR 0019): prep-fixture.mjs
+    // extracts the construct3-sample submodule's tracked HEAD content (git archive),
+    // not its working tree, so the corpus is identical on a developer machine and on
+    // CI — total=29/skipped=3/kept=26 everywhere — and these counts can be asserted
+    // exactly rather than as a lower bound. The non-round-tripping set below is still
+    // discovered, not pre-declared, since it is a claim about content, not membership.
+    expect(kept.length + skipped.length, "total .json/.c3proj corpus").to.equal(29);
     expect(kept.length, "project-source .json/.c3proj corpus size").to.equal(26);
-    expect(skipped.map(rel)).to.include.members(REQUIRED_EDITOR_LOCAL);
+    expect(skipped.map(rel), "editor-local set").to.have.members(REQUIRED_EDITOR_LOCAL);
 
     const nonRoundTripping: string[] = [];
     for (const file of kept) {
