@@ -405,8 +405,9 @@ project **source**, not editor-local — just written in a second, minified form
 
 ## Canonical reference fixture (`construct3-sample`)
 
-A **second** git submodule, `construct3-sample/` (pinned to tag `v0.2.0`, added
-#51), is the **canonical golden C3 project** — the single, editor-round-tripped
+A **second** git submodule, `construct3-sample/` (pinned at the commit tagged
+`v0.4.1`, added #51), is the **canonical golden C3 project** — the single,
+editor-round-tripped
 source of on-disk shape that c3source and its sibling tools consume instead of
 each hand-maintaining a drifting fixture. c3source is the **validator, not the
 owner** (it runs `validateForEditor`/`detectManifestDrift` over it). See [ADR
@@ -422,9 +423,24 @@ paths); a `pretest` npm hook runs it before every `npm test`, and it is a
 rather than the run breaking. As of **#54**, all the formerly
 `c3source-fixture/`-backed tests consume the materialized `test/fixtures/canonical/`
 (via the `PROJECT_FIXTURE` constant in `test/fixtureHelpers.ts`), and the committed
-`test/fixtures/c3source-fixture/` has been retired. The submodule pin advanced to
-**v0.2.0** for this migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds
-them to `Event sheet 1`, which `eventVarReference.test.ts` needs.
+`test/fixtures/c3source-fixture/` has been retired. The pin advanced to **v0.2.0**
+for that migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds them to
+`Event sheet 1`, which `eventVarReference.test.ts` needs — and then to **v0.4.1**,
+which adds a **global layer with override** to both layouts (exercising the
+prefix-resetting `global` path in `walkLayerEntries`) plus upstream-owned addon
+sources. The v0.4.1 bump is corpus-neutral: the `.json`/`.c3proj` counts are
+unchanged (29/3/26 clean, 26 kept round-tripping bar the brush file), because it
+edits two existing layout files rather than adding any, and its non-`project/`
+additions are never copied by `prep-fixture`. **When bumping the pin, re-measure
+rather than assume** — a tag that adds or removes a `project/` JSON file moves the
+corpus counts `manifestSerialize.test.ts` asserts.
+**What is actually pinned is a commit, not a tag:** the superproject tree stores a
+`160000 commit <sha>` entry and `.gitmodules` carries no `branch`/tag field, so git
+never consults a tag when updating the submodule — `git describe --tags` merely
+resolves that sha to a nearby tag name for humans. Tagging each golden release (ADR
+0015's convention) stays worthwhile as a readable label and a signal that a fixture
+state was deliberately published, but a bump is complete the moment the commit
+pointer is staged; the tag name in this doc is documentation, not configuration.
 **Overlay vs. upstream-enrich — the decision rule:** coverage the golden
 genuinely *should* carry (a real C3 construct a downstream test needs, e.g.
 event-var-reference ACEs) is added **upstream in `construct3-sample`**
@@ -436,8 +452,16 @@ golden **deliberately omits** (e.g. `uistate/` + `*.instancesBar.json`, which
 the golden's own `.gitignore` excludes) so the `isEditorLocalPath` drift-filter
 coverage isn't vacuous. When enriching the golden, verify before pushing to the
 shared submodule (parses, `validateForEditor` == 0 issues, referenced var
-declared + in scope, minimal `git diff --stat`); `construct3-sample`'s remote is
-HTTPS (no SSH-signing prompt), unlike c3source's git+ssh push.
+declared + in scope, minimal `git diff --stat`). `construct3-sample`'s remote is
+**SSH** (`git@github.com:GenvidTechnologies/construct3-sample`, set in
+`.gitmodules`), so pushing there goes through the same 1Password SSH-agent path
+as a c3source push and may need the user present to approve — it is no longer
+the "HTTPS, no prompt" exception this section once described. The SCP-style
+`git@github.com:` spelling is deliberate: `actions/checkout` rewrites that form
+to token-authenticated HTTPS for submodule clones, whereas a `git+ssh://` URL is
+not covered by that rewrite and would break CI's recursive checkout — and with it
+every fixture-backed test, which would **self-skip silently** rather than fail
+(watch the `pending` count, not just the green check).
 
 ## Formatting
 
