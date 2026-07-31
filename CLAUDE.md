@@ -435,7 +435,7 @@ for that migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds them 
 which adds a **global layer with override** to both layouts (exercising the
 prefix-resetting `global` path in `walkLayerEntries`) plus upstream-owned addon
 sources. The v0.4.1 bump is corpus-neutral: the `.json`/`.c3proj` counts are
-unchanged (29/3/26 clean, 26 kept round-tripping bar the brush file), because it
+unchanged (29/3/26, 26 kept round-tripping bar the brush file), because it
 edits two existing layout files rather than adding any, and its non-`project/`
 additions are never copied by `prep-fixture`. **When bumping the pin, re-measure
 rather than assume** — a tag that adds or removes a `project/` JSON file moves the
