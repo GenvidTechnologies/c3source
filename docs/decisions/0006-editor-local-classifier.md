@@ -43,3 +43,8 @@ scratch state); a file's serialization form (tab-indented vs. minified) is
 *not* a membership criterion for this table, and never has been — see [ADR
 0018](0018-brush-json-minified-source-not-editor-local.md), which declines to
 widen this classifier for `*.brush.json` on exactly that distinction.
+
+The classifier answers provenance only. It is not a reachability policy:
+`find_all_files_path`'s default descent derives from this table, but a caller
+may override it per-walk ([ADR 0020](0020-caller-controlled-walk-descent.md)).
+Overriding descent disables inherited classification for that subtree.

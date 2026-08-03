@@ -103,6 +103,20 @@ Crucially it captures the type-only exports (interfaces/type aliases) that a
 runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
 value-vs-type pair.
 
+**The declaration text includes JSDoc**, so "byte-identical dump" is a
+stronger claim than "identical API": a **comment-only** edit to a member of an
+exported interface moves the dump even though no signature changed. ADR 0012
+and ADR 0017 both cite an *exactly-empty* diff as their purity proof, which
+held only because those refactors happened not to touch JSDoc — a
+doc-carrying PR has no such luxury and will show entries that look like scope
+leaks but are prose. (#63 hit exactly this: the predicted two-line delta came
+back as three, the extra one being `C3Project` after `findAllScripts`'s
+comment was corrected.) When a change deliberately touches comments, strip
+JSDoc blocks from both dumps and re-diff to isolate real signature changes —
+e.g. `sed -E 's#/\*\*[^*]*\*+([^/*][^*]*\*+)*/##g'` over each dump before
+`diff`. Reserve the empty-diff standard for refactors that leave comments
+alone.
+
 Three functional areas:
 
 1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip
@@ -117,12 +131,20 @@ Three functional areas:
    deliberately not a membership criterion (see [ADR
    0018](docs/decisions/0018-brush-json-minified-source-not-editor-local.md)).
    The named collectors are thin wrappers over the exported generic
-   primitive `find_all_files_path(dir, predicate)` — the single recursive walk
+   primitive `find_all_files_path(dir, predicate, descend?)` — the single recursive walk
    that owns the recursion, the `uistate/` skip, and the per-level
    `readdirSync().sort()` ordering. It is exported so downstream can discover
    non-source artifacts (e.g. generated `.dsl.txt` files) through the same walk
    instead of maintaining a parallel collector that drifts on the next skip-rule
-   fix (issue #16); its `predicate` receives the bare basename. The key
+   fix (issue #16); its `predicate` receives the bare basename. The optional
+   third parameter, `descend`, controls directory *reachability* separately
+   from `predicate`'s file selection, defaulting to the same editor-local rule
+   (`ts-defs` — named via the exported `C3_TS_DEFS_FOLDER` — is otherwise
+   unreachable, which blocked a downstream consumer needing its `.d.ts`
+   files); overriding it disables inherited editor-local classification for
+   the entered subtree, so `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`
+   themselves are unchanged (see [ADR
+   0020](docs/decisions/0020-caller-controlled-walk-descent.md), #63). The key
    pattern: a `LayerVisitor`
    returns a _mutation count_ (number) and an `InstanceVisitor` returns a
    _changed_ boolean; `visit_layers_in_layout` sums the counts and **rewrites

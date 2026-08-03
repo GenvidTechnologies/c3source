@@ -209,10 +209,13 @@ export interface C3Project {
 
   /**
    * Return all source script paths under `scriptsDir` (or its `sub` subdirectory).
-   * Returns only `.ts` source files — excludes generated `.d.ts` declaration files
-   * (all of which live under `ts-defs/` and carry the `.d.ts` suffix).
-   * Built on {@link find_all_files_path} — the recursive walk handles `ts-defs/`
-   * correctly because every file inside it ends in `.d.ts`.
+   * Returns only `.ts` source files — excludes generated `.d.ts` declaration files.
+   * `ts-defs/` (where those declaration files live) is an editor-local directory
+   * (`EDITOR_LOCAL_EXCLUSIONS.dirs`), so {@link find_all_files_path} never descends into
+   * it — the tree is excluded by the directory prune, not by the `.d.ts` suffix filter.
+   * The suffix filter independently excludes a stray hand-authored declaration file sitting
+   * directly under `scriptsDir`. A caller that deliberately needs the `ts-defs/` contents
+   * passes {@link find_all_files_path}'s `descend` parameter (issue #63; see ADR 0020).
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `scriptsDir` (default `""`).
@@ -412,10 +415,11 @@ export function openProject(root: string): C3Project {
     },
 
     findAllScripts(sub?: string): string[] {
-      // Source scripts are .ts files. Generated declaration files in ts-defs/ all end in
-      // .d.ts, so filtering !file.endsWith(".d.ts") is sufficient to exclude them while
-      // find_all_files_path recurses normally (ts-defs/ is not an editor-local dir so it
-      // is not skipped by isEditorLocalPath — it is excluded by the predicate alone).
+      // Source scripts are .ts files. ts-defs/ (where generated .d.ts declaration files live)
+      // is an editor-local dir, so find_all_files_path prunes it before recursing — no
+      // generated .d.ts ever reaches this predicate. The !file.endsWith(".d.ts") clause is
+      // what excludes a stray hand-authored .d.ts sitting directly under scriptsDir. A caller
+      // who needs ts-defs/ passes find_all_files_path's descend parameter (#63; see ADR 0020).
       return findInSection(scriptsDir, sub, (dir) =>
         find_all_files_path(dir, (file) => file.endsWith(".ts") && !file.endsWith(".d.ts") && !isEditorLocalPath(file)),
       );

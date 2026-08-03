@@ -365,8 +365,13 @@ detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestD
 
 Compares manifest-declared membership against on-disk source files. When
 `manifest` is omitted, reads `projectDir/project.c3proj` automatically.
-Editor-local entries (`uistate/`, `ts-defs/`, `tsconfig.json`, `*.uistate.json`)
-are filtered from the disk side before comparison.
+For name-folder sections, editor-local entries (`uistate/`, `tsconfig.json`,
+`*.uistate.json`) are filtered from the disk side before comparison via
+`isEditorLocalPath`. `ts-defs/` is not reached by that filter at all: it lives
+under `scripts`, a file-folder section walked by `walkDiskFileTree`, which
+recurses manifest-declared subfolders only (see [Walk depth](#walk-depth)
+below) — `ts-defs` is undeclared, so it is invisible to drift before
+`isEditorLocalPath` ever gets a chance to run on it.
 
 `detectManifestDrift` only reports what it finds. The caller decides what to do
 about drift (warn, fail the build, sync).
