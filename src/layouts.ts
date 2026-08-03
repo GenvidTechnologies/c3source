@@ -98,13 +98,16 @@ export interface Family {
   effectTypes?: EffectTypeRef[];
 }
 
+/** C3's generated-TypeScript-declarations folder under `scripts/` (C3 domain fact, r487+). */
+export const C3_TS_DEFS_FOLDER = "ts-defs";
+
 /** The canonical set of C3-editor-local artifacts that are NOT project source. */
 export const EDITOR_LOCAL_EXCLUSIONS: {
   dirs: readonly string[];
   fileSuffixes: readonly string[];
   exactNames: readonly string[];
 } = {
-  dirs: ["uistate", "ts-defs"], // C3 r487+ uistate/ subfolders; ts-defs/ is C3-generated TS typings
+  dirs: ["uistate", C3_TS_DEFS_FOLDER], // C3 r487+ uistate/ subfolders; ts-defs/ is C3-generated TS typings
   fileSuffixes: [".uistate.json"],
   exactNames: ["tsconfig.json"], // C3-generated for TypeScript projects (overwritten by the editor)
 };
@@ -120,6 +123,9 @@ export function isEditorLocalPath(name: string): boolean {
   );
 }
 
+/** Default directory-descent rule: enter every directory that is not editor-local. */
+const descendSourceDirs = (name: string): boolean => !isEditorLocalPath(name);
+
 /**
  * The single recursive file walk behind every `find_all_*_path` collector, and
  * the generic primitive for discovering files c3source has no named collector
@@ -127,20 +133,42 @@ export function isEditorLocalPath(name: string): boolean {
  * which `predicate(filename)` is true. `predicate` receives the bare basename
  * (e.g. `"Level1.dsl.txt"`), not the full path.
  *
- * This owns the recursion, the directory-skip rules, and the ordering so callers
- * don't maintain a parallel walker that can drift:
+ * This owns the recursion, the directory-descent rule, and the ordering so
+ * callers don't maintain a parallel walker that can drift:
  * - **Recursion** — fully recursive through subdirectories.
- * - **Skip rule** — never descends into `uistate/` subfolders. C3 r487+ writes
- *   editor UI state into them next to the real files, and their non-source
- *   `.json` contents crash the parsers (mirrors the per-file `.uistate.json`
- *   skip the source predicates apply).
+ * - **Skip rule** — does not descend into any directory the default `descend`
+ *   rejects (`uistate/`, `ts-defs/` — i.e. `isEditorLocalPath`). C3 r487+ writes
+ *   editor UI state and generated TS typings into these next to the real files,
+ *   and their non-source contents crash the parsers (mirrors the per-file
+ *   `.uistate.json` skip the source predicates apply).
  * - **Ordering** — deterministic, per-level `readdirSync().sort()` depth-first.
  *
  * The named collectors (`find_all_layouts_path`, `find_all_eventsheets_path`, …)
  * differ only in their predicate, so they are thin wrappers over this; never
- * re-implement the recursion or the `uistate/` skip.
+ * re-implement the recursion or the descent rule.
+ *
+ * @param descend Controls which directories the walk enters, separately from
+ * `predicate` (which only selects files). Defaults to `descendSourceDirs`
+ * (`!isEditorLocalPath(name)`), so 2-argument callers are unaffected. This
+ * separation exists because `isEditorLocalPath` conflates two questions —
+ * "is this C3 source?" and "may the walk enter it?" — and some C3-generated,
+ * non-source directories (e.g. `scripts/ts-defs/`) still need to be reachable
+ * by a caller that wants their contents (issue #63; see ADR 0020).
+ *
+ * Overriding `descend` disables inherited editor-local classification for the
+ * entered subtree — the caller's `predicate` becomes the only filter, and it
+ * sees bare basenames that `isEditorLocalPath` will not flag (e.g.
+ * `objects.d.ts`, `Main Layout.instancesBar.json`).
+ *
+ * @example
+ * find_all_files_path(scriptsDir, (f) => f.endsWith(".d.ts"),
+ *   (d) => d === C3_TS_DEFS_FOLDER || !isEditorLocalPath(d));
  */
-export function find_all_files_path(dir: string, predicate: (filename: string) => boolean): string[] {
+export function find_all_files_path(
+  dir: string,
+  predicate: (filename: string) => boolean,
+  descend: (dirname: string) => boolean = descendSourceDirs,
+): string[] {
   const result: string[] = [];
   readdirSync(dir)
     .sort()
@@ -148,8 +176,8 @@ export function find_all_files_path(dir: string, predicate: (filename: string) =
       const filepath = path.join(dir, file);
       const stats = statSync(filepath);
       if (stats.isDirectory()) {
-        if (isEditorLocalPath(file)) return; // C3 r487+ uistate/ subfolders are not C3 source
-        result.push(...find_all_files_path(filepath, predicate));
+        if (!descend(file)) return; // C3 r487+ uistate/ and ts-defs/ subfolders are not descended by default
+        result.push(...find_all_files_path(filepath, predicate, descend));
       } else if (stats.isFile() && predicate(file)) {
         result.push(filepath);
       }
