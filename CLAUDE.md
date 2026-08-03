@@ -117,12 +117,20 @@ Three functional areas:
    deliberately not a membership criterion (see [ADR
    0018](docs/decisions/0018-brush-json-minified-source-not-editor-local.md)).
    The named collectors are thin wrappers over the exported generic
-   primitive `find_all_files_path(dir, predicate)` — the single recursive walk
+   primitive `find_all_files_path(dir, predicate, descend?)` — the single recursive walk
    that owns the recursion, the `uistate/` skip, and the per-level
    `readdirSync().sort()` ordering. It is exported so downstream can discover
    non-source artifacts (e.g. generated `.dsl.txt` files) through the same walk
    instead of maintaining a parallel collector that drifts on the next skip-rule
-   fix (issue #16); its `predicate` receives the bare basename. The key
+   fix (issue #16); its `predicate` receives the bare basename. The optional
+   third parameter, `descend`, controls directory *reachability* separately
+   from `predicate`'s file selection, defaulting to the same editor-local rule
+   (`ts-defs` — named via the exported `C3_TS_DEFS_FOLDER` — is otherwise
+   unreachable, which blocked a downstream consumer needing its `.d.ts`
+   files); overriding it disables inherited editor-local classification for
+   the entered subtree, so `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`
+   themselves are unchanged (see [ADR
+   0020](docs/decisions/0020-caller-controlled-walk-descent.md), #63). The key
    pattern: a `LayerVisitor`
    returns a _mutation count_ (number) and an `InstanceVisitor` returns a
    _changed_ boolean; `visit_layers_in_layout` sums the counts and **rewrites

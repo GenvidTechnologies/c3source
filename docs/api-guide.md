@@ -152,11 +152,52 @@ function listSourceEntries(dir: string): string[] {
 already call `isEditorLocalPath` internally. Use this function when you run
 your own `readdirSync` loop rather than going through the collectors.
 
+`find_all_files_path` also accepts an optional third parameter that
+overrides which directories it descends into, independently of this
+classifier — see [Reachability is not classification](#reachability-is-not-classification)
+below.
+
 ### Extending the exclusion set
 
 If a future C3 release introduces a new editor-local convention, add it to
 `EDITOR_LOCAL_EXCLUSIONS` — every call site inherits the change automatically.
 Do not inline the predicate in new code.
+
+### Reachability is not classification
+
+`isEditorLocalPath` used to answer two different questions with one predicate:
+*"is this directory C3 source?"* (classification) and *"may a disk walk enter
+it?"* (reachability). Because `ts-defs` is in `EDITOR_LOCAL_EXCLUSIONS.dirs`,
+`scripts/ts-defs/**` was unreachable through `find_all_files_path` no matter
+what `predicate` a caller passed — the directory-descent rule was hardcoded,
+not just the default.
+
+`find_all_files_path` now takes an optional third parameter, `descend`, that
+controls directory entry separately from `predicate` (which still only
+selects files). It defaults to the editor-local rule, so every existing
+2-argument call is unaffected. A caller that genuinely needs a C3-generated,
+non-source directory's contents (e.g. `ts-defs/`'s `.d.ts` files, for
+TypeScript symbol resolution) can opt in:
+
+```ts
+import { find_all_files_path, isEditorLocalPath, C3_TS_DEFS_FOLDER } from "@genvidtech/c3source";
+
+const tsDefs = find_all_files_path(
+  scriptsDir,
+  (name) => name.endsWith(".d.ts"),
+  (dirname) => dirname === C3_TS_DEFS_FOLDER || !isEditorLocalPath(dirname),
+);
+```
+
+**Overriding `descend` disables inherited editor-local classification for the
+entered subtree** — the caller's `predicate` becomes the only filter, and it
+sees bare basenames that `isEditorLocalPath` will not flag (e.g.
+`objects.d.ts`, `Main Layout.instancesBar.json`). Write the `predicate`
+defensively if the opened subtree could contain such names.
+
+See [ADR 0020](decisions/0020-caller-controlled-walk-descent.md) (issue #63)
+for why the classifier itself is unchanged and only reachability became
+overridable.
 
 **Deliberately not covered here.** `tilemapBrushes/**/*.brush.json` is *not* an
 editor-local artifact — `isEditorLocalPath` correctly returns `false` for it —

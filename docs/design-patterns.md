@@ -118,6 +118,22 @@ that happen to use the second, minified serialization form, currently just
 0018](decisions/0018-brush-json-minified-source-not-editor-local.md) for why
 that file is source, not a widening of this table.
 
+**Reachability, not classification.** `isEditorLocalPath` answers whether a
+name is C3 source or editor-local scratch state; it does not answer whether a
+disk walk may enter a directory of that name — those used to be the same
+question only because `find_all_files_path` hardcoded its directory-descent
+rule to the classifier. `find_all_files_path` now takes an optional third
+`descend` parameter, defaulting to that same rule, so a caller can opt a
+specific subtree (e.g. `scripts/ts-defs/`) back into reachability without
+touching `EDITOR_LOCAL_EXCLUSIONS`. This still honours "never inline the skip
+predicate" above: the *default* descent is still derived from the table, and
+an override composes with `isEditorLocalPath` (as the canonical recipe in
+[api-guide.md — Reachability is not
+classification](api-guide.md#reachability-is-not-classification) does) rather
+than replacing it. See [ADR
+0020](decisions/0020-caller-controlled-walk-descent.md) for why classification
+and reachability were split instead of narrowing the table.
+
 ## Traversal-vs-rendering split for SIDs
 
 `walkSids(node, visit: (sid, segments) => void)` is the exported primitive for

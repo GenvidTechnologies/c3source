@@ -229,10 +229,16 @@ project.findAllTimelines();
 | `findAllModels3d` | `find_all_files_path` | `.json` non-editor-local files |
 | `findAllScripts` | `find_all_files_path` | `.ts` source files only — excludes `.d.ts` declaration files (all of which live under `ts-defs/`) |
 
-`findAllScripts` returns only `.ts` source files. The generated `ts-defs/`
-subtree that C3 writes for TypeScript projects contains only `.d.ts` files, so
-filtering to `.ts` naturally excludes it without requiring a directory-name
-exclusion.
+`findAllScripts` returns only `.ts` source files, which independently excludes
+`ts-defs/`'s `.d.ts` files by extension — but the directory is also pruned
+before the walk ever reaches it: `ts-defs` is in `EDITOR_LOCAL_EXCLUSIONS.dirs`,
+so `find_all_files_path`'s directory-descent rule skips the whole subtree, and
+no basename inside it is ever offered to the `.ts` predicate. The `.d.ts`
+suffix clause is not dead weight, though — it independently guards a stray
+hand-authored declaration file placed directly under `scriptsDir`, outside
+`ts-defs/`, which the directory prune would not catch. A caller that needs
+`ts-defs/`'s `.d.ts` files can opt into descending there; see [api-guide.md —
+Reachability is not classification](api-guide.md#reachability-is-not-classification).
 
 ## Drift detection
 
