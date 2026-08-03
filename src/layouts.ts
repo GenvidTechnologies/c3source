@@ -253,7 +253,11 @@ function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): num
 }
 
 export function visit_layers_in_layouts(layouts_path: string, visitor: LayerVisitor): number {
-  const layouts = find_all_layouts_path(layouts_path);
+  // find_all_layouts_path filters only on !isEditorLocalPath (no .json predicate — that is
+  // intentional, see its JSDoc), so a stray non-JSON file under layouts/ would otherwise
+  // reach visit_layers_in_layout's JSON.parse and crash. Filter to .json here, at the parse
+  // boundary, rather than narrowing the finder's documented contract.
+  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, visitor) + changed,
     0,
@@ -272,7 +276,10 @@ function makeLayerVisitorFromInstanceVisitor(visitor: InstanceVisitor): LayerVis
 }
 
 export function visit_instances_in_layouts(layouts_path: string, visitor: InstanceVisitor): number {
-  const layouts = find_all_layouts_path(layouts_path);
+  // Same non-JSON-file hazard as visit_layers_in_layouts above (this ultimately calls the
+  // same visit_layers_in_layout, whose JSON.parse would crash on a stray non-JSON file) —
+  // filter to .json here, at the parse boundary, rather than narrowing find_all_layouts_path.
+  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
   const layerVisitor = makeLayerVisitorFromInstanceVisitor(visitor);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, layerVisitor) + changed,

@@ -10,6 +10,7 @@ import {
 } from "./layouts.js";
 import { find_all_eventsheets_path } from "./eventSheets.js";
 import { AddonAttribution, collectAddonAttribution, findAllAddons } from "./addons.js";
+import { ReferenceIntegrityOptions, ReferenceIntegrityResult, detectReferenceIntegrity } from "./references.js";
 import {
   C3ProjectManifest,
   C3_ROOT_FILE_FOLDERS,
@@ -266,6 +267,13 @@ export interface C3Project {
   detectImageDrift(): SectionDrift | null;
 
   /**
+   * Detect reference-integrity issues for this project.
+   * Delegates to {@link detectReferenceIntegrity} with the project root and the handle's
+   * cached manifest (reuses the already-parsed manifest instead of re-reading disk).
+   */
+  detectReferenceIntegrity(options?: ReferenceIntegrityOptions): ReferenceIntegrityResult;
+
+  /**
    * Derive addon attribution for every object type and family in this project.
    * Reads and parses each path returned by {@link findAllObjectTypes} / {@link findAllFamilies}
    * (I/O happens here, lazily, on each call — not cached), then delegates to the free
@@ -316,6 +324,7 @@ export function openProject(root: string): C3Project {
   // infinite recursion when the method tries to call `detectManifestDrift(...)`.
   const freeDetectManifestDrift = detectManifestDrift;
   const freeDetectImageDrift = detectImageDrift;
+  const freeDetectReferenceIntegrity = detectReferenceIntegrity;
   const freeCollectAddonAttribution = collectAddonAttribution;
   const freeFindAllAddons = findAllAddons;
 
@@ -454,8 +463,20 @@ export function openProject(root: string): C3Project {
       return freeDetectImageDrift(root);
     },
 
+    detectReferenceIntegrity(options?: ReferenceIntegrityOptions): ReferenceIntegrityResult {
+      // Pass the handle's cached manifest as the second arg so the free function reuses
+      // the already-parsed manifest instead of re-reading project.c3proj from disk.
+      return freeDetectReferenceIntegrity(root, this.manifest(), options);
+    },
+
     collectAddonAttribution(): AddonAttribution[] {
-      const objectTypes = this.findAllObjectTypes().map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
+      // find_all_objectTypes_path filters only on !isEditorLocalPath (no .json predicate —
+      // that is intentional, see its JSDoc), so a stray non-JSON file under objectTypes/
+      // would otherwise reach JSON.parse below and crash. Filter to .json here, at the
+      // parse boundary, rather than narrowing the finder's documented contract.
+      const objectTypes = this.findAllObjectTypes()
+        .filter((p) => p.endsWith(".json"))
+        .map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
       const families = this.findAllFamilies().map((p) => JSON.parse(readFileSync(p, "utf-8")) as Family);
       return freeCollectAddonAttribution(objectTypes, families);
     },
