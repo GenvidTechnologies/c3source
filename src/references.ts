@@ -302,3 +302,112 @@ export function detectAddonReferenceIssues(
 
   return issues;
 }
+
+// ─── family-member-missing detector ────────────────────────────────────────
+
+/**
+ * Detect `Family.members` entries naming an object type absent from the manifest.
+ *
+ * `members[i]` names an object type by **name**; C3 fails to load a family with a
+ * dangling member, so every miss is `severity: "error"`. Defensive about `members`
+ * being absent or not an array (mirrors the `Array.isArray` guard style in
+ * `src/manifest.ts`) — a malformed source file must not throw.
+ *
+ * Pure — no I/O, no mutation of `families`/`objectTypeNames`.
+ */
+export function detectFamilyMemberIssues(
+  families: SourceDoc<Family>[],
+  objectTypeNames: ReadonlySet<string>,
+): ReferenceIssue[] {
+  const issues: ReferenceIssue[] = [];
+
+  for (const doc of families) {
+    const members = doc.value.members;
+    if (!Array.isArray(members)) continue;
+    members.forEach((member, i) => {
+      if (objectTypeNames.has(member)) return;
+      issues.push({
+        kind: "family-member-missing",
+        severity: "error",
+        name: member,
+        file: doc.file,
+        owner: doc.value.name,
+        jsonPath: `members[${i}]`,
+        message: `Family "${doc.value.name}" (${doc.file}, members[${i}]) names object type "${member}" which has no matching entry in the manifest`,
+      });
+    });
+  }
+
+  return issues;
+}
+
+// ─── instance-type-missing detector ────────────────────────────────────────
+
+/**
+ * Detect layout `Instance.type` values naming an object type absent from the manifest.
+ *
+ * `Instance.type` names an object type by **name** at two distinct sites per layout:
+ *
+ * - layer instances (`layer.instances[j].type`) — walked via {@link walkLayerEntries}
+ *   rather than a second recursion (ADR 0005), reusing its `jsonPath`/`fullName`
+ *   rather than re-deriving them (ADR 0007); the issue carries `layerFullName`.
+ * - the layout's own root-level `"nonworld-instances"` array — no owning layer, so
+ *   `layerFullName` is omitted.
+ *
+ * C3 fails to load a layout with a dangling instance type, so every miss is
+ * `severity: "error"`. Defensive about `instances`/`"nonworld-instances"` being
+ * absent or not arrays — a malformed source file must not throw.
+ *
+ * Pure — no I/O, no mutation of `layouts`/`objectTypeNames`.
+ */
+export function detectInstanceTypeIssues(
+  layouts: SourceDoc<Layout>[],
+  objectTypeNames: ReadonlySet<string>,
+): ReferenceIssue[] {
+  const issues: ReferenceIssue[] = [];
+
+  for (const doc of layouts) {
+    const layout = doc.value;
+    const owner = layout.name;
+
+    if (Array.isArray(layout.layers)) {
+      for (const entry of walkLayerEntries(layout.layers, layout.name, [])) {
+        const instances = entry.layer.instances;
+        if (!Array.isArray(instances)) continue;
+        instances.forEach((instance, j) => {
+          if (objectTypeNames.has(instance.type)) return;
+          const jsonPath = `${entry.jsonPath}.instances[${j}]`;
+          issues.push({
+            kind: "instance-type-missing",
+            severity: "error",
+            name: instance.type,
+            file: doc.file,
+            owner,
+            jsonPath,
+            layerFullName: entry.fullName,
+            message: `Layout "${owner}" (${doc.file}, ${jsonPath}) has an instance of type "${instance.type}" which has no matching entry in the manifest`,
+          });
+        });
+      }
+    }
+
+    const nonWorldInstances = layout["nonworld-instances"];
+    if (Array.isArray(nonWorldInstances)) {
+      nonWorldInstances.forEach((instance, k) => {
+        if (objectTypeNames.has(instance.type)) return;
+        const jsonPath = `nonworld-instances[${k}]`;
+        issues.push({
+          kind: "instance-type-missing",
+          severity: "error",
+          name: instance.type,
+          file: doc.file,
+          owner,
+          jsonPath,
+          message: `Layout "${owner}" (${doc.file}, ${jsonPath}) has a non-world instance of type "${instance.type}" which has no matching entry in the manifest`,
+        });
+      });
+    }
+  }
+
+  return issues;
+}

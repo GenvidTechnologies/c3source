@@ -9,6 +9,8 @@ import {
   manifestFamilyNames,
   collectLayoutEffectIds,
   detectAddonReferenceIssues,
+  detectFamilyMemberIssues,
+  detectInstanceTypeIssues,
   type SourceDoc,
 } from "../src/references.js";
 import {
@@ -322,5 +324,123 @@ describe("detectAddonReferenceIssues — synthetic layer/layout-effect and edge 
     const issues = detectAddonReferenceIssues(bare, [spriteDoc], [], []);
     expect(issues.length).to.equal(1);
     expect(issues[0]).to.include({ kind: "addon-undeclared", severity: "error", name: "Sprite", addonType: "plugin" });
+  });
+});
+
+describe("detectFamilyMemberIssues", () => {
+  it("R-R44: a family member naming a missing object type yields one family-member-missing issue", () => {
+    const doc: SourceDoc<Family> = {
+      file: "families/TextFamily.json",
+      value: { name: "TextFamily", "plugin-id": "", members: ["Sprite", "Ghost"] },
+    };
+    const issues = detectFamilyMemberIssues([doc], new Set(["Sprite"]));
+    expect(issues).to.deep.equal([
+      {
+        kind: "family-member-missing",
+        severity: "error",
+        name: "Ghost",
+        file: "families/TextFamily.json",
+        owner: "TextFamily",
+        jsonPath: "members[1]",
+        message:
+          'Family "TextFamily" (families/TextFamily.json, members[1]) names object type "Ghost" which has no matching entry in the manifest',
+      },
+    ]);
+  });
+
+  it("R-R45: every member resolving returns []", () => {
+    const doc: SourceDoc<Family> = {
+      file: "families/TextFamily.json",
+      value: { name: "TextFamily", "plugin-id": "", members: ["Sprite", "Text"] },
+    };
+    const issues = detectFamilyMemberIssues([doc], new Set(["Sprite", "Text"]));
+    expect(issues).to.deep.equal([]);
+  });
+
+  it("R-R46: absent or non-array members returns [] without throwing", () => {
+    const noMembers = { file: "families/A.json", value: { name: "A", "plugin-id": "" } as Family };
+    const badMembers = {
+      file: "families/B.json",
+      value: { name: "B", "plugin-id": "", members: "Sprite" as unknown } as unknown as Family,
+    };
+    expect(detectFamilyMemberIssues([noMembers], new Set())).to.deep.equal([]);
+    expect(detectFamilyMemberIssues([badMembers], new Set())).to.deep.equal([]);
+  });
+});
+
+describe("detectInstanceTypeIssues", () => {
+  it("R-R47: a 3-deep nested sublayer instance with a missing type carries the exact jsonPath and layerFullName", () => {
+    const layout: Layout = {
+      name: "Second Layout",
+      layers: [
+        { name: "layer 1" },
+        { name: "layer 2" },
+        {
+          name: "sublayer 1.1",
+          subLayers: [
+            {
+              name: "sublayer 1.1.1",
+              subLayers: [
+                {
+                  name: "sublayer 1.1.1.1",
+                  instances: [{ type: "Ghost", uid: 1, properties: {} }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const issues = detectInstanceTypeIssues([{ file: "layouts/Second Layout.json", value: layout }], new Set());
+    expect(issues).to.deep.equal([
+      {
+        kind: "instance-type-missing",
+        severity: "error",
+        name: "Ghost",
+        file: "layouts/Second Layout.json",
+        owner: "Second Layout",
+        jsonPath: "layers[2].subLayers[0].subLayers[0].instances[0]",
+        layerFullName: "Second Layout.sublayer 1.1.sublayer 1.1.1.sublayer 1.1.1.1",
+        message:
+          'Layout "Second Layout" (layouts/Second Layout.json, layers[2].subLayers[0].subLayers[0].instances[0]) has an instance of type "Ghost" which has no matching entry in the manifest',
+      },
+    ]);
+  });
+
+  it("R-R48: a nonworld-instances entry with a missing type has no layerFullName", () => {
+    const layout: Layout = {
+      name: "Second Layout",
+      layers: [],
+      "nonworld-instances": [{ type: "Ghost", uid: 1, properties: {} }],
+    };
+    const issues = detectInstanceTypeIssues([{ file: "layouts/Second Layout.json", value: layout }], new Set());
+    expect(issues).to.have.lengthOf(1);
+    expect(issues[0]).to.include({
+      kind: "instance-type-missing",
+      severity: "error",
+      name: "Ghost",
+      jsonPath: "nonworld-instances[0]",
+      owner: "Second Layout",
+    });
+    expect(issues[0].layerFullName).to.equal(undefined);
+  });
+
+  it("R-R49: every instance type resolving (layer and nonworld) returns []", () => {
+    const layout: Layout = {
+      name: "L",
+      layers: [{ name: "A", instances: [{ type: "Sprite", uid: 1, properties: {} }] }],
+      "nonworld-instances": [{ type: "Text", uid: 2, properties: {} }],
+    };
+    const issues = detectInstanceTypeIssues(
+      [{ file: "layouts/L.json", value: layout }],
+      new Set(["Sprite", "Text"]),
+    );
+    expect(issues).to.deep.equal([]);
+  });
+
+  it("R-R50: a layout with no layers and no nonworld-instances returns [] without throwing", () => {
+    const layout = { name: "Empty" } as Layout;
+    const issues = detectInstanceTypeIssues([{ file: "layouts/Empty.json", value: layout }], new Set());
+    expect(issues).to.deep.equal([]);
   });
 });
