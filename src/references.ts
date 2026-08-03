@@ -1,4 +1,5 @@
 import { attributeFamily, attributeObjectType } from "./addons.js";
+import { EventSheet, ScriptAction, hasActions, hasConditions, visitEvents } from "./eventSheets.js";
 import { Family, Layer, Layout, ObjectType, walkLayerEntries } from "./layouts.js";
 import { C3ProjectManifest, collectManifestItemNames, getUsedAddons } from "./manifest.js";
 
@@ -7,10 +8,10 @@ import { C3ProjectManifest, collectManifestItemNames, getUsedAddons } from "./ma
 // Cross-reference detection: a C3 project can declare a reference (an addon id,
 // an object-type name, an event-sheet `objectClass`) that does not resolve to
 // anything on the other side. Detection-only, like `detectManifestDrift` and
-// `validateForEditor` — nothing here ever mutates its inputs. `detectAddonReferenceIssues`
-// (the `addon-undeclared`/`addon-unused` pass) is implemented below; the remaining three
-// detectors and the I/O orchestrator that reads a project and runs them all land in later
-// tasks.
+// `validateForEditor` — nothing here ever mutates its inputs. All four detectors
+// (`detectAddonReferenceIssues`, `detectFamilyMemberIssues`, `detectInstanceTypeIssues`,
+// `detectEventClassIssues`) are implemented below; the I/O orchestrator that reads a
+// project and runs them all lands in a later task.
 
 /**
  * The five kinds of unresolved cross-reference this module detects:
@@ -407,6 +408,113 @@ export function detectInstanceTypeIssues(
         });
       });
     }
+  }
+
+  return issues;
+}
+
+// ─── event-class-unresolved detector ───────────────────────────────────────
+
+/**
+ * Extract a loosely-typed action's `objectClass`, or `null` when the action
+ * carries none. Mirrors the defensive `"key" in action` + `typeof` narrowing
+ * already used by `formatActionInner`/`isEventVarReference` in `src/eventSheets.ts`
+ * rather than casting blindly: `action` is `ScriptAction | Record<string, unknown>`,
+ * and only the standard-action and custom-ACE action shapes carry an `objectClass`
+ * (a script/comment/function-call action does not).
+ */
+function actionObjectClass(action: ScriptAction | Record<string, unknown>): string | null {
+  if (!("objectClass" in action)) return null;
+  const objectClass = (action as Record<string, unknown>).objectClass;
+  return typeof objectClass === "string" ? objectClass : null;
+}
+
+/**
+ * Detect event-sheet ACEs whose `objectClass` resolves to neither a manifest
+ * object type nor a manifest family nor a known pseudo-class.
+ *
+ * `classNames` is the caller-supplied union of manifest object-type names and
+ * family names — an ACE may legitimately target a family (e.g. `objectClass:
+ * "TextFamily"`), so object types alone would false-positive. The pseudo-class
+ * set is {@link ReferenceIntegrityOptions.pseudoObjectClasses} if supplied,
+ * else {@link C3_PSEUDO_OBJECT_CLASSES} — REPLACED wholesale, not merged, same
+ * contract as the other detectors' options.
+ *
+ * Walks each sheet with `visitEvents` (ADR 0005: the one canonical event walk,
+ * which also owns C3's event numbering) rather than a second recursion, and
+ * checks three distinct `objectClass` sites per visited event:
+ *
+ * - `conditions[].objectClass` — typed on `Condition`, read directly.
+ * - each action's `objectClass` — actions are loosely typed
+ *   (`ScriptAction | Record<string, unknown>`), so extracted defensively via
+ *   {@link actionObjectClass} rather than cast blindly.
+ * - a `custom-ace-block` event's own top-level `objectClass` — `CustomAceBlockEvent`
+ *   is the only event kind that carries one. `isFunctionDefinition` narrows to
+ *   both `function-block` and `custom-ace-block`, so it is NOT the right guard
+ *   here; this checks `eventType === "custom-ace-block"` specifically. A plain
+ *   `function-block` (no `objectClass` of its own) is unaffected.
+ *
+ * Reporting is **one issue per event, not per ACE** — matching
+ * `validateEventForEditor`'s existing event-granularity precedent: several ACEs
+ * in one event referencing the same unresolved class report once; two ACEs in
+ * one event referencing two *different* unresolved classes report once each.
+ *
+ * `severity: "warning"` is deliberate (hence `event-class-unresolved`, not
+ * `event-class-missing`): the detector cannot distinguish a deleted object type
+ * (a load breaker) from a pseudo-class this table doesn't yet know about
+ * (harmless) — see {@link C3_PSEUDO_OBJECT_CLASSES}'s "KNOWN INCOMPLETE" note.
+ *
+ * `jsonPath` is `ctx.jsonPath` from `visitEvents`, passed through verbatim —
+ * never rebuilt, prefixed, or appended to, so it cannot drift from the
+ * canonical walk (same discipline as `EditorValidationIssue.path`).
+ *
+ * Pure — no I/O, no mutation of `sheets`.
+ */
+export function detectEventClassIssues(
+  sheets: SourceDoc<EventSheet>[],
+  classNames: ReadonlySet<string>,
+  options?: ReferenceIntegrityOptions,
+): ReferenceIssue[] {
+  const pseudoClasses = new Set(options?.pseudoObjectClasses ?? C3_PSEUDO_OBJECT_CLASSES);
+  const resolves = (name: string): boolean => classNames.has(name) || pseudoClasses.has(name);
+
+  const issues: ReferenceIssue[] = [];
+
+  for (const doc of sheets) {
+    const owner = doc.value.name;
+
+    visitEvents(doc.value.events, (event, ctx) => {
+      const unresolved = new Set<string>();
+
+      if (hasConditions(event)) {
+        for (const condition of event.conditions) {
+          if (!resolves(condition.objectClass)) unresolved.add(condition.objectClass);
+        }
+      }
+
+      if (hasActions(event)) {
+        for (const action of event.actions) {
+          const objectClass = actionObjectClass(action);
+          if (objectClass !== null && !resolves(objectClass)) unresolved.add(objectClass);
+        }
+      }
+
+      if (event.eventType === "custom-ace-block" && !resolves(event.objectClass)) {
+        unresolved.add(event.objectClass);
+      }
+
+      for (const name of unresolved) {
+        issues.push({
+          kind: "event-class-unresolved",
+          severity: "warning",
+          name,
+          file: doc.file,
+          owner,
+          jsonPath: ctx.jsonPath,
+          message: `Event sheet "${owner}" (${doc.file}, ${ctx.jsonPath}) references objectClass "${name}" which resolves to no object type, family, or known pseudo-class`,
+        });
+      }
+    });
   }
 
   return issues;

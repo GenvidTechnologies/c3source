@@ -11,14 +11,19 @@ import {
   detectAddonReferenceIssues,
   detectFamilyMemberIssues,
   detectInstanceTypeIssues,
+  detectEventClassIssues,
   type SourceDoc,
 } from "../src/references.js";
 import {
   openProject,
   readProjectManifest,
+  visitEvents,
   type C3ProjectManifest,
   type C3UsedAddon,
+  type CustomAceBlockEvent,
+  type EventSheet,
   type Family,
+  type FunctionBlockEvent,
   type Layout,
   type ObjectType,
 } from "../src/c3source.js";
@@ -441,6 +446,246 @@ describe("detectInstanceTypeIssues", () => {
   it("R-R50: a layout with no layers and no nonworld-instances returns [] without throwing", () => {
     const layout = { name: "Empty" } as Layout;
     const issues = detectInstanceTypeIssues([{ file: "layouts/Empty.json", value: layout }], new Set());
+    expect(issues).to.deep.equal([]);
+  });
+});
+
+describe("detectEventClassIssues", () => {
+  /** Minimal well-formed CustomAceBlockEvent, sid overridable to avoid collisions within a sheet. */
+  function customAceBlock(objectClass: string, sid = 10): CustomAceBlockEvent {
+    return {
+      eventType: "custom-ace-block",
+      aceType: "action",
+      aceName: "MyAce",
+      objectClass,
+      functionReturnType: "none",
+      functionCopyPicked: false,
+      functionIsAsync: false,
+      functionParameters: [],
+      conditions: [],
+      actions: [],
+      sid,
+    };
+  }
+
+  /** Minimal well-formed FunctionBlockEvent — carries no objectClass of its own. */
+  function functionBlock(sid = 11): FunctionBlockEvent {
+    return {
+      eventType: "function-block",
+      functionName: "MyFunction",
+      functionReturnType: "none",
+      functionCopyPicked: false,
+      functionIsAsync: false,
+      functionParameters: [],
+      conditions: [],
+      actions: [],
+      sid,
+    };
+  }
+
+  it("R-R51: System and Functions ACEs are both unflagged (the two seeded pseudo-classes)", () => {
+    const sheet: EventSheet = {
+      name: "Sheet",
+      sid: 1,
+      events: [
+        {
+          eventType: "block",
+          sid: 2,
+          conditions: [{ id: "on-start-of-layout", objectClass: "System", sid: 3 }],
+          actions: [{ id: "set-function-return-value", objectClass: "Functions", parameters: {} }],
+        },
+      ],
+    };
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set());
+    expect(issues).to.deep.equal([]);
+  });
+
+  it('R-R52: an action referencing objectClass "Ghost" yields one event-class-unresolved warning', () => {
+    const sheet: EventSheet = {
+      name: "Sheet",
+      sid: 1,
+      events: [
+        {
+          eventType: "block",
+          sid: 2,
+          conditions: [],
+          actions: [{ id: "some-action", objectClass: "Ghost" }],
+        },
+      ],
+    };
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set());
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({
+      kind: "event-class-unresolved",
+      severity: "warning",
+      name: "Ghost",
+      file: "eventSheets/Sheet.json",
+      owner: "Sheet",
+      jsonPath: "events[0]",
+    });
+  });
+
+  const nestedSheet: EventSheet = {
+    name: "Nested Sheet",
+    sid: 1,
+    events: [
+      {
+        eventType: "group",
+        sid: 2,
+        disabled: false,
+        title: "Group",
+        isActiveOnStart: true,
+        children: [
+          {
+            eventType: "block",
+            sid: 3,
+            conditions: [{ id: "some-condition", objectClass: "Ghost", sid: 4 }],
+            actions: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  it("R-R53: an unresolved class nested inside a group's children produces the nested jsonPath, not the top-level group's", () => {
+    const issues = detectEventClassIssues([{ file: "eventSheets/Nested.json", value: nestedSheet }], new Set());
+    expect(issues.length).to.equal(1);
+    expect(issues[0].jsonPath).to.equal("events[0].children[0]");
+  });
+
+  it("R-R54: drift lock — the reported jsonPath is string-identical to an independent visitEvents walk over the same sheet", () => {
+    const issues = detectEventClassIssues([{ file: "eventSheets/Nested.json", value: nestedSheet }], new Set());
+    expect(issues.length).to.equal(1);
+
+    // Independent walk, written longhand here: does NOT call detectEventClassIssues, does NOT
+    // reuse any value it returned, and does NOT share a helper with the implementation. This is
+    // what makes the lock non-vacuous — it proves the detector's jsonPath matches a coordinate
+    // derived by a second, separately-written visitEvents pass, not merely itself.
+    let expectedJsonPath: string | undefined;
+    visitEvents(nestedSheet.events, (event, ctx) => {
+      if (event.eventType === "block" && event.conditions.some((c) => c.objectClass === "Ghost")) {
+        expectedJsonPath = ctx.jsonPath;
+      }
+    });
+
+    expect(expectedJsonPath).to.equal("events[0].children[0]");
+    expect(issues[0].jsonPath).to.equal(expectedJsonPath);
+  });
+
+  it('R-R55: objectClass "TextFamily" resolves when classNames includes family names, not just object-type names', () => {
+    const sheet: EventSheet = {
+      name: "Sheet",
+      sid: 1,
+      events: [
+        {
+          eventType: "block",
+          sid: 2,
+          conditions: [{ id: "some-condition", objectClass: "TextFamily", sid: 3 }],
+          actions: [],
+        },
+      ],
+    };
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set(["TextFamily"]));
+    expect(issues).to.deep.equal([]);
+  });
+
+  it('R-R56: options.pseudoObjectClasses suppresses the "Ghost" finding when it includes "Ghost"', () => {
+    const sheet: EventSheet = {
+      name: "Sheet",
+      sid: 1,
+      events: [
+        {
+          eventType: "block",
+          sid: 2,
+          conditions: [{ id: "some-condition", objectClass: "Ghost", sid: 3 }],
+          actions: [],
+        },
+      ],
+    };
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set(), {
+      pseudoObjectClasses: ["Ghost"],
+    });
+    expect(issues).to.deep.equal([]);
+  });
+
+  it("R-R57: a custom-ace-block event's own top-level objectClass is checked", () => {
+    const sheet: EventSheet = { name: "Sheet", sid: 1, events: [customAceBlock("Ghost")] };
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set());
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({
+      kind: "event-class-unresolved",
+      severity: "warning",
+      name: "Ghost",
+      jsonPath: "events[0]",
+    });
+  });
+
+  it("R-R58: a function-block (which has no objectClass of its own) produces no spurious issue and does not throw", () => {
+    const sheet: EventSheet = { name: "Sheet", sid: 1, events: [functionBlock()] };
+    expect(() =>
+      detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set()),
+    ).to.not.throw();
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set());
+    expect(issues).to.deep.equal([]);
+  });
+
+  it("R-R59: granularity is one issue per event — repeated refs to the same unresolved class collapse to one, distinct classes report once each", () => {
+    const sameClassSheet: EventSheet = {
+      name: "Sheet",
+      sid: 1,
+      events: [
+        {
+          eventType: "block",
+          sid: 2,
+          conditions: [{ id: "c1", objectClass: "Ghost", sid: 3 }],
+          actions: [
+            { id: "a1", objectClass: "Ghost" },
+            { id: "a2", objectClass: "Ghost" },
+          ],
+        },
+      ],
+    };
+    const sameClassIssues = detectEventClassIssues(
+      [{ file: "eventSheets/Sheet.json", value: sameClassSheet }],
+      new Set(),
+    );
+    expect(sameClassIssues.length).to.equal(1);
+
+    const twoClassesSheet: EventSheet = {
+      name: "Sheet",
+      sid: 1,
+      events: [
+        {
+          eventType: "block",
+          sid: 2,
+          conditions: [{ id: "c1", objectClass: "Ghost", sid: 3 }],
+          actions: [{ id: "a1", objectClass: "Phantom" }],
+        },
+      ],
+    };
+    const twoClassesIssues = detectEventClassIssues(
+      [{ file: "eventSheets/Sheet.json", value: twoClassesSheet }],
+      new Set(),
+    );
+    expect(twoClassesIssues.length).to.equal(2);
+    expect(twoClassesIssues.map((i) => i.name).sort()).to.deep.equal(["Ghost", "Phantom"]);
+  });
+
+  it("R-R60: an all-resolving sheet (conditions, actions, and a custom-ace-block, all matching classNames or pseudo-classes) returns []", () => {
+    const sheet: EventSheet = {
+      name: "Sheet",
+      sid: 1,
+      events: [
+        {
+          eventType: "block",
+          sid: 2,
+          conditions: [{ id: "c1", objectClass: "Sprite", sid: 3 }],
+          actions: [{ id: "a1", objectClass: "System" }],
+        },
+        customAceBlock("Sprite", 20),
+      ],
+    };
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set(["Sprite"]));
     expect(issues).to.deep.equal([]);
   });
 });
