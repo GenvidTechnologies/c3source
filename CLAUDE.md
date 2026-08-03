@@ -103,6 +103,20 @@ Crucially it captures the type-only exports (interfaces/type aliases) that a
 runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
 value-vs-type pair.
 
+**The declaration text includes JSDoc**, so "byte-identical dump" is a
+stronger claim than "identical API": a **comment-only** edit to a member of an
+exported interface moves the dump even though no signature changed. ADR 0012
+and ADR 0017 both cite an *exactly-empty* diff as their purity proof, which
+held only because those refactors happened not to touch JSDoc — a
+doc-carrying PR has no such luxury and will show entries that look like scope
+leaks but are prose. (#63 hit exactly this: the predicted two-line delta came
+back as three, the extra one being `C3Project` after `findAllScripts`'s
+comment was corrected.) When a change deliberately touches comments, strip
+JSDoc blocks from both dumps and re-diff to isolate real signature changes —
+e.g. `sed -E 's#/\*\*[^*]*\*+([^/*][^*]*\*+)*/##g'` over each dump before
+`diff`. Reserve the empty-diff standard for refactors that leave comments
+alone.
+
 Three functional areas:
 
 1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip

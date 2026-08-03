@@ -118,8 +118,14 @@ unable to answer the directory-name question at all.
   release commit, per this repo's convention.
 - Unlike a table-contents change, this **is** visible to
   `scripts/api-surface.mjs` — the declaration text of `find_all_files_path`
-  changes, plus the new `C3_TS_DEFS_FOLDER` export. Expected dump delta:
-  exactly two lines.
+  changes, plus the new `C3_TS_DEFS_FOLDER` export. **Signature** delta:
+  exactly those two lines. The *raw* dump for the PR that introduced this
+  shows a third entry, `C3Project`, because the dump's
+  canonicalized-declaration-text includes **JSDoc** and the same PR corrected
+  `findAllScripts`'s doc comment; its method signature is byte-identical.
+  Strip JSDoc blocks from both dumps before diffing to isolate real signature
+  changes from prose (see `CLAUDE.md`) — otherwise a doc-carrying PR reads as
+  a scope leak.
 - **Residual risk to watch:** a future change that threads a `descend`
   override into `find_all_layouts_path`/`find_all_objectTypes_path` would hit
   Fork B's leak — those collectors have no extension filter. They are
