@@ -77,6 +77,10 @@ export interface C3ProjectManifest {
   properties: Record<string, unknown>;
   bundleAddons?: boolean;
   usedAddons?: C3UsedAddon[];
+  /** Name of C3's built-in functions object, configurable per project. Defaults to
+   *  `"Functions"` (see `C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`) when absent —
+   *  observed absent in 5 of 14 real-world corpus projects. */
+  functionsName?: string;
   [key: string]: unknown; // forward-compat: viewportWidth, firstLayout, …
 }
 
@@ -561,9 +565,12 @@ export type DriftKind = "missing" | "untracked" | "moved" | "folder-missing" | "
 export interface DriftEntry {
   kind: DriftKind;
   name: string;
-  /** Subfolder-name segments in the MANIFEST tree (absent on "untracked" and "dangling-ref"). */
+  /** Subfolder-name segments in the MANIFEST tree (absent on "untracked"). On
+   *  "dangling-ref" this carries a synthetic `#<containerIndex>` segment instead
+   *  of a subfolder name — the one place a path segment isn't a subfolder name. */
   manifestPath?: ManifestPathSegment[];
-  /** Subfolder-name segments on DISK (absent on "missing" and "dangling-ref"). */
+  /** Subfolder-name segments on DISK (absent on "missing" and "dangling-ref": a
+   *  dangling reference is manifest-vs-manifest, with no disk counterpart). */
   diskPath?: ManifestPathSegment[];
 }
 

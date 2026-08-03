@@ -14,6 +14,7 @@ Each entry should be a one-line description. Only list docs that exist.
 - `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation, manifest write surface + write-through cache rule (#36 #57 #58)
 - `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
 - `api-guide-addons.md` — addon domain layer: usedAddons manifest support, addon attribution (behaviorTypes/effectTypes), findAllAddons, readAddonPackage, parseAcesModel/parseAddonMetadata (#44)
+- `api-guide-references.md` — reference-integrity detection: the five ReferenceIssue kinds, C3_PSEUDO_OBJECT_CLASSES/NON_ATTRIBUTABLE_ADDON_TYPES domain-fact tables, the four pure detectors + detectReferenceIntegrity orchestrator, C3Project.detectReferenceIntegrity, error policy, ownership boundary vs. construct3-chef (#60)
 
 ## Decision Records
 
@@ -39,3 +40,4 @@ Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.
 - `decisions/0018-brush-json-minified-source-not-editor-local.md` — `*.brush.json` is minified project source, not editor-local; `EDITOR_LOCAL_EXCLUSIONS` deliberately unchanged; new `isMinifiedSourcePath` domain fact (#59)
 - `decisions/0019-hermetic-fixture-materialization.md` — materialize the canonical fixture from the `construct3-sample` submodule's tracked HEAD content (`git archive`) instead of its working tree, so the corpus no longer differs between a developer machine and CI (#64)
 - `decisions/0020-caller-controlled-walk-descent.md` — `find_all_files_path` gains an optional `descend` parameter so callers can opt a directory (e.g. `ts-defs/`) back into reachability without narrowing `EDITOR_LOCAL_EXCLUSIONS`; classification stays unchanged (#63)
+- `decisions/0021-reference-integrity-detection.md` — reference-integrity detection lives in a new `src/references.ts` module/DAG tier with its own `ReferenceIssue` type, not folded into `detectManifestDrift`/`DriftEntry` (#60)

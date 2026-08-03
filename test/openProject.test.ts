@@ -14,8 +14,10 @@ import {
   find_all_eventsheets_path,
   find_all_layouts_path,
   find_all_objectTypes_path,
+  visit_layers_in_layouts,
   detectManifestDrift,
   detectImageDrift,
+  detectReferenceIntegrity,
   type C3Project,
   type C3ProjectManifest,
 } from "../src/c3source.js";
@@ -614,5 +616,73 @@ describe("openProject — reloadManifest() (T19)", () => {
     const reloaded = proj.reloadManifest();
     expect(reloaded.name).to.equal("After");
     expect(proj.manifest()).to.equal(reloaded);
+  });
+});
+
+// ─── F1: detectReferenceIntegrity() delegator + the pre-existing crash fix (OP-74 to OP-76) ─
+
+describe("openProject — detectReferenceIntegrity() delegator (OP-74, OP-75)", () => {
+  let proj: C3Project;
+
+  before(function () {
+    if (!fixtureProjectExists()) return this.skip();
+    proj = openProject(FIXTURE_DIR);
+  });
+
+  it("OP-74: detectReferenceIntegrity() deep-equals standalone detectReferenceIntegrity(FIXTURE_DIR)", () => {
+    const fromHandle = proj.detectReferenceIntegrity();
+    const standalone = detectReferenceIntegrity(FIXTURE_DIR);
+    expect(fromHandle).to.deep.equal(standalone);
+  });
+
+  it("OP-75: detectReferenceIntegrity() reuses the cached manifest — a mutation to it is reflected without a disk re-read", () => {
+    const cachedManifest = proj.manifest();
+    const before = proj.detectReferenceIntegrity();
+    expect(before.ok).to.equal(true);
+
+    // Mutate the cached manifest in place (same object detectManifestDrift/detectReferenceIntegrity
+    // is handed) so every family-member and instance-type reference in the project now dangles.
+    // If the handle instead re-read project.c3proj from disk, this mutation would have no effect
+    // and `after.ok` would still be true.
+    const originalObjectTypes = cachedManifest.objectTypes;
+    cachedManifest.objectTypes = { items: [], subfolders: [] };
+    try {
+      const after = proj.detectReferenceIntegrity();
+      expect(after.ok).to.equal(false);
+      expect(after.issues.length).to.be.greaterThan(0);
+    } finally {
+      cachedManifest.objectTypes = originalObjectTypes;
+    }
+  });
+});
+
+describe("openProject — crash fix: non-.json files under objectTypes/ and layouts/ (OP-76)", () => {
+  it("OP-76: a stray README.md under objectTypes/ does not crash collectAddonAttribution(), and one under layouts/ does not crash visit_layers_in_layouts", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-strayfiles-"));
+    try {
+      const objectTypesDir = path.join(tmpDir, C3_SECTION_FOLDERS.objectTypes);
+      const layoutsDir = path.join(tmpDir, C3_SECTION_FOLDERS.layouts);
+      mkdirSync(objectTypesDir, { recursive: true });
+      mkdirSync(layoutsDir, { recursive: true });
+
+      // find_all_objectTypes_path / find_all_layouts_path filter only on !isEditorLocalPath
+      // (no .json predicate — see their JSDoc), so both of these stray files are returned by
+      // the finders and previously reached JSON.parse unfiltered.
+      writeFileSync(path.join(objectTypesDir, "README.md"), "not json");
+      writeFileSync(path.join(objectTypesDir, "Foo.json"), JSON.stringify({ name: "Foo" }));
+
+      writeFileSync(path.join(layoutsDir, "README.md"), "not json");
+      writeC3JsonFile(path.join(layoutsDir, "Main Layout.json"), { name: "Main Layout", layers: [] });
+
+      const proj = openProject(tmpDir);
+
+      expect(() => proj.collectAddonAttribution()).to.not.throw();
+      const attribution = proj.collectAddonAttribution();
+      expect(attribution.map((a) => a.name)).to.deep.equal(["Foo"]);
+
+      expect(() => visit_layers_in_layouts(layoutsDir, () => 0)).to.not.throw();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

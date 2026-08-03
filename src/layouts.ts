@@ -55,6 +55,7 @@ export interface Layer {
   instances?: Instance[];
   /** C3's global-layer-override marker (single-r spelling matches C3's on-disk key). */
   overriden?: 0 | 1;
+  effectTypes?: EffectTypeRef[];
 }
 
 export interface Layout {
@@ -66,6 +67,7 @@ export interface Layout {
   eventSheet?: string;
   width?: number;
   height?: number;
+  effectTypes?: EffectTypeRef[];
 }
 
 export interface BehaviorTypeRef {
@@ -224,6 +226,16 @@ export type LayerEntry = {
   index: number;
 };
 
+/**
+ * A {@link LayerEntry} plus its JSON locator within the owning layout, e.g.
+ * `"layers[2].subLayers[0]"` — same grammar as `formatSidPath` in
+ * `src/eventSheets.ts` (see {@link walkLayerEntries} for why the rendering is
+ * duplicated rather than shared).
+ */
+export interface LayerEntryWithPath extends LayerEntry {
+  jsonPath: string;
+}
+
 /** Predicate over a {@link LayerEntry}; return true to select the layer. */
 export type LayerPredicate = (entry: LayerEntry) => boolean;
 
@@ -241,7 +253,11 @@ function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): num
 }
 
 export function visit_layers_in_layouts(layouts_path: string, visitor: LayerVisitor): number {
-  const layouts = find_all_layouts_path(layouts_path);
+  // find_all_layouts_path filters only on !isEditorLocalPath (no .json predicate — that is
+  // intentional, see its JSDoc), so a stray non-JSON file under layouts/ would otherwise
+  // reach visit_layers_in_layout's JSON.parse and crash. Filter to .json here, at the parse
+  // boundary, rather than narrowing the finder's documented contract.
+  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, visitor) + changed,
     0,
@@ -260,7 +276,10 @@ function makeLayerVisitorFromInstanceVisitor(visitor: InstanceVisitor): LayerVis
 }
 
 export function visit_instances_in_layouts(layouts_path: string, visitor: InstanceVisitor): number {
-  const layouts = find_all_layouts_path(layouts_path);
+  // Same non-JSON-file hazard as visit_layers_in_layouts above (this ultimately calls the
+  // same visit_layers_in_layout, whose JSON.parse would crash on a stray non-JSON file) —
+  // filter to .json here, at the parse boundary, rather than narrowing find_all_layouts_path.
+  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
   const layerVisitor = makeLayerVisitorFromInstanceVisitor(visitor);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, layerVisitor) + changed,
@@ -273,18 +292,36 @@ export function visit_instances_in_layouts(layouts_path: string, visitor: Instan
  * walker/finder. Yields each layer parent-before-children, fully recursive
  * through `subLayers`, building the dotted/global-resetting `fullName` exactly
  * as `visitLayers` historically did (a layer flagged `global` resets the
- * qualifier to "global"). Internal: consumers go through `visitLayers` or the
- * `find*` functions. Because it is a generator, a consumer that stops iterating
- * (the `find*` functions, on first match) halts the walk immediately.
+ * qualifier to "global"), plus a `jsonPath` locator (e.g.
+ * `"layers[2].subLayers[0]"`) built inline as the recursion descends. Exported
+ * so a consumer needing the JSON coordinate of a layer (e.g. an instance-level
+ * dangling-reference report) can drive the walk directly instead of
+ * re-deriving the index chain from `ancestors`; most consumers still go
+ * through `visitLayers` or the `find*` functions below, which simply ignore
+ * `jsonPath`. Because it is a generator, a consumer that stops iterating (the
+ * `find*` functions, on first match) halts the walk immediately.
+ *
+ * `jsonPath` rendering is a deliberate ~3-line duplicate of `formatSidPath`'s
+ * grammar (`src/eventSheets.ts`, `[i]` for array indices, `.key` for object
+ * keys, no leading dot) rather than a call to it: `eventSheets.ts` imports
+ * `layouts.ts`, so calling back would create a `layouts -> eventSheets` cycle
+ * (`layouts` may import only `serialize`). If the path grammar ever changes,
+ * update both this site and `formatSidPath`.
  */
-function* walkLayerEntries(layers: Layer[], prefix: string, ancestors: Layer[]): Generator<LayerEntry> {
+export function* walkLayerEntries(
+  layers: Layer[],
+  prefix: string,
+  ancestors: Layer[],
+  basePath = "layers",
+): Generator<LayerEntryWithPath> {
   for (let index = 0; index < layers.length; index++) {
     const layer = layers[index];
     const base = layer.global ? "global" : prefix;
     const fullName = base ? `${base}.${layer.name}` : layer.name;
-    yield { layer, name: layer.name, fullName, ancestors, parent: layers, index };
+    const jsonPath = `${basePath}[${index}]`;
+    yield { layer, name: layer.name, fullName, ancestors, parent: layers, index, jsonPath };
     if (layer.subLayers) {
-      yield* walkLayerEntries(layer.subLayers, fullName, [...ancestors, layer]);
+      yield* walkLayerEntries(layer.subLayers, fullName, [...ancestors, layer], `${jsonPath}.subLayers`);
     }
   }
 }

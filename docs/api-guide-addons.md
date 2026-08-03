@@ -143,6 +143,20 @@ It reads and parses every path returned by `findAllObjectTypes()` /
 `collectAddonAttribution`. Graceful-empty when the `objectTypes`/`families`
 directories are absent, since the underlying finders already return `[]`.
 
+**What `collectAddonAttribution` deliberately does not cover.** A layout's
+own top-level `effectTypes` and a layer's/sublayer's `effectTypes` are a
+separate surface, exposed instead by
+[`collectLayoutEffectIds`](api-guide-references.md#the-four-pure-detectors)
+in `src/references.ts`. This is a sibling function, not a widening of
+`collectAddonAttribution`: a layer is neither an object type nor a family, so
+covering it would violate `attributeObjectType`/`attributeFamily`'s
+documented contract of deriving strictly from an item's **own declared
+fields**, and it would add `"layout" | "layer"` to the exported
+`AddonAttribution.source` union — an exhaustive-`switch` break for any
+existing consumer, i.e. a breaking change. See
+[ADR 0021](decisions/0021-reference-integrity-detection.md) (point 3) for the
+full rationale.
+
 ## Discovery: `findAllAddons`
 
 ```ts
@@ -379,11 +393,22 @@ for (const addonPath of project.findAllAddons("addons")) {
 ## Out of scope
 
 This layer parses, models, and discovers — it does not reconcile or render.
-Consumers own:
 
-- **Validation/reconciliation** — cross-referencing `usedAddons` (declared)
-  against `collectAddonAttribution` (referenced) or against the addon
-  packages found by `findAllAddons` to flag missing/unused addons.
+- **`usedAddons` ↔ source cross-referencing is no longer out of scope.**
+  c3source ships this: see
+  [api-guide-references.md](api-guide-references.md) for
+  `detectAddonReferenceIssues`/`detectReferenceIntegrity`, which join
+  `usedAddons` (declared) against `collectAddonAttribution` plus
+  `collectLayoutEffectIds` (referenced) and report `addon-undeclared`/
+  `addon-unused` issues.
+
+Consumers still own:
+
+- **The `.c3addon`-package direction** — cross-referencing `usedAddons`
+  against the addon packages found by `findAllAddons` (does every declared
+  addon resolve to an actual installed package, and vice versa) stays a
+  consumer concern; see
+  [api-guide-references.md — Ownership boundary vs. construct3-chef](api-guide-references.md#ownership-boundary-vs-construct3-chef).
 - **ACE diff** — comparing two `AcesModel`s (e.g. across an addon version
   bump) to detect added/removed/changed actions, conditions, or
   expressions.

@@ -85,7 +85,17 @@ interface C3ProjectManifest {
   containers: C3Container[];
   rootFileFolders: C3RootFileFolders;
   properties: Record<string, unknown>;
-  [key: string]: unknown; // forward-compat: usedAddons, firstLayout, viewportWidth, …
+  bundleAddons?: boolean;
+  usedAddons?: C3UsedAddon[];
+  /** Name of C3's built-in functions object, configurable per project.
+   *  Optional — absent means the project uses C3's default, `"Functions"`
+   *  (`C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`). Observed absent in
+   *  5 of 14 real-world corpus projects. Before #60, c3source could not see
+   *  this attribute at all — a renamed functions object silently produced
+   *  false `event-class-unresolved` issues; see
+   *  [api-guide-references.md](api-guide-references.md#domain-fact-tables). */
+  functionsName?: string;
+  [key: string]: unknown; // forward-compat: firstLayout, viewportWidth, …
 }
 ```
 
@@ -466,6 +476,13 @@ const drift = detectManifestDrift("./my-game", m);
 member that names an object type absent from the manifest is reported as a
 `dangling-ref` entry. The `manifestPath` carries `["#<i>"]` (the container's
 index) so the caller can locate which container holds the stale reference.
+
+This `dangling-ref` check is drift's **only** reference check — drift stays
+membership-only otherwise (declared vs. on-disk names, not whether a
+reference *resolves*). Reference integrity beyond containers (addon
+declarations, family members, layout instance types, event `objectClass`)
+lives in a separate module — see
+[api-guide-references.md](api-guide-references.md).
 
 ### Images drift
 

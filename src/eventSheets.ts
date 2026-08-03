@@ -986,7 +986,14 @@ export function extractIncludes(sheet: EventSheet): IncludeReference[] {
 /** A path segment: object key (string) or array index (number). */
 export type SidPathSegment = string | number;
 
-/** Render segments into the canonical dotted/indexed path string. Empty segments -> "". */
+/**
+ * Render segments into the canonical dotted/indexed path string. Empty segments -> "".
+ *
+ * This exact grammar is duplicated inline in `src/layouts.ts`'s `walkLayerEntries`
+ * (its `jsonPath` rendering) because `layouts.ts` cannot import this module without
+ * creating a `layouts -> eventSheets` cycle (`eventSheets.ts` already imports
+ * `layouts.ts`). If this grammar ever changes, update both sites.
+ */
 export function formatSidPath(segments: ReadonlyArray<SidPathSegment>): string {
   let out = "";
   for (const seg of segments) {
