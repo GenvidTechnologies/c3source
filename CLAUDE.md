@@ -431,11 +431,22 @@ Four functional areas:
    one I/O orchestrator (`detectReferenceIntegrity(projectDir, manifest?,
    options?)`) plus the `C3Project` handle's `detectReferenceIntegrity(options?)`,
    which passes the cached manifest. The exported table `C3_PSEUDO_OBJECT_CLASSES`
-   (`objectClass` values resolving to no object type/family by design, e.g.
-   `"System"`/`"Functions"`) is **known incomplete** — corpus-derived, not
-   C3-source-derived — with `scripts/scan-references.mjs` (dev-only, mirrors
-   `scripts/api-surface.mjs`) as the tool to re-validate it against real
-   projects on a C3 version bump. `collectLayoutEffectIds` **supplements**
+   (`objectClass` values resolving to no object type/family **by design**;
+   statically known members only, currently just `"System"`) is **known
+   incomplete** — corpus-derived, not C3-source-derived — with
+   `scripts/scan-references.mjs` (dev-only, mirrors `scripts/api-surface.mjs`)
+   as the tool to re-validate it against real projects on a C3 version bump.
+   C3's functions object is deliberately **not** in that table: its name is a
+   **per-project setting** (`project.c3proj`'s optional `functionsName`,
+   defaulting to `C3_DEFAULT_FUNCTIONS_NAME` = `"Functions"`), so
+   `detectEventClassIssues` resolves it separately, one additional name atop
+   the pseudo-class set, with precedence `options.functionsName` →
+   `manifest.functionsName` → the default; a renamed functions object means
+   the literal `"Functions"` stops resolving. This was a real defect (#60,
+   fixed in commit 353f571): the table originally hardcoded `"Functions"`
+   too, which the 14-project corpus scan never caught because every scanned
+   project used the default name — the scan validated the *value*, not the
+   *mechanism*. `collectLayoutEffectIds` **supplements**
    `collectAddonAttribution` rather than widening it — a layout/layer effect is
    not an item's own declared field, and adding it to `AddonAttribution.source`
    would break any consumer's exhaustive `switch`. Error policy deliberately

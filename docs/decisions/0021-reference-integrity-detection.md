@@ -111,6 +111,27 @@ layout would be a false clean bill of health.
 
 ## Consequences
 
+- **Correction (2026-08-03, #60):** the "212 occurrences" finding in point 4
+  above is unchanged and still stands as the argument for
+  `scripts/scan-references.mjs` — but the conclusion originally drawn from it
+  was wrong. `"Functions"` is not a fixed pseudo-class; it is the **default
+  value of a per-project setting** (`project.c3proj`'s `functionsName`
+  attribute, now modeled as `C3ProjectManifest.functionsName?: string`). A
+  project that renames its functions object emitted `objectClass` values the
+  static table could never contain, producing a false `event-class-unresolved`
+  on **every** function call in that project — the exact failure mode the
+  table existed to prevent. `C3_PSEUDO_OBJECT_CLASSES` is now `["System"]`
+  only; the functions object's name is resolved per-project via the new
+  `C3_DEFAULT_FUNCTIONS_NAME` constant and `ReferenceIntegrityOptions.functionsName`,
+  with precedence explicit option → `manifest.functionsName` → the default
+  (fixed in commit 353f571). It slipped through because all 14 corpus projects
+  scanned used the default name, so the scan confirmed the observed **value**
+  but was structurally unable to reveal the **mechanism** behind it — every
+  sample happened to exercise the same code path. That sharpens, rather than
+  weakens, the case for keeping the scanner: it shows a corpus scan alone is
+  sufficient evidence for a domain-fact table's *values* but not for its
+  *shape* (fixed string vs. per-project setting) — a distinct question the
+  scan was never positioned to answer, no matter how many projects it covers.
 - Semver **minor** (1.8.0 → 1.9.0); the bump is a separate release commit.
 - **Unvalidated assumption, recorded honestly:** `NON_ATTRIBUTABLE_ADDON_TYPES
   = ["theme"]` is derived from `C3UsedAddon`'s JSDoc and was **never

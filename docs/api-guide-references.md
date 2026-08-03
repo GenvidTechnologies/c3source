@@ -44,7 +44,7 @@ type ReferenceIssueSeverity = "error" | "warning";
 | `addon-unused` | `warning` | A manifest `usedAddons` entry matches nothing derived from source. Hygiene only — C3 still loads the project. |
 | `family-member-missing` | `error` | A `Family.members` entry names an object type absent from the manifest. C3 fails to load the family. |
 | `instance-type-missing` | `error` | A layout instance's `type` names an object type absent from the manifest. C3 fails to load the layout. |
-| `event-class-unresolved` | `warning` | An event-sheet ACE's `objectClass` resolves to neither an object type nor a family nor a known pseudo-class. |
+| `event-class-unresolved` | `warning` | An event-sheet ACE's `objectClass` resolves to neither an object type nor a family nor a known pseudo-class nor the project's functions object. |
 
 `error` means C3 fails to load the project outright; `warning` means either
 pure hygiene (`addon-unused` — nothing breaks, something is just declared and
@@ -104,58 +104,90 @@ support.
 
 ## Domain-fact tables
 
-Two exported tables, following the same convention as
-`EVENTVAR_REFERENCE_ACES`/`IMAGE_FILE_TYPE_EXTENSIONS`/`EDITOR_FIELD_RULES`
+One exported table plus one exported constant, following the same convention
+as `EVENTVAR_REFERENCE_ACES`/`IMAGE_FILE_TYPE_EXTENSIONS`/`EDITOR_FIELD_RULES`
 (see [api-guide-extraction.md](api-guide-extraction.md)):
 
 ```ts
-const C3_PSEUDO_OBJECT_CLASSES: string[] = ["System", "Functions"];
+const C3_PSEUDO_OBJECT_CLASSES: string[] = ["System"];
+const C3_DEFAULT_FUNCTIONS_NAME = "Functions";
 const NON_ATTRIBUTABLE_ADDON_TYPES: string[] = ["theme"];
 ```
 
 **`C3_PSEUDO_OBJECT_CLASSES`** — `objectClass` values that resolve to no
-object type and no family **by design**: `"System"` (the built-in System
-object) and `"Functions"` (C3's built-in event-sheet-functions object).
-**Known incomplete** — it was derived from a 16-project corpus scan, not from
-C3's source, and the canonical fixture alone yields only `{"System"}` (see
+object type and no family **by design**, holding only the **statically**
+known pseudo-classes: `"System"` (the built-in System object). **Known
+incomplete even for the classes it does cover** — it was derived from a
+16-project corpus scan, not from C3's source, and the canonical fixture alone
+yields only `{"System"}` (see
 [ADR 0021](decisions/0021-reference-integrity-detection.md), point 4, for the
 corpus evidence). `Mouse`/`Keyboard`/`Touch`/`Audio`/`Browser` are **not**
 pseudo-classes — each is an ordinary object type with its own
 `objectTypes/*.json` entry and manifest membership, so they must resolve
 normally rather than being special-cased here.
 
+C3's built-in event-sheet-functions object is deliberately **not** in this
+table: its `objectClass` name is a **per-project setting**, not a fixed
+string. This distinction was learned the hard way — see the
+[ADR 0021 consequences correction](decisions/0021-reference-integrity-detection.md#consequences)
+for how a corpus scan can confirm a string value while missing the mechanism
+behind it.
+
+**`C3_DEFAULT_FUNCTIONS_NAME`** (`"Functions"`) — the functions object's name
+when `project.c3proj` omits `functionsName` (see
+[`C3ProjectManifest.functionsName`](api-guide-manifest.md)). `detectEventClassIssues`
+resolves an ACE's `objectClass` against this name **in addition to**
+`classNames` and the pseudo-class set — via
+[`ReferenceIntegrityOptions.functionsName`](#the-four-pure-detectors), which
+is a single **additional** resolvable name, not a replacement for
+`C3_PSEUDO_OBJECT_CLASSES`. `detectReferenceIntegrity` resolves it with
+precedence **explicit `options.functionsName` → `manifest.functionsName` →
+`C3_DEFAULT_FUNCTIONS_NAME`**, so most callers never need to set it
+explicitly. If a project renames its functions object (e.g. to `"Fn"`), the
+literal `"Functions"` **stops resolving** — C3 does not keep it as an alias,
+so a caller that hardcodes `"Functions"` instead of reading `functionsName`
+will misclassify every function-call ACE in a renamed project.
+
 **`NON_ATTRIBUTABLE_ADDON_TYPES`** — `usedAddons[].type` values that can
 never appear on the source-derived side, so `addon-unused` never reports
 them. Currently just `"theme"` (`plugin`/`behavior`/`effect` are the only
 attributable types).
 
-**Extending them.** Two ways, matching the `EDITOR_FIELD_RULES` convention:
+**Extending/tuning them.** Matching the `EDITOR_FIELD_RULES` convention,
+per-call via `ReferenceIntegrityOptions`:
 
-1. **Array mutation** — push onto the exported array directly; this changes
-   the default for every call in the process.
-2. **Per-call, via `ReferenceIntegrityOptions`**:
+```ts
+interface ReferenceIntegrityOptions {
+  pseudoObjectClasses?: readonly string[];       // REPLACES C3_PSEUDO_OBJECT_CLASSES
+  nonAttributableAddonTypes?: readonly string[]; // REPLACES NON_ATTRIBUTABLE_ADDON_TYPES
+  functionsName?: string;                        // ADDS ONE resolvable name, alongside the table
+}
+```
 
-   ```ts
-   interface ReferenceIntegrityOptions {
-     pseudoObjectClasses?: readonly string[];       // REPLACES C3_PSEUDO_OBJECT_CLASSES
-     nonAttributableAddonTypes?: readonly string[]; // REPLACES NON_ATTRIBUTABLE_ADDON_TYPES
-   }
-   ```
+**This asymmetry is easy to misread — `pseudoObjectClasses` and
+`nonAttributableAddonTypes` each *replace* their table wholesale for the
+call; `functionsName` *adds* a single name on top of whatever pseudo-class
+set is in effect.** To extend a table rather than override it, spread the
+base table in yourself:
 
-   Both fields **replace**, not merge. To extend rather than override,
-   spread the table in yourself:
+```ts
+import { C3_PSEUDO_OBJECT_CLASSES, detectReferenceIntegrity } from "@genvidtech/c3source";
 
-   ```ts
-   import { C3_PSEUDO_OBJECT_CLASSES, detectReferenceIntegrity } from "@genvidtech/c3source";
+const result = detectReferenceIntegrity("./my-game", undefined, {
+  pseudoObjectClasses: [...C3_PSEUDO_OBJECT_CLASSES, "MyPluginPseudoClass"],
+});
+```
 
-   const result = detectReferenceIntegrity("./my-game", undefined, {
-     pseudoObjectClasses: [...C3_PSEUDO_OBJECT_CLASSES, "MyPluginPseudoClass"],
-   });
-   ```
+Passing `pseudoObjectClasses: ["MyPluginPseudoClass"]` alone would drop
+`"System"` entirely and start flagging every ordinary `System` ACE — always
+spread the base table in first. `functionsName`, by contrast, never needs
+that treatment — pass just the renamed value:
 
-   Passing `pseudoObjectClasses: ["MyPluginPseudoClass"]` alone would drop
-   `"System"`/`"Functions"` entirely and start flagging every ordinary
-   `System` ACE — always spread the base table in first.
+```ts
+const result = detectReferenceIntegrity("./my-game", undefined, {
+  functionsName: "Fn", // this project renamed its functions object away from the default
+});
+```
 
 ## The four pure detectors
 
@@ -225,10 +257,18 @@ const issues = detectInstanceTypeIssues(layouts, manifestObjectTypeNames(manifes
 
 **`detectEventClassIssues`** — every ACE's `objectClass` (condition, action,
 or a `custom-ace-block` event's own) must resolve to a manifest object type,
-a manifest family, or a pseudo-class. `classNames` is the caller-supplied
-union of both name sets, since an ACE may legitimately target a family.
-Reporting is **one issue per event** (matching `validateEventForEditor`'s
-existing event-granularity precedent), not one per ACE.
+a manifest family, a pseudo-class, or the project's functions object.
+`classNames` is the caller-supplied union of both name sets, since an ACE may
+legitimately target a family. Reporting is **one issue per event** (matching
+`validateEventForEditor`'s existing event-granularity precedent), not one per
+ACE.
+
+A **direct** caller of this pure detector has no manifest handed to it (that
+only happens inside `detectReferenceIntegrity`), so if the project being
+checked renamed its functions object, pass that name explicitly via
+`options.functionsName` — omitting it falls back to
+`C3_DEFAULT_FUNCTIONS_NAME` (`"Functions"`), which is correct only for a
+project using the default:
 
 ```ts
 import {
@@ -245,7 +285,9 @@ const sheets: SourceDoc<EventSheet>[] = [
 ];
 const classNames = new Set([...manifestObjectTypeNames(manifest), ...manifestFamilyNames(manifest)]);
 
-const issues = detectEventClassIssues(sheets, classNames);
+const issues = detectEventClassIssues(sheets, classNames, {
+  functionsName: manifest.functionsName, // undefined falls back to C3_DEFAULT_FUNCTIONS_NAME internally
+});
 ```
 
 ## The I/O orchestrator: `detectReferenceIntegrity`
@@ -265,7 +307,13 @@ detectReferenceIntegrity(
 
 Reads the project from disk and runs all four detectors. When `manifest` is
 omitted, it reads `<projectDir>/project.c3proj` via `readProjectManifest`
-(strict — throws on a malformed manifest). Source is read from the four
+(strict — throws on a malformed manifest). The functions object's name for
+`detectEventClassIssues` is resolved with precedence **`options.functionsName`
+→ `manifest.functionsName` → `C3_DEFAULT_FUNCTIONS_NAME`** — an explicit
+option wins over whatever the manifest declares, which wins over the default
+— so a caller almost never needs to set `functionsName` explicitly; it exists
+for the orchestrator itself and for a direct caller of the pure detector (see
+[Domain-fact tables](#domain-fact-tables)). Source is read from the four
 section directories named by `C3_SECTION_FOLDERS` (`objectTypes`, `families`,
 `layouts`, `eventSheets`), each graceful-empty when its directory is absent —
 a project with no `families/` folder is not itself a reference-integrity
