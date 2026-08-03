@@ -1,17 +1,35 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { attributeFamily, attributeObjectType } from "./addons.js";
 import { EventSheet, ScriptAction, hasActions, hasConditions, visitEvents } from "./eventSheets.js";
-import { Family, Layer, Layout, ObjectType, walkLayerEntries } from "./layouts.js";
-import { C3ProjectManifest, collectManifestItemNames, getUsedAddons } from "./manifest.js";
+import {
+  Family,
+  Layer,
+  Layout,
+  ObjectType,
+  find_all_files_path,
+  isEditorLocalPath,
+  walkLayerEntries,
+} from "./layouts.js";
+import {
+  C3ProjectManifest,
+  C3_SECTION_FOLDERS,
+  PROJECT_MANIFEST_FILE,
+  collectManifestItemNames,
+  getUsedAddons,
+  readProjectManifest,
+} from "./manifest.js";
 
 // ─── Reference-integrity types ─────────────────────────────────────────────
 //
 // Cross-reference detection: a C3 project can declare a reference (an addon id,
 // an object-type name, an event-sheet `objectClass`) that does not resolve to
 // anything on the other side. Detection-only, like `detectManifestDrift` and
-// `validateForEditor` — nothing here ever mutates its inputs. All four detectors
-// (`detectAddonReferenceIssues`, `detectFamilyMemberIssues`, `detectInstanceTypeIssues`,
-// `detectEventClassIssues`) are implemented below; the I/O orchestrator that reads a
-// project and runs them all lands in a later task.
+// `validateForEditor` — nothing here ever mutates its inputs. The four pure
+// detectors (`detectAddonReferenceIssues`, `detectFamilyMemberIssues`,
+// `detectInstanceTypeIssues`, `detectEventClassIssues`) are implemented above;
+// the I/O orchestrator that reads a project and runs them all is
+// `detectReferenceIntegrity`, at the bottom of this file.
 
 /**
  * The five kinds of unresolved cross-reference this module detects:
@@ -518,4 +536,85 @@ export function detectEventClassIssues(
   }
 
   return issues;
+}
+
+// ─── I/O orchestrator ──────────────────────────────────────────────────────
+
+/**
+ * Read every `.json` file under `dir`, skipping editor-local artifacts, and parse each
+ * into a {@link SourceDoc} whose `file` is project-root-relative and forward-slash-normalized
+ * (`path.relative(projectDir, absPath).replace(/\\/g, "/")`) regardless of host OS path
+ * separator — required so `file` matches the documented worked-example paths
+ * (`families/TextFamily.json`, `objectTypes/tiles/Tilemap.json`) on Windows, where
+ * `path.relative` otherwise yields backslashes.
+ *
+ * Mirrors `detectImageDrift`'s walk (`src/manifest.ts`): `find_all_files_path(dir, (f) =>
+ * f.endsWith(".json") && !isEditorLocalPath(f))`, NOT `find_all_layouts_path` /
+ * `find_all_objectTypes_path` — those filter on `!isEditorLocalPath(file)` alone with no
+ * `.json` check, so a stray non-JSON file under a section directory would reach
+ * `JSON.parse` and crash.
+ *
+ * Graceful-empty: returns `[]` without touching the filesystem further when `dir` does not
+ * exist (mirrors `findInSection` in `src/project.ts` and `detectImageDrift`'s own
+ * `existsSync` guards) — a project missing a whole source section (e.g. no `families/`) is
+ * not itself a reference-integrity failure.
+ */
+function readSourceDocs<T>(projectDir: string, folderName: string): SourceDoc<T>[] {
+  const dir = path.join(projectDir, folderName);
+  if (!existsSync(dir)) return [];
+  const jsonPaths = find_all_files_path(dir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));
+  return jsonPaths.map((absPath) => ({
+    file: path.relative(projectDir, absPath).replace(/\\/g, "/"),
+    value: JSON.parse(readFileSync(absPath, "utf-8")) as T,
+  }));
+}
+
+/**
+ * Read a C3 project from disk and run all four reference-integrity detectors against it.
+ *
+ * When `manifest` is omitted, reads `<projectDir>/<PROJECT_MANIFEST_FILE>` via
+ * {@link readProjectManifest} (strict — throws on a malformed manifest). Passing an
+ * explicit `manifest` (e.g. a mutated in-memory clone) skips that read entirely and is
+ * honoured verbatim, which is what makes the whole module testable without touching disk.
+ *
+ * Source is read from the four section directories named by {@link C3_SECTION_FOLDERS}
+ * (`objectTypes`, `families`, `layouts`, `eventSheets`) via {@link readSourceDocs}, each
+ * graceful-empty when its directory is absent. `classNames` for {@link detectEventClassIssues}
+ * is the union of {@link manifestObjectTypeNames} and {@link manifestFamilyNames} — an ACE may
+ * legitimately target either.
+ *
+ * **Error policy — a deliberate divergence from `detectManifestDrift`/`detectImageDrift`:**
+ * findings (the returned `issues`) are collected, but I/O and `JSON.parse` failures
+ * (a missing manifest when none is supplied, an unreadable file, malformed JSON) THROW and
+ * are NOT caught here. `detectManifestDrift` wraps its call to `detectImageDrift` in a
+ * try/catch because image drift is a best-effort *addition* to a result the caller asked
+ * for anyway — degrading to "images section omitted" is honest there. Reference integrity
+ * has no such caller-didn't-ask-for-this framing: it **is** the caller's request, so silently
+ * returning `{ok: true, issues: []}` for a project containing an unparseable layout would be
+ * a false clean bill of health. Do not add a try/catch here to "harden" this function; that
+ * would reintroduce exactly the failure mode this policy exists to avoid.
+ */
+export function detectReferenceIntegrity(
+  projectDir: string,
+  manifest?: C3ProjectManifest,
+  options?: ReferenceIntegrityOptions,
+): ReferenceIntegrityResult {
+  const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
+
+  const objectTypeDocs = readSourceDocs<ObjectType>(projectDir, C3_SECTION_FOLDERS.objectTypes);
+  const familyDocs = readSourceDocs<Family>(projectDir, C3_SECTION_FOLDERS.families);
+  const layoutDocs = readSourceDocs<Layout>(projectDir, C3_SECTION_FOLDERS.layouts);
+  const eventSheetDocs = readSourceDocs<EventSheet>(projectDir, C3_SECTION_FOLDERS.eventSheets);
+
+  const objectTypeNames = manifestObjectTypeNames(m);
+  const classNames = new Set([...objectTypeNames, ...manifestFamilyNames(m)]);
+
+  const issues: ReferenceIssue[] = [
+    ...detectAddonReferenceIssues(m, objectTypeDocs, familyDocs, layoutDocs, options),
+    ...detectFamilyMemberIssues(familyDocs, objectTypeNames),
+    ...detectInstanceTypeIssues(layoutDocs, objectTypeNames),
+    ...detectEventClassIssues(eventSheetDocs, classNames, options),
+  ];
+
+  return { issues, ok: issues.length === 0 };
 }

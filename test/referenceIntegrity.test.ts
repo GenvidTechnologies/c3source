@@ -1,7 +1,7 @@
 import { describe, it, before } from "mocha";
 import { expect } from "chai";
 import path from "node:path";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   C3_PSEUDO_OBJECT_CLASSES,
   NON_ATTRIBUTABLE_ADDON_TYPES,
@@ -12,7 +12,9 @@ import {
   detectFamilyMemberIssues,
   detectInstanceTypeIssues,
   detectEventClassIssues,
+  detectReferenceIntegrity,
   type SourceDoc,
+  type ReferenceIntegrityResult,
 } from "../src/references.js";
 import {
   openProject,
@@ -27,7 +29,18 @@ import {
   type Layout,
   type ObjectType,
 } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
+import { writeC3JsonFile } from "../src/serialize.js";
+import { fixtureProjectExists, fixtureProjectPath, makeTempProject } from "./fixtureHelpers.js";
+
+/** A minimal manifest satisfying every collectManifestIssues-required top-level field (mirrors openProject.test.ts). */
+function minimalManifest(name: string): C3ProjectManifest {
+  return {
+    name,
+    runtime: "c3",
+    projectFormatVersion: 1,
+    savedWithRelease: 187,
+  } as unknown as C3ProjectManifest;
+}
 
 describe("reference-integrity domain-fact tables", () => {
   it("R-R22: C3_PSEUDO_OBJECT_CLASSES deep-equals [\"System\", \"Functions\"] (tripwire — widening is a reviewed edit)", () => {
@@ -687,5 +700,94 @@ describe("detectEventClassIssues", () => {
     };
     const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set(["Sprite"]));
     expect(issues).to.deep.equal([]);
+  });
+});
+
+describe("detectReferenceIntegrity — I/O orchestrator", () => {
+  it("R-R61: the clean canonical fixture is reference-integrity-issue-free (ok === true, issues deep-equals [])", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+    const result = detectReferenceIntegrity(fixtureProjectPath());
+    expect(result.ok).to.equal(true);
+    expect(result.issues).to.deep.equal([]);
+  });
+
+  it("R-R62: a minimal manifest with no source directories at all is ok, without throwing", () => {
+    const root = makeTempProject(minimalManifest("Empty"));
+    let result: ReferenceIntegrityResult | undefined;
+    expect(() => {
+      result = detectReferenceIntegrity(root);
+    }).to.not.throw();
+    expect(result!.ok).to.equal(true);
+    expect(result!.issues).to.deep.equal([]);
+  });
+
+  it("R-R63: a stray notes.txt and *.uistate.json under each source directory are ignored — no throw, no issues (pins the mandatory .json predicate)", () => {
+    const root = makeTempProject(minimalManifest("Stray"));
+    for (const folder of ["layouts", "objectTypes", "families", "eventSheets"]) {
+      const dir = path.join(root, folder);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, "notes.txt"), "not json");
+      writeFileSync(path.join(dir, "Something.uistate.json"), "{}");
+    }
+    let result: ReferenceIntegrityResult | undefined;
+    expect(() => {
+      result = detectReferenceIntegrity(root);
+    }).to.not.throw();
+    expect(result!.issues).to.deep.equal([]);
+    expect(result!.ok).to.equal(true);
+  });
+
+  it("R-R64: an issue's file is project-root-relative and forward-slash-normalized, never backslash (pins path normalization on Windows)", () => {
+    const root = makeTempProject(minimalManifest("Norm"));
+    const familiesDir = path.join(root, "families");
+    mkdirSync(familiesDir, { recursive: true });
+    writeC3JsonFile(path.join(familiesDir, "X.json"), { name: "X", "plugin-id": "", members: ["Ghost"] });
+
+    const result = detectReferenceIntegrity(root);
+    const missing = result.issues.filter((i) => i.kind === "family-member-missing");
+    expect(missing.length).to.equal(1);
+    expect(missing[0].file).to.equal("families/X.json");
+    expect(missing[0].file).to.not.include("\\");
+  });
+
+  it("R-R65: detectReferenceIntegrity never mutates the passed-in manifest object or any source file's bytes on disk", () => {
+    const root = makeTempProject(minimalManifest("NoMutate"));
+    const familiesDir = path.join(root, "families");
+    const objectTypesDir = path.join(root, "objectTypes");
+    mkdirSync(familiesDir, { recursive: true });
+    mkdirSync(objectTypesDir, { recursive: true });
+    writeC3JsonFile(path.join(familiesDir, "X.json"), { name: "X", "plugin-id": "", members: ["Sprite"] });
+    writeC3JsonFile(path.join(objectTypesDir, "Sprite.json"), { name: "Sprite", "plugin-id": "Sprite" });
+
+    const manifest = readProjectManifest(path.join(root, "project.c3proj"));
+    const manifestSnapshot = JSON.parse(JSON.stringify(manifest));
+    const familyBytesBefore = readFileSync(path.join(familiesDir, "X.json"));
+    const objectTypeBytesBefore = readFileSync(path.join(objectTypesDir, "Sprite.json"));
+
+    detectReferenceIntegrity(root, manifest);
+
+    expect(manifest).to.deep.equal(manifestSnapshot);
+    expect(readFileSync(path.join(familiesDir, "X.json"))).to.deep.equal(familyBytesBefore);
+    expect(readFileSync(path.join(objectTypesDir, "Sprite.json"))).to.deep.equal(objectTypeBytesBefore);
+  });
+
+  it("R-R66: an explicit manifest parameter is honoured over the on-disk manifest — a mutated clone changes the result", () => {
+    const root = makeTempProject(minimalManifest("Explicit"));
+    const familiesDir = path.join(root, "families");
+    mkdirSync(familiesDir, { recursive: true });
+    writeC3JsonFile(path.join(familiesDir, "X.json"), { name: "X", "plugin-id": "", members: ["Sprite"] });
+
+    const resultFromDisk = detectReferenceIntegrity(root);
+    expect(
+      resultFromDisk.issues.some((i) => i.kind === "family-member-missing" && i.name === "Sprite"),
+    ).to.equal(true);
+
+    const onDiskManifest = readProjectManifest(path.join(root, "project.c3proj"));
+    const declared: C3ProjectManifest = {
+      ...onDiskManifest,
+      objectTypes: { items: ["Sprite"], subfolders: [] },
+    } as C3ProjectManifest;
+    const resultExplicit = detectReferenceIntegrity(root, declared);
+    expect(resultExplicit.issues.some((i) => i.kind === "family-member-missing")).to.equal(false);
   });
 });
