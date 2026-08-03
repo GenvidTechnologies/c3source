@@ -77,6 +77,10 @@ export interface C3ProjectManifest {
   properties: Record<string, unknown>;
   bundleAddons?: boolean;
   usedAddons?: C3UsedAddon[];
+  /** Name of C3's built-in functions object, configurable per project. Defaults to
+   *  `"Functions"` (see `C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`) when absent —
+   *  observed absent in 5 of 14 real-world corpus projects. */
+  functionsName?: string;
   [key: string]: unknown; // forward-compat: viewportWidth, firstLayout, …
 }
 

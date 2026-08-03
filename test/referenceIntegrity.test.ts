@@ -4,6 +4,7 @@ import path from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   C3_PSEUDO_OBJECT_CLASSES,
+  C3_DEFAULT_FUNCTIONS_NAME,
   NON_ATTRIBUTABLE_ADDON_TYPES,
   manifestObjectTypeNames,
   manifestFamilyNames,
@@ -43,8 +44,8 @@ function minimalManifest(name: string): C3ProjectManifest {
 }
 
 describe("reference-integrity domain-fact tables", () => {
-  it("R-R22: C3_PSEUDO_OBJECT_CLASSES deep-equals [\"System\", \"Functions\"] (tripwire — widening is a reviewed edit)", () => {
-    expect(C3_PSEUDO_OBJECT_CLASSES).to.deep.equal(["System", "Functions"]);
+  it('R-R22: C3_PSEUDO_OBJECT_CLASSES deep-equals ["System"] (tripwire — widening is a reviewed edit; "Functions" moved to C3_DEFAULT_FUNCTIONS_NAME, #60)', () => {
+    expect(C3_PSEUDO_OBJECT_CLASSES).to.deep.equal(["System"]);
   });
 
   it("R-R23: NON_ATTRIBUTABLE_ADDON_TYPES deep-equals [\"theme\"] (tripwire — widening is a reviewed edit)", () => {
@@ -789,5 +790,107 @@ describe("detectReferenceIntegrity — I/O orchestrator", () => {
     } as C3ProjectManifest;
     const resultExplicit = detectReferenceIntegrity(root, declared);
     expect(resultExplicit.issues.some((i) => i.kind === "family-member-missing")).to.equal(false);
+  });
+});
+
+// ─── functionsName resolution (#60) ────────────────────────────────────────
+//
+// "Functions" was originally a static entry in C3_PSEUDO_OBJECT_CLASSES, but it is
+// actually the *default value* of project.c3proj's per-project `functionsName`
+// attribute — a project that renames its functions object (e.g. to "Fn") emits
+// that name as objectClass on every function ACE, which the static table could
+// never resolve. These tests cover the fix: C3_DEFAULT_FUNCTIONS_NAME as the
+// domain-fact default, detectReferenceIntegrity folding manifest.functionsName
+// into resolution, and detectEventClassIssues's options.functionsName escape
+// hatch for direct callers with no manifest.
+
+/** Minimal well-formed EventSheet whose only event has one action referencing `objectClass`. */
+function eventSheetWithFunctionsAce(name: string, objectClass: string): unknown {
+  return {
+    name,
+    sid: 1,
+    events: [
+      {
+        eventType: "block",
+        sid: 2,
+        conditions: [],
+        actions: [{ id: "set-function-return-value", objectClass, parameters: {} }],
+      },
+    ],
+  };
+}
+
+describe("C3_DEFAULT_FUNCTIONS_NAME (#60)", () => {
+  it('R-R67: C3_DEFAULT_FUNCTIONS_NAME === "Functions"', () => {
+    expect(C3_DEFAULT_FUNCTIONS_NAME).to.equal("Functions");
+  });
+});
+
+describe("detectReferenceIntegrity — functionsName resolution (#60)", () => {
+  it("R-R68: a manifest with functionsName \"Functions\" (or absent) resolves an ACE targeting \"Functions\" — no issue", () => {
+    for (const manifest of [minimalManifest("DefaultAbsent"), { ...minimalManifest("DefaultExplicit"), functionsName: "Functions" }]) {
+      const root = makeTempProject(manifest);
+      const eventSheetsDir = path.join(root, "eventSheets");
+      mkdirSync(eventSheetsDir, { recursive: true });
+      writeC3JsonFile(path.join(eventSheetsDir, "Sheet.json"), eventSheetWithFunctionsAce("Sheet", "Functions"));
+
+      const result = detectReferenceIntegrity(root);
+      expect(result.ok).to.equal(true);
+      expect(result.issues).to.deep.equal([]);
+    }
+  });
+
+  it('R-R69: the renamed case (the actual bug) — functionsName "Fn" + an ACE targeting "Fn" resolves — no issue', () => {
+    const manifest = { ...minimalManifest("Renamed"), functionsName: "Fn" };
+    const root = makeTempProject(manifest);
+    const eventSheetsDir = path.join(root, "eventSheets");
+    mkdirSync(eventSheetsDir, { recursive: true });
+    writeC3JsonFile(path.join(eventSheetsDir, "Sheet.json"), eventSheetWithFunctionsAce("Sheet", "Fn"));
+
+    const result = detectReferenceIntegrity(root);
+    expect(result.ok).to.equal(true);
+    expect(result.issues).to.deep.equal([]);
+
+    // Confirms this test actually exercises the fix: before #60, detectReferenceIntegrity
+    // ignored manifest.functionsName entirely and resolved only the static
+    // C3_PSEUDO_OBJECT_CLASSES table, which never contained "Fn" — so the pre-fix behavior
+    // for this exact input is reproduced here via the pure detector with the OLD default
+    // (no functionsName folded in), and it DOES report the false positive that motivated #60.
+    const preFixIssues = detectEventClassIssues(
+      [{ file: "eventSheets/Sheet.json", value: eventSheetWithFunctionsAce("Sheet", "Fn") as EventSheet }],
+      new Set(),
+    );
+    expect(preFixIssues.length).to.equal(1);
+    expect(preFixIssues[0]).to.include({ kind: "event-class-unresolved", name: "Fn" });
+  });
+
+  it('R-R70: the inverse — with functionsName "Fn", an ACE targeting the old default "Functions" is now unresolved', () => {
+    const manifest = { ...minimalManifest("Inverse"), functionsName: "Fn" };
+    const root = makeTempProject(manifest);
+    const eventSheetsDir = path.join(root, "eventSheets");
+    mkdirSync(eventSheetsDir, { recursive: true });
+    writeC3JsonFile(path.join(eventSheetsDir, "Sheet.json"), eventSheetWithFunctionsAce("Sheet", "Functions"));
+
+    const result = detectReferenceIntegrity(root);
+    expect(result.ok).to.equal(false);
+    expect(result.issues.some((i) => i.kind === "event-class-unresolved" && i.name === "Functions")).to.equal(true);
+  });
+
+  it('R-R71: the pure detector\'s option path — detectEventClassIssues(..., { functionsName: "Fn" }) resolves "Fn"', () => {
+    const sheet = eventSheetWithFunctionsAce("Sheet", "Fn") as EventSheet;
+    const issues = detectEventClassIssues([{ file: "eventSheets/Sheet.json", value: sheet }], new Set(), {
+      functionsName: "Fn",
+    });
+    expect(issues).to.deep.equal([]);
+  });
+
+  it("R-R72: the canonical fixture's 3 real Functions ACEs (functionsName \"Functions\", pin v0.5.0) resolve cleanly", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+    const manifest = readProjectManifest(path.join(fixtureProjectPath(), "project.c3proj"));
+    expect(manifest.functionsName).to.equal("Functions");
+
+    const result = detectReferenceIntegrity(fixtureProjectPath());
+    expect(result.ok).to.equal(true);
+    expect(result.issues).to.deep.equal([]);
   });
 });

@@ -39,7 +39,8 @@ import {
  * - `family-member-missing` — a family's `members` names an object type absent from the manifest.
  * - `instance-type-missing` — a layout instance's `type` names an object type absent from the manifest.
  * - `event-class-unresolved` — an event-sheet ACE's `objectClass` resolves to neither an
- *   object type nor a family nor a known pseudo-class (see {@link C3_PSEUDO_OBJECT_CLASSES}).
+ *   object type nor a family nor a known pseudo-class (see {@link C3_PSEUDO_OBJECT_CLASSES})
+ *   nor the project's functions object (see {@link C3_DEFAULT_FUNCTIONS_NAME}).
  */
 export type ReferenceIssueKind =
   | "addon-undeclared"
@@ -91,6 +92,19 @@ export interface ReferenceIntegrityOptions {
   pseudoObjectClasses?: readonly string[];
   /** REPLACES NON_ATTRIBUTABLE_ADDON_TYPES. */
   nonAttributableAddonTypes?: readonly string[];
+  /**
+   * Name of C3's built-in functions object for this call's `objectClass` resolution.
+   * Unlike `pseudoObjectClasses` (which REPLACES the whole table), this is a single
+   * ADDITIONAL resolvable name — `detectEventClassIssues` treats an `objectClass`
+   * equal to this value as resolved, alongside `classNames` and the pseudo-class set.
+   * Defaults to {@link C3_DEFAULT_FUNCTIONS_NAME} (`"Functions"`) when omitted, which
+   * keeps today's behavior for a project using the default name. A direct caller of
+   * `detectEventClassIssues` — who has no manifest to read `functionsName` from —
+   * supplies it here; `detectReferenceIntegrity` instead resolves it from
+   * `manifest.functionsName` (falling back to this option, then the default) so most
+   * callers never need to set it explicitly.
+   */
+  functionsName?: string;
 }
 
 // ─── Domain-fact tables (ADR 0008 convention — cf. EVENTVAR_REFERENCE_ACES,
@@ -98,17 +112,26 @@ export interface ReferenceIntegrityOptions {
 
 /**
  * `objectClass` values in an event-sheet ACE that resolve to no object type and
- * no family **by design** — C3 r487-pinned.
+ * no family **by design** — C3 r487-pinned. This table holds only the
+ * **statically** known pseudo-classes:
  *
  * - `"System"` — the built-in System object.
- * - `"Functions"` — C3's built-in event-sheet-functions object (observed ACE ids:
- *   `set-function-return-value`, `map-function`, `map-function-default`,
- *   `call-mapped-function`). It is **absent from the canonical fixture** and was
- *   found only by scanning a 16-project corpus, where it occurred **212 times in
- *   a single project**.
  *
- * This table is **KNOWN INCOMPLETE**: extend it either by array mutation (the
- * `EDITOR_FIELD_RULES` convention) or, without mutating shared state, by passing
+ * C3's built-in event-sheet-functions object is deliberately **NOT** in this
+ * table: its `objectClass` name is **per-project configurable**, not a fixed
+ * string. `project.c3proj` carries an optional `functionsName` attribute
+ * (`C3ProjectManifest.functionsName`, `src/manifest.ts`) that defaults to
+ * {@link C3_DEFAULT_FUNCTIONS_NAME} (`"Functions"`) when absent; a project that
+ * renames it (e.g. to `"Fn"`) emits that name as the `objectClass` on every
+ * function ACE (observed ACE ids: `set-function-return-value`, `map-function`,
+ * `map-function-default`, `call-mapped-function`). Resolving it therefore
+ * requires the manifest, not a static table — see
+ * {@link ReferenceIntegrityOptions.functionsName} and
+ * `detectReferenceIntegrity`'s use of `manifest.functionsName`.
+ *
+ * This table is **KNOWN INCOMPLETE** even for the classes it does cover: extend
+ * it either by array mutation (the `EDITOR_FIELD_RULES` convention) or, without
+ * mutating shared state, by passing
  * {@link ReferenceIntegrityOptions.pseudoObjectClasses} (which REPLACES this
  * table for that call — spread it in to extend rather than replace).
  *
@@ -117,7 +140,14 @@ export interface ReferenceIntegrityOptions {
  * manifest, so an `event-class-unresolved` check must resolve them normally, not
  * special-case them here.
  */
-export const C3_PSEUDO_OBJECT_CLASSES: string[] = ["System", "Functions"];
+export const C3_PSEUDO_OBJECT_CLASSES: string[] = ["System"];
+
+/**
+ * Default name of C3's built-in functions object when `project.c3proj` omits
+ * `functionsName`. See {@link C3_PSEUDO_OBJECT_CLASSES}'s doc comment for why the
+ * functions object is not in that static table.
+ */
+export const C3_DEFAULT_FUNCTIONS_NAME = "Functions";
 
 /**
  * `usedAddons[].type` values that can never appear on the derived (source-attributed)
@@ -449,14 +479,20 @@ function actionObjectClass(action: ScriptAction | Record<string, unknown>): stri
 
 /**
  * Detect event-sheet ACEs whose `objectClass` resolves to neither a manifest
- * object type nor a manifest family nor a known pseudo-class.
+ * object type nor a manifest family nor a known pseudo-class nor the project's
+ * functions object.
  *
  * `classNames` is the caller-supplied union of manifest object-type names and
  * family names — an ACE may legitimately target a family (e.g. `objectClass:
  * "TextFamily"`), so object types alone would false-positive. The pseudo-class
  * set is {@link ReferenceIntegrityOptions.pseudoObjectClasses} if supplied,
  * else {@link C3_PSEUDO_OBJECT_CLASSES} — REPLACED wholesale, not merged, same
- * contract as the other detectors' options.
+ * contract as the other detectors' options. Separately, {@link
+ * ReferenceIntegrityOptions.functionsName} (or, when omitted, {@link
+ * C3_DEFAULT_FUNCTIONS_NAME}) names the project's functions object and is
+ * ADDED to the resolvable set alongside `classNames` and the pseudo-class set —
+ * it is a single value, not a table, so it is never merged into
+ * `C3_PSEUDO_OBJECT_CLASSES` itself (see that constant's doc comment for why).
  *
  * Walks each sheet with `visitEvents` (ADR 0005: the one canonical event walk,
  * which also owns C3's event numbering) rather than a second recursion, and
@@ -494,7 +530,8 @@ export function detectEventClassIssues(
   options?: ReferenceIntegrityOptions,
 ): ReferenceIssue[] {
   const pseudoClasses = new Set(options?.pseudoObjectClasses ?? C3_PSEUDO_OBJECT_CLASSES);
-  const resolves = (name: string): boolean => classNames.has(name) || pseudoClasses.has(name);
+  const functionsName = options?.functionsName ?? C3_DEFAULT_FUNCTIONS_NAME;
+  const resolves = (name: string): boolean => classNames.has(name) || pseudoClasses.has(name) || name === functionsName;
 
   const issues: ReferenceIssue[] = [];
 
@@ -581,7 +618,13 @@ function readSourceDocs<T>(projectDir: string, folderName: string): SourceDoc<T>
  * (`objectTypes`, `families`, `layouts`, `eventSheets`) via {@link readSourceDocs}, each
  * graceful-empty when its directory is absent. `classNames` for {@link detectEventClassIssues}
  * is the union of {@link manifestObjectTypeNames} and {@link manifestFamilyNames} — an ACE may
- * legitimately target either.
+ * legitimately target either. The project's functions-object name is resolved as
+ * `options?.functionsName ?? m.functionsName ?? C3_DEFAULT_FUNCTIONS_NAME` (see
+ * {@link C3_DEFAULT_FUNCTIONS_NAME}) — an explicit `options.functionsName` (a direct
+ * override, same precedence an explicit `manifest` parameter takes over the on-disk
+ * read) wins over the manifest's own `functionsName`, which wins over the default —
+ * and passed to {@link detectEventClassIssues} so a project that renames its functions
+ * object away from `"Functions"` still resolves it correctly.
  *
  * **Error policy — a deliberate divergence from `detectManifestDrift`/`detectImageDrift`:**
  * findings (the returned `issues`) are collected, but I/O and `JSON.parse` failures
@@ -608,12 +651,14 @@ export function detectReferenceIntegrity(
 
   const objectTypeNames = manifestObjectTypeNames(m);
   const classNames = new Set([...objectTypeNames, ...manifestFamilyNames(m)]);
+  const functionsName = options?.functionsName ?? m.functionsName ?? C3_DEFAULT_FUNCTIONS_NAME;
+  const eventClassOptions: ReferenceIntegrityOptions = { ...options, functionsName };
 
   const issues: ReferenceIssue[] = [
     ...detectAddonReferenceIssues(m, objectTypeDocs, familyDocs, layoutDocs, options),
     ...detectFamilyMemberIssues(familyDocs, objectTypeNames),
     ...detectInstanceTypeIssues(layoutDocs, objectTypeNames),
-    ...detectEventClassIssues(eventSheetDocs, classNames, options),
+    ...detectEventClassIssues(eventSheetDocs, classNames, eventClassOptions),
   ];
 
   return { issues, ok: issues.length === 0 };
