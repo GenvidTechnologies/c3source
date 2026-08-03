@@ -214,7 +214,8 @@ export interface C3Project {
    * (`EDITOR_LOCAL_EXCLUSIONS.dirs`), so {@link find_all_files_path} never descends into
    * it — the tree is excluded by the directory prune, not by the `.d.ts` suffix filter.
    * The suffix filter independently excludes a stray hand-authored declaration file sitting
-   * directly under `scriptsDir`.
+   * directly under `scriptsDir`. A caller that deliberately needs the `ts-defs/` contents
+   * passes {@link find_all_files_path}'s `descend` parameter (issue #63; see ADR 0020).
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `scriptsDir` (default `""`).
@@ -417,7 +418,8 @@ export function openProject(root: string): C3Project {
       // Source scripts are .ts files. ts-defs/ (where generated .d.ts declaration files live)
       // is an editor-local dir, so find_all_files_path prunes it before recursing — no
       // generated .d.ts ever reaches this predicate. The !file.endsWith(".d.ts") clause is
-      // what excludes a stray hand-authored .d.ts sitting directly under scriptsDir.
+      // what excludes a stray hand-authored .d.ts sitting directly under scriptsDir. A caller
+      // who needs ts-defs/ passes find_all_files_path's descend parameter (#63; see ADR 0020).
       return findInSection(scriptsDir, sub, (dir) =>
         find_all_files_path(dir, (file) => file.endsWith(".ts") && !file.endsWith(".d.ts") && !isEditorLocalPath(file)),
       );
