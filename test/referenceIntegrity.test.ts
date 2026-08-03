@@ -1,14 +1,25 @@
 import { describe, it, before } from "mocha";
 import { expect } from "chai";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import {
   C3_PSEUDO_OBJECT_CLASSES,
   NON_ATTRIBUTABLE_ADDON_TYPES,
   manifestObjectTypeNames,
   manifestFamilyNames,
   collectLayoutEffectIds,
+  detectAddonReferenceIssues,
+  type SourceDoc,
 } from "../src/references.js";
-import { readProjectManifest, type C3ProjectManifest, type Layout } from "../src/c3source.js";
+import {
+  openProject,
+  readProjectManifest,
+  type C3ProjectManifest,
+  type C3UsedAddon,
+  type Family,
+  type Layout,
+  type ObjectType,
+} from "../src/c3source.js";
 import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
 describe("reference-integrity domain-fact tables", () => {
@@ -108,5 +119,208 @@ describe("collectLayoutEffectIds", () => {
       { effectId: "Blur", jsonPath: "effectTypes[0]" },
       { effectId: "Glow", jsonPath: "layers[0].effectTypes[0]", layerFullName: "L.A" },
     ]);
+  });
+});
+
+describe("detectAddonReferenceIssues — against the canonical fixture", () => {
+  const FIXTURE_DIR = fixtureProjectPath();
+
+  /** Fixture-root-relative, POSIX-normalized path, mirrors manifestSerialize.test.ts's `rel`. */
+  const rel = (f: string): string => path.relative(FIXTURE_DIR, f).split(path.sep).join("/");
+
+  let manifest: C3ProjectManifest;
+  let objectTypeDocs: SourceDoc<ObjectType>[];
+  let familyDocs: SourceDoc<Family>[];
+  let layoutDocs: SourceDoc<Layout>[];
+
+  before(function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+    const project = openProject(FIXTURE_DIR);
+    manifest = project.manifest();
+    objectTypeDocs = project
+      .findAllObjectTypes()
+      .map((p) => ({ file: rel(p), value: JSON.parse(readFileSync(p, "utf-8")) as ObjectType }));
+    familyDocs = project
+      .findAllFamilies()
+      .map((p) => ({ file: rel(p), value: JSON.parse(readFileSync(p, "utf-8")) as Family }));
+    layoutDocs = project
+      .findAllLayouts()
+      .map((p) => ({ file: rel(p), value: JSON.parse(readFileSync(p, "utf-8")) as Layout }));
+  });
+
+  function cloneManifest(): C3ProjectManifest {
+    return JSON.parse(JSON.stringify(manifest));
+  }
+
+  it("R-R32: the clean fixture is addon-reference-issue-free (baseline)", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+    expect(detectAddonReferenceIssues(manifest, objectTypeDocs, familyDocs, layoutDocs)).to.deep.equal([]);
+  });
+
+  it("R-R33: a family-only addon (Timer, attached only to TextFamily) missing from usedAddons is addon-undeclared", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+    const clone = cloneManifest();
+    clone.usedAddons = (clone.usedAddons ?? []).filter((a) => !(a.type === "behavior" && a.id === "Timer"));
+    const issues = detectAddonReferenceIssues(clone, objectTypeDocs, familyDocs, layoutDocs);
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({
+      kind: "addon-undeclared",
+      severity: "error",
+      name: "Timer",
+      addonType: "behavior",
+      owner: "TextFamily",
+      jsonPath: "behaviorTypes[0]",
+    });
+    expect(issues[0].file.endsWith("families/TextFamily.json")).to.equal(true);
+  });
+
+  it("R-R34: an object type's plugin-id with no usedAddons match is addon-undeclared", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+    const mutated = objectTypeDocs.map((doc) =>
+      doc.value.name === "Sprite" ? { file: doc.file, value: { ...doc.value, "plugin-id": "SpriteXYZ" } } : doc,
+    );
+    const issues = detectAddonReferenceIssues(manifest, mutated, familyDocs, layoutDocs);
+    const spriteIssues = issues.filter((i) => i.name === "SpriteXYZ");
+    expect(spriteIssues.length).to.equal(1);
+    expect(spriteIssues[0]).to.include({
+      kind: "addon-undeclared",
+      severity: "error",
+      addonType: "plugin",
+      owner: "Sprite",
+      jsonPath: "plugin-id",
+    });
+  });
+
+  it("R-R35: an unmatched usedAddons entry is addon-unused, indexed at its original manifest position", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+    const clone = cloneManifest();
+    expect((clone.usedAddons ?? []).length).to.equal(13);
+    clone.usedAddons = [
+      ...(clone.usedAddons ?? []),
+      { type: "effect", id: "NotUsed", name: "Not Used", author: "x", bundled: false },
+    ];
+    const issues = detectAddonReferenceIssues(clone, objectTypeDocs, familyDocs, layoutDocs);
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({
+      kind: "addon-unused",
+      severity: "warning",
+      name: "NotUsed",
+      addonType: "effect",
+      file: "project.c3proj",
+      owner: "",
+      jsonPath: "usedAddons[13]",
+    });
+  });
+});
+
+describe("detectAddonReferenceIssues — synthetic layer/layout-effect and edge cases", () => {
+  function usedAddon(type: string, id: string, name = id): C3UsedAddon {
+    return { type, id, name, author: "x", bundled: false };
+  }
+
+  function manifestWith(addons: C3UsedAddon[]): C3ProjectManifest {
+    return { usedAddons: addons } as unknown as C3ProjectManifest;
+  }
+
+  const layoutWithLayerEffect: SourceDoc<Layout> = {
+    file: "layouts/L.json",
+    value: { name: "L", layers: [{ name: "A", effectTypes: [{ effectId: "burn", name: "Burn" }] }] },
+  };
+
+  it("R-R36: a layer-level effect matching usedAddons counts as used — zero addon-unused when the layout is included", () => {
+    const manifest = manifestWith([usedAddon("effect", "burn", "Burn")]);
+    const issues = detectAddonReferenceIssues(manifest, [], [], [layoutWithLayerEffect]);
+    expect(issues).to.deep.equal([]);
+  });
+
+  it("R-R37: omitting the layout re-surfaces the same addon as unused (pins the 2->0 layer-effect fix)", () => {
+    const manifest = manifestWith([usedAddon("effect", "burn", "Burn")]);
+    const issues = detectAddonReferenceIssues(manifest, [], [], []);
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({ kind: "addon-unused", severity: "warning", name: "burn", addonType: "effect" });
+  });
+
+  it("R-R38: a layout-level (not layer-level) effectTypes entry also counts as used", () => {
+    const manifest = manifestWith([usedAddon("effect", "burn", "Burn")]);
+    const layoutWithLayoutEffect: SourceDoc<Layout> = {
+      file: "layouts/L.json",
+      value: { name: "L", layers: [{ name: "A" }], effectTypes: [{ effectId: "burn", name: "Burn" }] },
+    };
+    const issues = detectAddonReferenceIssues(manifest, [], [], [layoutWithLayoutEffect]);
+    expect(issues).to.deep.equal([]);
+  });
+
+  it("R-R39: an undeclared layer effect is addon-undeclared, carrying the layer's jsonPath and layerFullName", () => {
+    const manifest = manifestWith([]);
+    const issues = detectAddonReferenceIssues(manifest, [], [], [layoutWithLayerEffect]);
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({
+      kind: "addon-undeclared",
+      severity: "error",
+      name: "burn",
+      addonType: "effect",
+      file: "layouts/L.json",
+      owner: "L",
+      jsonPath: "layers[0].effectTypes[0]",
+      layerFullName: "L.A",
+    });
+  });
+
+  it("R-R40: a usedAddons entry of a non-attributable type (theme) produces no issue by default", () => {
+    const manifest = manifestWith([usedAddon("theme", "dark", "Dark")]);
+    expect(detectAddonReferenceIssues(manifest, [], [], [])).to.deep.equal([]);
+  });
+
+  it("R-R41: options.nonAttributableAddonTypes: [] widens detection — the same theme entry now reports addon-unused", () => {
+    const manifest = manifestWith([usedAddon("theme", "dark", "Dark")]);
+    const issues = detectAddonReferenceIssues(manifest, [], [], [], { nonAttributableAddonTypes: [] });
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({
+      kind: "addon-unused",
+      severity: "warning",
+      name: "dark",
+      addonType: "theme",
+      jsonPath: "usedAddons[0]",
+    });
+  });
+
+  it("R-R42: the join key is (type, id), never name — a name-matching but id-mismatched entry yields both an addon-undeclared and an addon-unused", () => {
+    const spriteDoc: SourceDoc<ObjectType> = {
+      file: "objectTypes/Sprite.json",
+      value: { name: "Sprite", "plugin-id": "Sprite" },
+    };
+    // manifest keeps the display name "Sprite" but the id is wrong ("SpritePlugin") — a name
+    // join would (incorrectly) resolve this; the (type, id) join must not.
+    const manifest = manifestWith([{ type: "plugin", id: "SpritePlugin", name: "Sprite", author: "x", bundled: false }]);
+    const issues = detectAddonReferenceIssues(manifest, [spriteDoc], [], []);
+    expect(issues.length).to.equal(2);
+    const undeclared = issues.find((i) => i.kind === "addon-undeclared");
+    const unused = issues.find((i) => i.kind === "addon-unused");
+    expect(undeclared).to.include({
+      severity: "error",
+      name: "Sprite",
+      addonType: "plugin",
+      owner: "Sprite",
+      jsonPath: "plugin-id",
+    });
+    expect(unused).to.include({
+      severity: "warning",
+      name: "SpritePlugin",
+      addonType: "plugin",
+      file: "project.c3proj",
+      owner: "",
+      jsonPath: "usedAddons[0]",
+    });
+  });
+
+  it("R-R43: usedAddons absent entirely reports no addon-unused; every derived id surfaces as addon-undeclared", () => {
+    const spriteDoc: SourceDoc<ObjectType> = {
+      file: "objectTypes/Sprite.json",
+      value: { name: "Sprite", "plugin-id": "Sprite" },
+    };
+    const bare = {} as C3ProjectManifest;
+    const issues = detectAddonReferenceIssues(bare, [spriteDoc], [], []);
+    expect(issues.length).to.equal(1);
+    expect(issues[0]).to.include({ kind: "addon-undeclared", severity: "error", name: "Sprite", addonType: "plugin" });
   });
 });

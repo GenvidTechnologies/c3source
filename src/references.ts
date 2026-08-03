@@ -1,15 +1,16 @@
-import { Layer, Layout, walkLayerEntries } from "./layouts.js";
-import { C3ProjectManifest, collectManifestItemNames } from "./manifest.js";
+import { attributeFamily, attributeObjectType } from "./addons.js";
+import { Family, Layer, Layout, ObjectType, walkLayerEntries } from "./layouts.js";
+import { C3ProjectManifest, collectManifestItemNames, getUsedAddons } from "./manifest.js";
 
 // ─── Reference-integrity types ─────────────────────────────────────────────
 //
 // Cross-reference detection: a C3 project can declare a reference (an addon id,
 // an object-type name, an event-sheet `objectClass`) that does not resolve to
 // anything on the other side. Detection-only, like `detectManifestDrift` and
-// `validateForEditor` — nothing here ever mutates its inputs. The four detectors
-// (one per resolvable kind, `addon-undeclared`/`addon-unused` sharing one pass)
-// and the I/O orchestrator that reads a project and runs them all land in later
-// tasks; this file is types, domain-fact tables, and pure helpers only.
+// `validateForEditor` — nothing here ever mutates its inputs. `detectAddonReferenceIssues`
+// (the `addon-undeclared`/`addon-unused` pass) is implemented below; the remaining three
+// detectors and the I/O orchestrator that reads a project and runs them all land in later
+// tasks.
 
 /**
  * The five kinds of unresolved cross-reference this module detects:
@@ -172,4 +173,132 @@ export function collectLayoutEffectIds(
   }
 
   return out;
+}
+
+// ─── addon-undeclared / addon-unused detector ──────────────────────────────
+
+/** One addon usage derived from source (object type, family, or layout/layer), pre-joined to a location. */
+interface DerivedAddonUsage {
+  addonType: string;
+  id: string;
+  file: string;
+  owner: string;
+  jsonPath: string;
+  layerFullName?: string;
+}
+
+/**
+ * Push the three usages ({@link AddonAttribution}'s `pluginId`/`behaviorIds`/`effectIds`) an
+ * object type or family attributes, at `file`/`owner`.
+ */
+function pushDerivedAttribution(
+  out: DerivedAddonUsage[],
+  attribution: { pluginId: string; behaviorIds: string[]; effectIds: string[] },
+  file: string,
+  owner: string,
+): void {
+  out.push({ addonType: "plugin", id: attribution.pluginId, file, owner, jsonPath: "plugin-id" });
+  // behaviorIds[i] corresponds to behaviorTypes[i]: src/addons.ts's attributeObjectType/attributeFamily
+  // build behaviorIds by .map()ing over behaviorTypes in declared order — keep the two in sync.
+  attribution.behaviorIds.forEach((id, i) => {
+    out.push({ addonType: "behavior", id, file, owner, jsonPath: `behaviorTypes[${i}]` });
+  });
+  // effectIds[i] corresponds to effectTypes[i]: same src/addons.ts .map() correspondence as above.
+  attribution.effectIds.forEach((id, i) => {
+    out.push({ addonType: "effect", id, file, owner, jsonPath: `effectTypes[${i}]` });
+  });
+}
+
+/**
+ * Detect addon references that fail to resolve either direction:
+ *
+ * - `addon-undeclared` — an object type, family, layout, or layer draws on an addon
+ *   (plugin/behavior/effect, via `attributeObjectType`/`attributeFamily`/{@link collectLayoutEffectIds})
+ *   with no matching entry in the manifest's `usedAddons` — C3 fails to load the project, so
+ *   `severity: "error"`.
+ * - `addon-unused` — a `usedAddons` entry matches nothing derived from source — hygiene only, so
+ *   `severity: "warning"`. Entries whose `type` is in the effective non-attributable set
+ *   ({@link ReferenceIntegrityOptions.nonAttributableAddonTypes} or, by default,
+ *   {@link NON_ATTRIBUTABLE_ADDON_TYPES}) are skipped — they can never appear on the derived side,
+ *   so reporting them would always be a false positive.
+ *
+ * The derived side attributes `objectTypes` and `families` **individually** (not as a merged
+ * pool) — a family-only addon (e.g. a behavior attached only to a family, never to any object
+ * type) must still count as used — and folds in every layout's own and every layer's
+ * `effectTypes` via {@link collectLayoutEffectIds}, so an effect applied only at the layout/layer
+ * level is not misreported as unused.
+ *
+ * The join key is always the pair `(type, id)` — **never** `name`: C3 display names diverge
+ * systematically from ids (`NinePatch` -> `"9-patch"`, `Json` -> `"JSON"`, `TextBox` ->
+ * `"Text input"`, `MyCompany_MyEffect` -> `"My custom effect"`), so a name join would silently
+ * produce wrong answers.
+ *
+ * Pure — no I/O, no mutation of `manifest`/`objectTypes`/`families`/`layouts`.
+ */
+export function detectAddonReferenceIssues(
+  manifest: C3ProjectManifest,
+  objectTypes: SourceDoc<ObjectType>[],
+  families: SourceDoc<Family>[],
+  layouts: SourceDoc<Layout>[],
+  options?: ReferenceIntegrityOptions,
+): ReferenceIssue[] {
+  const nonAttributable = new Set(options?.nonAttributableAddonTypes ?? NON_ATTRIBUTABLE_ADDON_TYPES);
+  const declared = getUsedAddons(manifest);
+  const declaredKeys = new Set(declared.map((a) => `${a.type}:${a.id}`));
+
+  const derived: DerivedAddonUsage[] = [];
+  for (const doc of objectTypes) {
+    pushDerivedAttribution(derived, attributeObjectType(doc.value), doc.file, doc.value.name);
+  }
+  for (const doc of families) {
+    pushDerivedAttribution(derived, attributeFamily(doc.value), doc.file, doc.value.name);
+  }
+  for (const doc of layouts) {
+    for (const effect of collectLayoutEffectIds(doc.value)) {
+      derived.push({
+        addonType: "effect",
+        id: effect.effectId,
+        file: doc.file,
+        owner: doc.value.name,
+        jsonPath: effect.jsonPath,
+        layerFullName: effect.layerFullName,
+      });
+    }
+  }
+
+  const issues: ReferenceIssue[] = [];
+  const derivedKeys = new Set<string>();
+
+  for (const usage of derived) {
+    derivedKeys.add(`${usage.addonType}:${usage.id}`);
+    if (declaredKeys.has(`${usage.addonType}:${usage.id}`)) continue;
+    issues.push({
+      kind: "addon-undeclared",
+      severity: "error",
+      name: usage.id,
+      file: usage.file,
+      owner: usage.owner,
+      jsonPath: usage.jsonPath,
+      ...(usage.layerFullName !== undefined ? { layerFullName: usage.layerFullName } : {}),
+      addonType: usage.addonType,
+      message: `${usage.addonType} "${usage.id}" is referenced by "${usage.owner}" (${usage.file}, ${usage.jsonPath}) but has no matching entry in the manifest's usedAddons`,
+    });
+  }
+
+  declared.forEach((addon, i) => {
+    if (nonAttributable.has(addon.type)) return;
+    if (derivedKeys.has(`${addon.type}:${addon.id}`)) return;
+    issues.push({
+      kind: "addon-unused",
+      severity: "warning",
+      name: addon.id,
+      file: "project.c3proj",
+      owner: "",
+      jsonPath: `usedAddons[${i}]`,
+      addonType: addon.type,
+      message: `usedAddons[${i}] declares ${addon.type} "${addon.id}" but no object type, family, or layout draws on it`,
+    });
+  });
+
+  return issues;
 }
