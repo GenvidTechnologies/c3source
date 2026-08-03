@@ -271,7 +271,9 @@ editor-owned); `scripts/prep-fixture.mjs` (a `pretest` hook) materializes it int
 the **gitignored** `test/fixtures/canonical/` — a byte copy of
 `construct3-sample/project/` plus the additive `test/fixtures/canonical-overlay/`
 minus the `canonical.striplist.txt` paths. A C3-emitted `.gitignore` inside the
-golden excludes `*.uistate.json` and `ts-defs`. Tests reach the fixture through
+golden excludes `*.uistate.json` and `uistate/` (it carries an explicit note that
+`ts-defs` must **not** be added there — those files are tracked, not gitignored).
+Tests reach the fixture through
 the single `PROJECT_FIXTURE` constant in `test/fixtureHelpers.ts` (with
 `fixtureProjectPath`/`fixtureProjectExists`), and self-skip via
 `fixtureProjectExists(...)`/`this.skip()` so the suite stays green when the
@@ -310,10 +312,13 @@ real C3 project, so it carries more than data):
   hook skips all `it()`s in *that* describe, so a describe reading the fixture
   inline in its `it()`s with no `before()` gate is the gap (#54 had to add gates
   to four such `projectManifest` describes).
-- **Golden-supplied vs. overlay-supplied editor-local content.** `*.uistate.json`
-  and `ts-defs` are gitignored inside the golden, so they never reach
-  `canonical/` via the byte copy; content a test needs *present* to prove the
-  `uistate/` / `ts-defs/` skip is real (not vacuous) is supplied by the committed
+- **Golden-supplied vs. overlay-supplied editor-local content.** `ts-defs` is
+  tracked inside the golden (56 files, per its `.gitignore`'s own "do not
+  re-add it" note) and reaches `canonical/scripts/ts-defs/` via the plain byte
+  copy, so the `ts-defs/` directory skip is proven by the golden itself.
+  `*.uistate.json` and the `uistate/` directory's `*.instancesBar.json` files
+  *are* gitignored inside the golden, so content a test needs *present* to
+  prove that skip is real (not vacuous) is supplied by the committed
   **overlay** instead. Note the suffix patterns are exact: `*.uistate.json` does
   **not** match the `uistate/` directory's `*.instancesBar.json` files, so the
   overlay carries one of each form to exercise both the suffix and the directory

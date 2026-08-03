@@ -197,3 +197,33 @@ tracked `ts-defs` files that c3source classifies editor-local, and
 `.gitignore:3`'s `ts-defs` entry is an upstream bug that construct3-chef
 depends on the files despite. Neither direction is evidence for or against
 `*.brush.json`'s classification.
+
+**2026-08-03 (#63): withdrawn citation.** The Decision section's parenthetical
+— "`src/project.ts:212-215` confirms `findAllScripts` excludes it precisely
+because every file there is a generated `.d.ts`" — is **retracted**. That
+comment does not say that and never did: `dc416bc` (#21, 2026-06-02) added
+`"ts-defs"` to `EDITOR_LOCAL_EXCLUSIONS.dirs`, and `6f3fec0` (#36, 2026-06-17,
+15 days later, with `dc416bc` as its ancestor) then wrote the current
+`findAllScripts` doc comment — which says the tree is excluded by the
+*directory prune*, not by identifying every entry as a generated `.d.ts`. The
+citation was false when written. **The conclusion it was cited for is
+unaffected:** `ts-defs/*.d.ts` files remain genuinely derivable, resting on
+`src/layouts.ts:107` ("C3-generated TS typings") and on C3's own TypeScript
+codegen behavior — not on anything `src/project.ts` says. Treat the Decision
+section's `src/project.ts:212-215` citation as withdrawn in favor of
+`src/layouts.ts:107` alone; the Decision section's text is left unedited here
+per this ADR's own correction convention (cf. ADR 0016's dated inline note).
+
+**2026-08-03 (#63): the upstream `ts-defs` gitignore bug is historical, not
+current.** The Context and the preceding paragraph above describe the golden's
+`project/.gitignore` `ts-defs` entry as a live upstream bug. That was accurate
+when this ADR was written (2026-07-29) but was fixed the same day, upstream,
+in `construct3-sample` commit `c68c2e3` ("fix: stop gitignoring the ts-defs
+tree in project/ (#3)") — the commit currently pinned as the `construct3-sample`
+submodule HEAD. The `.gitignore` now carries an explicit "do not re-add it"
+note, and all 56 `ts-defs` files are tracked and reach `test/fixtures/canonical/`
+via the plain byte copy. **This does not reopen the withdrawn-evidence
+instruction above or in the Context:** the golden's tracked/gitignored state
+was, is, and remains inadmissible as evidence for a source/not-source
+classification call in this codebase — only the factual status of that one
+specific upstream bug (now fixed) has changed.
