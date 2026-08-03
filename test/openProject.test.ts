@@ -1,6 +1,6 @@
 import { describe, it } from "mocha";
 import { expect } from "chai";
-import { mkdtempSync, rmdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -492,6 +492,28 @@ describe("openProject — new findAll*() methods (OP-64 to OP-72)", () => {
   it("OP-72: IMAGES_FOLDER is exported as a string with value 'images'", () => {
     expect(typeof IMAGES_FOLDER).to.equal("string");
     expect(IMAGES_FOLDER).to.equal("images");
+  });
+});
+
+describe("openProject — findAllScripts() excludes a stray .d.ts outside ts-defs/ (OP-73)", () => {
+  it("OP-73: a hand-authored scripts/foo.d.ts sitting directly under scriptsDir is still excluded", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-strand3ts-"));
+    try {
+      const scriptsDir = path.join(tmpDir, C3_ROOT_FILE_FOLDERS.script);
+      mkdirSync(scriptsDir, { recursive: true });
+      writeFileSync(path.join(scriptsDir, "foo.d.ts"), "export {};");
+      writeFileSync(path.join(scriptsDir, "main.ts"), "export {};");
+
+      const proj = openProject(tmpDir);
+      const basenames = proj.findAllScripts().map((p) => path.basename(p));
+      // The stray .d.ts is directly under scriptsDir, NOT inside ts-defs/, so the
+      // uistate/ts-defs directory-skip rule in find_all_files_path never sees it —
+      // it is the findAllScripts predicate's own `!file.endsWith(".d.ts")` clause
+      // that must exclude it (see the comment on findAllScripts in src/project.ts).
+      expect(basenames).to.deep.equal(["main.ts"]);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 
