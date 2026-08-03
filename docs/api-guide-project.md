@@ -11,6 +11,7 @@ For the underlying manifest model and drift detection types see
 - [Manifest access](#manifest-access)
 - [File finders](#file-finders)
 - [Drift detection](#drift-detection)
+- [Reference integrity](#reference-integrity)
 - [Relationship to the free functions](#relationship-to-the-free-functions)
 
 ---
@@ -270,13 +271,35 @@ if (imageDrift) {
 }
 ```
 
+## Reference integrity
+
+```ts
+project.detectReferenceIntegrity(options?: ReferenceIntegrityOptions): ReferenceIntegrityResult
+```
+
+Delegates to the free function `detectReferenceIntegrity` with the project
+root **and the handle's cached manifest** (from `manifest()`), same pattern
+as `detectManifestDrift()` — avoids a second read of `project.c3proj`. For
+the result types, the five issue kinds, and the pure detectors underneath
+see [api-guide-references.md](api-guide-references.md).
+
+```ts
+const result = project.detectReferenceIntegrity();
+if (!result.ok) {
+  for (const issue of result.issues) {
+    console.warn(`[${issue.severity}] ${issue.kind} ${issue.file}:${issue.jsonPath} — ${issue.message}`);
+  }
+}
+```
+
 ## Relationship to the free functions
 
 `openProject`/`C3Project` is additive. The free functions —
 `find_all_eventsheets_path`, `find_all_layouts_path`, `find_all_objectTypes_path`,
 `find_all_files_path`, `readProjectManifest`, `detectManifestDrift`,
-`detectImageDrift` — remain exported and unchanged. The handle is a thin
-consumer of those same functions; it adds nothing they cannot already do.
+`detectImageDrift`, `detectReferenceIntegrity` — remain exported and
+unchanged. The handle is a thin consumer of those same functions; it adds
+nothing they cannot already do.
 
 Use the handle when you are working with a project root across multiple
 operations (finders, manifest reads, drift checks). Use the free functions

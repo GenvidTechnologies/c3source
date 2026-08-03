@@ -64,21 +64,26 @@ log freely.
 
 ## Architecture
 
-Logic is split across six per-area modules — `src/serialize.ts`,
+Logic is split across seven per-area modules — `src/serialize.ts`,
 `src/layouts.ts`, `src/eventSheets.ts`, `src/manifest.ts`, `src/addons.ts`,
-`src/project.ts` — imported in an acyclic DAG. `serialize` is the sole leaf
-(it imports nothing from the package); `layouts` imports only `serialize`;
-`eventSheets` and `addons` import only `layouts`; `manifest` imports `layouts`
-plus `serialize` (for its write path); `project` imports all of the above.
-`src/c3source.ts` is now a thin internal re-export barrel over the six
-(`export *` from each, in DAG order — serialize, layouts, eventSheets,
-manifest, addons, project); `src/index.ts` is unchanged and still re-exports
-it (`export * from "./c3source.js"`), so the public API surface did not move.
-See [ADR 0012](docs/decisions/0012-per-area-module-split.md) for the split
-rationale (it supersedes the module-layout half of [ADR
+`src/references.ts`, `src/project.ts` — imported in an acyclic DAG.
+`serialize` is the sole leaf (it imports nothing from the package); `layouts`
+imports only `serialize`; `eventSheets`, `addons`, and `manifest` all import
+only `layouts` (`manifest` additionally imports `serialize`, for its write
+path) and are mutually independent siblings; `references` sits one tier above
+that sibling group, importing `layouts`, `eventSheets`, `addons`, and
+`manifest`; `project` imports all of the above. `src/c3source.ts` is a thin
+internal re-export barrel over the seven (`export *` from each, in DAG order
+— serialize, layouts, eventSheets, manifest, addons, references, project);
+`src/index.ts` is unchanged and still re-exports it (`export * from
+"./c3source.js"`), so the public API surface did not move. See [ADR
+0012](docs/decisions/0012-per-area-module-split.md) for the split rationale
+(it supersedes the module-layout half of [ADR
 0001](docs/decisions/0001-single-module-esm-library.md)); [ADR
 0016](docs/decisions/0016-c3-source-json-serialization-form.md) adds
-`serialize` beneath `layouts` as the new leaf. The `.js`
+`serialize` beneath `layouts` as the new leaf; [ADR
+0021](docs/decisions/0021-reference-integrity-detection.md) adds `references`
+as the new tier beneath `project`. The `.js`
 extension on intra-package imports is required — the project is ESM
 (`"type": "module"`, `NodeNext` resolution). The package `main`/`types`/`exports` point at the built
 `dist/*.js` and `dist/*.d.ts` — the same artifacts the `files` allowlist
@@ -117,7 +122,7 @@ e.g. `sed -E 's#/\*\*[^*]*\*+([^/*][^*]*\*+)*/##g'` over each dump before
 `diff`. Reserve the empty-diff standard for refactors that leave comments
 alone.
 
-Three functional areas:
+Four functional areas:
 
 1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip
    `.uistate.json` files and never descend into `uistate/` subfolders, which
@@ -412,6 +417,36 @@ Three functional areas:
    checked out non-recursively, so CI must check out submodules recursively
    for that coverage to actually run. See
    [api-guide-addons.md](docs/api-guide-addons.md) for the full reference.
+
+4. **Reference integrity** (in `src/references.ts`, #60) — detects **unresolved**
+   name-keyed cross-references the manifest/source's own data implies, not
+   editor-observed rejections. Five kinds via one `ReferenceIssue` type:
+   `addon-undeclared`/`family-member-missing`/`instance-type-missing` are
+   `error` (C3 fails to load); `addon-unused` is `warning` (hygiene);
+   `event-class-unresolved` is `warning` because the detector cannot
+   distinguish a deleted object type from a pseudo-class its table doesn't yet
+   know. Shape: four **pure** detectors (`detectAddonReferenceIssues`,
+   `detectFamilyMemberIssues`, `detectInstanceTypeIssues`,
+   `detectEventClassIssues` — take already-parsed `SourceDoc<T>[]`, no I/O) plus
+   one I/O orchestrator (`detectReferenceIntegrity(projectDir, manifest?,
+   options?)`) plus the `C3Project` handle's `detectReferenceIntegrity(options?)`,
+   which passes the cached manifest. The exported table `C3_PSEUDO_OBJECT_CLASSES`
+   (`objectClass` values resolving to no object type/family by design, e.g.
+   `"System"`/`"Functions"`) is **known incomplete** — corpus-derived, not
+   C3-source-derived — with `scripts/scan-references.mjs` (dev-only, mirrors
+   `scripts/api-surface.mjs`) as the tool to re-validate it against real
+   projects on a C3 version bump. `collectLayoutEffectIds` **supplements**
+   `collectAddonAttribution` rather than widening it — a layout/layer effect is
+   not an item's own declared field, and adding it to `AddonAttribution.source`
+   would break any consumer's exhaustive `switch`. Error policy deliberately
+   diverges from `detectImageDrift`: findings are collected, but I/O/parse
+   failures throw rather than degrading to a partial result, because reference
+   integrity *is* the caller's request. Ownership boundary: c3source ships the
+   declared-`usedAddons` ↔ used-in-source edge; the `.c3addon`-package ↔
+   `usedAddons` direction stays construct3-chef's (`addonValidator.ts`,
+   `addonInventory.ts`). See [ADR
+   0021](docs/decisions/0021-reference-integrity-detection.md) and
+   [api-guide-references.md](docs/api-guide-references.md).
 
 All file writes go through `src/serialize.ts`'s `serializeC3Json`/
 `writeC3JsonFile` (`C3_JSON_INDENT = "\t"`) — the single owner of the C3

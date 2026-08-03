@@ -467,6 +467,13 @@ member that names an object type absent from the manifest is reported as a
 `dangling-ref` entry. The `manifestPath` carries `["#<i>"]` (the container's
 index) so the caller can locate which container holds the stale reference.
 
+This `dangling-ref` check is drift's **only** reference check — drift stays
+membership-only otherwise (declared vs. on-disk names, not whether a
+reference *resolves*). Reference integrity beyond containers (addon
+declarations, family members, layout instance types, event `objectClass`)
+lives in a separate module — see
+[api-guide-references.md](api-guide-references.md).
+
 ### Images drift
 
 When an `images/` directory exists in the project, `detectManifestDrift`

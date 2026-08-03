@@ -233,6 +233,10 @@ System event-variable ACE id to the parameter key that holds the variable name
 introspect or extend the set; the table is intentionally non-exhaustive across
 every C3 version.
 
+A sibling domain-fact table in the same convention, `C3_PSEUDO_OBJECT_CLASSES`
+(`objectClass` values that resolve to no object type or family by design),
+lives in `src/references.ts` — see [api-guide-references.md — Domain-fact tables](api-guide-references.md#domain-fact-tables).
+
 **`isEventVarReference`** returns `{ nameParamKey }` when `ace.objectClass ===
 "System"` and `ace.id` is in the table, else `null`. The locator is a parameter
 **key**, not a positional index, because c3source stores ACE parameters as a

@@ -14,6 +14,7 @@ Each entry should be a one-line description. Only list docs that exist.
 - `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation, manifest write surface + write-through cache rule (#36 #57 #58)
 - `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
 - `api-guide-addons.md` — addon domain layer: usedAddons manifest support, addon attribution (behaviorTypes/effectTypes), findAllAddons, readAddonPackage, parseAcesModel/parseAddonMetadata (#44)
+- `api-guide-references.md` — reference-integrity detection: the five ReferenceIssue kinds, C3_PSEUDO_OBJECT_CLASSES/NON_ATTRIBUTABLE_ADDON_TYPES domain-fact tables, the four pure detectors + detectReferenceIntegrity orchestrator, C3Project.detectReferenceIntegrity, error policy, ownership boundary vs. construct3-chef (#60)
 
 ## Decision Records
 
