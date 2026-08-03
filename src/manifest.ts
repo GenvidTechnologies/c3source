@@ -561,9 +561,12 @@ export type DriftKind = "missing" | "untracked" | "moved" | "folder-missing" | "
 export interface DriftEntry {
   kind: DriftKind;
   name: string;
-  /** Subfolder-name segments in the MANIFEST tree (absent on "untracked" and "dangling-ref"). */
+  /** Subfolder-name segments in the MANIFEST tree (absent on "untracked"). On
+   *  "dangling-ref" this carries a synthetic `#<containerIndex>` segment instead
+   *  of a subfolder name — the one place a path segment isn't a subfolder name. */
   manifestPath?: ManifestPathSegment[];
-  /** Subfolder-name segments on DISK (absent on "missing" and "dangling-ref"). */
+  /** Subfolder-name segments on DISK (absent on "missing" and "dangling-ref": a
+   *  dangling reference is manifest-vs-manifest, with no disk counterpart). */
   diskPath?: ManifestPathSegment[];
 }
 
