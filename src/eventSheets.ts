@@ -541,7 +541,6 @@ export const EVENTVAR_REFERENCE_ACES: Record<string, string> = {
   "toggle-boolean-eventvar": "variable",
   "compare-eventvar": "variable",
   "compare-boolean-eventvar": "variable",
-  "is-boolean-eventvar-set": "variable",
 };
 
 /**

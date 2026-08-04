@@ -15,8 +15,12 @@ import { loadFixture, fixtureExists, PROJECT_FIXTURE } from "./fixtureHelpers.js
 // ---------------------------------------------------------------------------
 
 describe("EVENTVAR_REFERENCE_ACES", () => {
-  it("exports a record with 9 entries", () => {
-    expect(Object.keys(EVENTVAR_REFERENCE_ACES)).to.have.length(9);
+  it("exports a record with 8 entries", () => {
+    expect(Object.keys(EVENTVAR_REFERENCE_ACES)).to.have.length(8);
+  });
+
+  it("does not table the fabricated id 'is-boolean-eventvar-set'", () => {
+    expect(EVENTVAR_REFERENCE_ACES).to.not.have.property("is-boolean-eventvar-set");
   });
 
   it("maps every expected id to 'variable'", () => {
@@ -29,7 +33,6 @@ describe("EVENTVAR_REFERENCE_ACES", () => {
       "toggle-boolean-eventvar",
       "compare-eventvar",
       "compare-boolean-eventvar",
-      "is-boolean-eventvar-set",
     ];
     for (const id of expectedIds) {
       expect(EVENTVAR_REFERENCE_ACES[id], `id "${id}"`).to.equal("variable");
@@ -38,7 +41,7 @@ describe("EVENTVAR_REFERENCE_ACES", () => {
 });
 
 describe("isEventVarReference", () => {
-  it("returns { nameParamKey: 'variable' } for each of the 9 System ids", () => {
+  it("returns { nameParamKey: 'variable' } for each of the 8 System ids", () => {
     const ids = Object.keys(EVENTVAR_REFERENCE_ACES);
     for (const id of ids) {
       const ace = { id, objectClass: "System", parameters: { variable: "x" } };
@@ -83,7 +86,7 @@ describe("isEventVarReference", () => {
 });
 
 describe("getEventVarReferenceName", () => {
-  it("returns the variable name for each of the 9 System ids", () => {
+  it("returns the variable name for each of the 8 System ids", () => {
     const ids = Object.keys(EVENTVAR_REFERENCE_ACES);
     for (const id of ids) {
       const ace = { id, objectClass: "System", parameters: { variable: "myVar" } };
