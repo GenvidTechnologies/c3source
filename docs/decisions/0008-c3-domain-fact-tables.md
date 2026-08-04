@@ -77,3 +77,34 @@ The tables predating this — `EVENTVAR_REFERENCE_ACES`, `COMPARISON_OPERATORS`,
 and from incident reports, i.e. by the method that failed twice above. There is no
 evidence any is wrong; there is also no evidence any is right.
 `scripts/scan-references.mjs` is the pattern for checking them.
+
+**That closing claim is now falsified (added 2026-08-04, #68).** A 14-project
+corpus audit (`docs/domain-fact-audit.md`, tool `scripts/scan-domain-facts.mjs`)
+checked all six tables and found two of the four "no evidence either way"
+tables were in fact wrong:
+
+- **`EVENTVAR_REFERENCE_ACES`** was missing `reset-eventvar` (491 corpus
+  occurrences, entirely unaccounted for) and separately carried a
+  **fabricated** id, `is-boolean-eventvar-set`, that does not correspond to
+  any real C3 System ACE — a table of facts containing a non-fact. Both fixed
+  in commit `cd0df1b`/`135cc44`.
+- **`IMAGE_FILE_TYPE_EXTENSIONS`**'s *values* audited clean (every present
+  `fileType` mapped) while its *shape* was wrong: it assumed every image node
+  carries a `fileType` field, but pre-r402 C3 releases emit none at all. This
+  is the sharpest illustration yet of this ADR's own rule above — a value
+  audit cannot find a mechanism defect. Fixed via `deriveExpectedImages`/
+  `C3_LEGACY_IMAGE_EXTENSION`; see [ADR
+  0023](0023-pre-r402-image-serialization-drift-degradation.md).
+- The remaining four (`COMPARISON_OPERATORS`, `EDITOR_FIELD_RULES`,
+  `EDITOR_LOCAL_EXCLUSIONS`, `C3_MINIFIED_SOURCE_SUFFIXES`) audited clean —
+  with the caveat that `EDITOR_FIELD_RULES` is **not corpus-auditable even in
+  principle**: every corpus project already loads successfully in the
+  editor, so a scan sees which fields are present, never which the loader
+  actually requires (`docs/domain-fact-audit.md`'s ["What a corpus cannot
+  audit at
+  all"](../domain-fact-audit.md#what-a-corpus-cannot-audit-at-all) section).
+
+See [ADR 0022](0022-domain-fact-audit-convention.md) for the resulting
+convention — a confidence label (`AUDITED` / `KNOWN INCOMPLETE` /
+`UNVALIDATED` / `NOT CORPUS-AUDITABLE`) now lives in each table's JSDoc, and
+`docs/domain-fact-audit.md` carries the corpus numbers behind it.
