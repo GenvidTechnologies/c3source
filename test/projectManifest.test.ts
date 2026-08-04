@@ -10,6 +10,8 @@ import {
   collectManifestFileNames,
   detectManifestDrift,
   deriveExpectedImageNames,
+  deriveExpectedImages,
+  C3_LEGACY_IMAGE_EXTENSION,
   detectImageDrift,
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
@@ -602,6 +604,62 @@ describe("F4: image-derived drift", () => {
     // Manifest drift must still be clean (JPEGTileBackground + LevelMaps wired into project.c3proj)
     const manifestDrift = detectManifestDrift(FIXTURE_DIR);
     expect(manifestDrift.inSync).to.equal(true);
+  });
+});
+
+describe("deriveExpectedImages (#68)", () => {
+  it("single-image branch, mapped fileType → one ExpectedImage with the resolved ext", () => {
+    const images = deriveExpectedImages({ name: "Foo", image: { fileType: "image/jpeg" } });
+    expect(images).to.deep.equal([{ stem: "foo", ext: "jpg", context: "Foo" }]);
+  });
+
+  it("single-image branch, absent fileType → one ExpectedImage with ext: undefined (pre-r407 legacy node)", () => {
+    const images = deriveExpectedImages({ name: "Foo", image: {} });
+    expect(images).to.deep.equal([{ stem: "foo", ext: undefined, context: "Foo" }]);
+
+    const imagesNullFileType = deriveExpectedImages({ name: "Foo", image: { fileType: null } });
+    expect(imagesNullFileType).to.deep.equal([{ stem: "foo", ext: undefined, context: "Foo" }]);
+  });
+
+  it("animation frame, mapped fileType → per-frame ExpectedImage with the resolved ext", () => {
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{ fileType: "image/webp" }] }],
+        subfolders: [],
+      },
+    };
+    const images = deriveExpectedImages(ot);
+    expect(images).to.deep.equal([{ stem: "bar-run-000", ext: "webp", context: "Bar/Run#0" }]);
+  });
+
+  it("animation frame, absent fileType → per-frame ExpectedImage with ext: undefined (independent of the single-image branch)", () => {
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{}] }],
+        subfolders: [],
+      },
+    };
+    const images = deriveExpectedImages(ot);
+    expect(images).to.deep.equal([{ stem: "bar-run-000", ext: undefined, context: "Bar/Run#0" }]);
+  });
+
+  it("unmapped fileType still throws, on both the single-image and animation-frame branches", () => {
+    expect(() => deriveExpectedImages({ name: "Foo", image: { fileType: "image/gif" } })).to.throw(/unknown/i);
+
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{ fileType: "image/bmp" }] }],
+        subfolders: [],
+      },
+    };
+    expect(() => deriveExpectedImages(ot)).to.throw(/unknown/i);
+  });
+
+  it("C3_LEGACY_IMAGE_EXTENSION is the documented default extension ('png')", () => {
+    expect(C3_LEGACY_IMAGE_EXTENSION).to.equal("png");
   });
 });
 

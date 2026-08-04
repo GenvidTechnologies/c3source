@@ -897,6 +897,99 @@ interface AnimationFolder {
   subfolders: AnimationFolder[];
 }
 
+/** One expected on-disk image, as derived structurally from an object type. */
+export interface ExpectedImage {
+  /** Filename stem, no extension: "bullet-default-000", "tiledbackground". */
+  stem: string;
+  /** Extension resolved from `fileType` via IMAGE_FILE_TYPE_EXTENSIONS; absent for pre-r407 nodes that record no MIME. */
+  ext?: string;
+  /** Locator for diagnostics: "TiledBackground" or "Bullet/Default#0". */
+  context: string;
+}
+
+/**
+ * Pre-r407 C3 releases serialize image nodes with no `fileType` (MIME) field at all —
+ * they write `exportFormat`/`exportQuality` (export re-encoding settings) instead, and
+ * the on-disk file is still a real image, e.g. `bullet-default-000.png`.
+ * `C3_LEGACY_IMAGE_EXTENSION` is the DEFAULT this repo assumes for such legacy nodes —
+ * NOT A RESOLUTION: a 14-project corpus could not discriminate this default from
+ * stem-matching (both scored 0 missing / 0 orphan over all 15 legacy nodes observed
+ * across 2 real projects), so it rests on mechanism (pre-r407 serialization omits the
+ * field entirely), not evidence.
+ *
+ * Do NOT read `exportFormat` (`"lossless"` / `"lossy"`) as a format proxy anywhere — it
+ * is an export re-encoding setting, not the source MIME: `exportFormat: "lossy"` was
+ * observed on 8,448 real nodes whose actual source format is `image/png`. (#68)
+ */
+export const C3_LEGACY_IMAGE_EXTENSION = "png";
+
+/**
+ * Resolve the on-disk extension for a C3 image `fileType` MIME string, tolerating an
+ * absent/empty value (pre-r407 legacy nodes — see {@link C3_LEGACY_IMAGE_EXTENSION}) by
+ * returning `undefined` rather than throwing. Still throws when `fileType` is present but
+ * unmapped (unknown format). `context` is included in the error message to aid diagnosis.
+ */
+function extensionForFileTypeOrUndefined(fileType: unknown, context: string): string | undefined {
+  if (fileType == null || fileType === "") return undefined;
+  const ext = IMAGE_FILE_TYPE_EXTENSIONS[String(fileType)];
+  if (ext === undefined) {
+    throw new Error(`unknown image fileType "${String(fileType)}" on "${context}"`);
+  }
+  return ext;
+}
+
+/**
+ * Structured counterpart of {@link deriveExpectedImageNames}: returns one
+ * {@link ExpectedImage} per expected on-disk image, carrying the derived `ext` (or
+ * `undefined` when the source `fileType` is absent, tolerated rather than treated as
+ * malformed — see {@link C3_LEGACY_IMAGE_EXTENSION}) and a diagnostic `context` locator,
+ * instead of a pre-joined filename string.
+ *
+ * Same structural derivation rules as `deriveExpectedImageNames` — a top-level `image`
+ * field yields one entry (`stem` = the lowercased object type name), a top-level
+ * `animations` field yields one entry per animation frame (`stem` =
+ * `<lowercased-name>-<lowercased-animation-name>-<frame3>`, subfolders collapsed) — see
+ * that function's doc comment for the full V1 coverage rule and explicit limits.
+ *
+ * An unmapped (but present) `fileType` still throws (unknown format); only an
+ * absent/empty `fileType` is tolerated here, unlike `deriveExpectedImageNames`.
+ */
+export function deriveExpectedImages(objectType: Record<string, unknown>): ExpectedImage[] {
+  const name = String(objectType.name).toLowerCase();
+  if ("image" in objectType) {
+    const img = objectType.image as Record<string, unknown>;
+    const ext = extensionForFileTypeOrUndefined(img?.fileType, String(objectType.name));
+    return [{ stem: name, ext, context: String(objectType.name) }];
+  }
+  if ("animations" in objectType) {
+    const result: ExpectedImage[] = [];
+    const collectAnimations = (folder: AnimationFolder): void => {
+      for (const animItem of folder.items) {
+        const animName = String(animItem.name).toLowerCase();
+        const frames = Array.isArray(animItem.frames) ? animItem.frames : [];
+        for (let i = 0; i < frames.length; i++) {
+          const frame = frames[i] as Record<string, unknown>;
+          const context = `${String(objectType.name)}/${animItem.name}#${i}`;
+          const ext = extensionForFileTypeOrUndefined(frame?.fileType, context);
+          result.push({ stem: `${name}-${animName}-${String(i).padStart(3, "0")}`, ext, context });
+        }
+      }
+      for (const sub of folder.subfolders) {
+        collectAnimations(sub);
+      }
+    };
+    const animationsRoot = objectType.animations as AnimationFolder;
+    if (animationsRoot && typeof animationsRoot === "object") {
+      collectAnimations({
+        items: Array.isArray(animationsRoot.items) ? animationsRoot.items : [],
+        subfolders: Array.isArray(animationsRoot.subfolders) ? animationsRoot.subfolders : [],
+      });
+    }
+    return result;
+  }
+  return [];
+}
+
 /**
  * Derive the expected on-disk image filenames for a single object type.
  *
