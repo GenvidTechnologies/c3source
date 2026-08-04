@@ -823,6 +823,12 @@ function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: Mani
  * Compare manifest-declared membership against on-disk source (editor-local filtered).
  * When `manifest` is omitted, reads `projectDir/project.c3proj`.
  * Detection only — policy (warn, fail, sync) is the caller's responsibility.
+ *
+ * The image sub-detector ({@link detectImageDrift}) is best-effort: if it throws (e.g. an
+ * unmapped image `fileType`), core drift still returns rather than failing, but the failure
+ * is reported via {@link ManifestDrift.degraded} — never silently swallowed — with the
+ * "images" section simply absent from {@link ManifestDrift.sections}. A degradation never
+ * flips {@link ManifestDrift.inSync}, which stays `sections.length === 0` (#68).
  */
 export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
   const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
@@ -854,13 +860,16 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     }
   const containerEntries = detectContainerDrift(m);
   if (containerEntries.length) sections.push({ section: "containers", folder: "", entries: containerEntries });
+  let degraded: DriftDegradation[] | undefined;
   try {
     const imagesDrift = detectImageDrift(projectDir, m);
     if (imagesDrift && imagesDrift.entries.length) sections.push(imagesDrift);
-  } catch {
-    // images derivation is best-effort; never fail core drift on it
+  } catch (err) {
+    // Best-effort: never fail core drift on image derivation — but never hide the
+    // failure either. The section is omitted AND the reason is reported (#68).
+    (degraded ??= []).push({ section: "images", message: err instanceof Error ? err.message : String(err) });
   }
-  return { sections, inSync: sections.length === 0 };
+  return { sections, inSync: sections.length === 0, ...(degraded ? { degraded } : {}) };
 }
 
 /**

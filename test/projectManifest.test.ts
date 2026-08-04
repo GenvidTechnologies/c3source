@@ -22,6 +22,7 @@ import {
   walkDiskFileTree,
   diffNameMaps,
   formatManifestPath,
+  openProject,
   type C3ProjectManifest,
   type C3NameFolder,
   type C3FileFolder,
@@ -711,6 +712,46 @@ describe("detectImageDrift: legacy (fileType-less) stem matching (#68)", () => {
     expect(renamedMissing[0].name).to.equal(`bar-idle-000.${C3_LEGACY_IMAGE_EXTENSION}`);
     expect(renamedUntracked.length).to.equal(1);
     expect(renamedUntracked[0].name).to.equal("unexpected-stem.jpg");
+  });
+});
+
+describe("detectManifestDrift: image degradation is reported, not swallowed (#68)", () => {
+  // A valid MIME string that is deliberately NOT in IMAGE_FILE_TYPE_EXTENSIONS.
+  const unmappedObjectType = {
+    name: "Baz",
+    image: { fileType: "image/tiff" },
+  };
+
+  it("R9a: an unmapped fileType degrades the images section instead of throwing, and reports why", () => {
+    const dir = makeTempImageProject([unmappedObjectType], [], {
+      name: "r9a-temp-project",
+      runtime: "c3",
+      projectFormatVersion: 1,
+      savedWithRelease: 49500,
+    });
+    const drift = detectManifestDrift(dir);
+
+    expect(drift.degraded).to.not.be.undefined;
+    expect(drift.degraded!.length).to.equal(1);
+    expect(drift.degraded![0].section).to.equal("images");
+    expect(drift.degraded![0].message).to.match(/image\/tiff/);
+
+    const imagesSection = drift.sections.find((s) => s.section === "images");
+    expect(imagesSection).to.be.undefined;
+  });
+
+  it("R9b: a clean run reports no degradation and stays in sync", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+
+    const drift = detectManifestDrift(FIXTURE_DIR);
+    expect(drift.degraded).to.be.undefined;
+    expect(drift.inSync).to.equal(true);
+  });
+
+  it("R9c: a direct detectImageDrift call still throws on the same input, via both the free function and the C3Project handle", () => {
+    const dir = makeTempImageProject([unmappedObjectType], []);
+    expect(() => detectImageDrift(dir)).to.throw(/unknown/i);
+    expect(() => openProject(dir).detectImageDrift()).to.throw(/unknown/i);
   });
 });
 
