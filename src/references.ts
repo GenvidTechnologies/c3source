@@ -595,8 +595,14 @@ export function detectEventClassIssues(
  * exist (mirrors `findInSection` in `src/project.ts` and `detectImageDrift`'s own
  * `existsSync` guards) — a project missing a whole source section (e.g. no `families/`) is
  * not itself a reference-integrity failure.
+ *
+ * Exported (#68) so this section-read + editor-local-filter I/O lives once in tested library
+ * code instead of being re-implemented in the unlinted, untypechecked, untested, not-in-CI
+ * `scripts/*.mjs` zone. `scripts/scan-references.mjs:50-58` already duplicates this logic; a
+ * second dev script, `scripts/scan-domain-facts.mjs`, would otherwise have re-implemented it a
+ * third time.
  */
-function readSourceDocs<T>(projectDir: string, folderName: string): SourceDoc<T>[] {
+export function readSourceDocs<T>(projectDir: string, folderName: string): SourceDoc<T>[] {
   const dir = path.join(projectDir, folderName);
   if (!existsSync(dir)) return [];
   const jsonPaths = find_all_files_path(dir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));
