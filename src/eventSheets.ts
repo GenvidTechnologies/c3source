@@ -930,8 +930,21 @@ export interface EditorFieldRule {
  * validate a rule is a deliberate C3-editor import experiment — strip the field,
  * import, observe rejection (see `docs/domain-fact-audit.md`, #68).
  *
+ * **That experiment has now been run** (#70), which is why `custom-ace-name-required`
+ * is here. It also disproved the corpus's strongest competing candidate:
+ * `function-block.functionDescription` is present on *every* instance in a
+ * multi-project corpus and is nonetheless **optional** — C3 loads without it and does
+ * not restore it on save. Corpus ubiquity is therefore not evidence of a loader
+ * requirement (the editor writes a field by default; that is not the loader demanding
+ * it), so an "always present" field list is a hypothesis generator with a real
+ * false-positive rate, never a shortlist of probable rules.
+ *
  * **Blast radius:** a missing rule is a silent false negative — a real editor
- * rejection goes unreported until C3 refuses the file.
+ * rejection goes unreported until C3 refuses the file. C3's own diagnostics are
+ * weak here and vary by rule: a missing `variable.comment` **crashes** the editor,
+ * while a missing `custom-ace-block.aceName` yields only *"Failed to open project.
+ * Check it is a valid Construct 3 folder project"* — naming no field. Reporting the
+ * exact field and `jsonPath` is most of this table's value.
  */
 export const EDITOR_FIELD_RULES: EditorFieldRule[] = [
   {
@@ -949,6 +962,18 @@ export const EDITOR_FIELD_RULES: EditorFieldRule[] = [
       typeof (e as GroupEvent).description === "string"
         ? null
         : "GroupEvent.description must be a string (C3 editor rejects undefined on import)",
+  },
+  // Unlike the two rules above, `aceName` is already typed non-optional on
+  // CustomAceBlockEvent — so this rule is not guarding a type/editor mismatch, it is
+  // guarding *runtime* data: a sheet parsed from disk, or an event synthesized as a
+  // loose Record and cast. The type is an assertion there, not a guarantee.
+  {
+    rule: "custom-ace-name-required",
+    eventType: "custom-ace-block",
+    check: (e) =>
+      typeof (e as CustomAceBlockEvent).aceName === "string"
+        ? null
+        : "CustomAceBlockEvent.aceName must be a string (C3 editor refuses to open the project)",
   },
 ];
 

@@ -230,13 +230,35 @@ superset**, not a verified rule set — record it as untested hypotheses:
 | `include` | 260 | `eventType`, `includeSheet` |
 | `variable` | 1,900 | `comment`, `eventType`, `initialValue`, `isConstant`, `isStatic`, `name`, `sid`, `type` |
 
-Two fields stand out as always-present but **not** in `EDITOR_FIELD_RULES`:
-`function-block.functionDescription` and `custom-ace-block.aceName`. Neither
-is a rule yet — presence-in-corpus is not proof the loader rejects their
-absence — but both are the most plausible next candidates if a C3 import
-failure surfaces one of them missing (the same way `eventvar-comment-required`
-and `group-description-required` were originally seeded from incident
-reports, not from a scan).
+Two fields stood out as always-present but **not** in `EDITOR_FIELD_RULES`:
+`function-block.functionDescription` and `custom-ace-block.aceName`. Both were
+tested directly against the C3 editor in #70, and **they split**:
+
+| Candidate | Corpus presence | C3 verdict |
+|---|---|---|
+| `variable.comment` *(positive control — already a rule)* | 1,900 / 1,900 | **rejected** — the editor *crashes* on open |
+| `function-block.functionDescription` | 1,030 / 1,030 | **accepted** — optional, and not restored on save |
+| `custom-ace-block.aceName` | 179 / 179 | **rejected** — *"Failed to open project"* |
+
+`custom-ace-name-required` was added to `EDITOR_FIELD_RULES` as a result.
+
+**The `functionDescription` result is the one to remember.** It is present on
+*every* instance in the corpus and is nonetheless optional. So:
+
+> **Corpus ubiquity is not evidence of a loader requirement.** The editor
+> writes a field by default; that is not the loader demanding it.
+
+This table is therefore a **hypothesis generator with a demonstrated
+false-positive rate** — one of its two strongest candidates was wrong — not a
+shortlist of probable rules. Read it as "worth testing", never as "probably
+required", and treat a rule as real only once C3 itself has refused a file
+without it. This is also the concrete justification for the table's
+`NOT CORPUS-AUDITABLE` label: not a caveat, a measurement.
+
+Note the diagnostics C3 gives are weak and inconsistent — a missing `comment`
+crashes the editor outright, while a missing `aceName` produces a generic
+dialog naming no field at all. Reporting the offending field and `jsonPath` is
+most of what `validateForEditor` is for.
 
 ## A better validation channel: editor.construct.net
 
