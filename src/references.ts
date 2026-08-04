@@ -157,10 +157,11 @@ export const C3_DEFAULT_FUNCTIONS_NAME = "Functions";
  * source (`AddonAttribution.pluginId`/`behaviorIds`/`effectIds`) — a `theme` has no
  * source-side counterpart to derive.
  *
- * **UNVALIDATED**: `"theme"` was never actually observed across a 16-project real-world
- * corpus (only `plugin`/`behavior`/`effect` were seen). The failure mode if this table
- * is wrong is benign either way — it only *suppresses* an `addon-unused` warning, so
- * being wrong costs a missed warning, never a false alarm.
+ * **UNVALIDATED**: `"theme"` was never actually observed in the real-world corpus
+ * (only `plugin`/`behavior`/`effect` were seen). See `docs/domain-fact-audit.md`
+ * (#68) for the evidence volume. The failure mode if this table is wrong is benign
+ * either way — it only *suppresses* an `addon-unused` warning, so being wrong costs
+ * a missed warning, never a false alarm.
  *
  * REPLACED wholesale (not merged) by {@link ReferenceIntegrityOptions.nonAttributableAddonTypes}
  * when supplied — spread this table in to extend rather than replace.
@@ -595,8 +596,14 @@ export function detectEventClassIssues(
  * exist (mirrors `findInSection` in `src/project.ts` and `detectImageDrift`'s own
  * `existsSync` guards) — a project missing a whole source section (e.g. no `families/`) is
  * not itself a reference-integrity failure.
+ *
+ * Exported (#68) so this section-read + editor-local-filter I/O lives once in tested library
+ * code instead of being re-implemented in the unlinted, untypechecked, untested, not-in-CI
+ * `scripts/*.mjs` zone. `scripts/scan-references.mjs:50-58` already duplicates this logic; a
+ * second dev script, `scripts/scan-domain-facts.mjs`, would otherwise have re-implemented it a
+ * third time.
  */
-function readSourceDocs<T>(projectDir: string, folderName: string): SourceDoc<T>[] {
+export function readSourceDocs<T>(projectDir: string, folderName: string): SourceDoc<T>[] {
   const dir = path.join(projectDir, folderName);
   if (!existsSync(dir)) return [];
   const jsonPaths = find_all_files_path(dir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));

@@ -89,10 +89,14 @@ interface C3ProjectManifest {
   usedAddons?: C3UsedAddon[];
   /** Name of C3's built-in functions object, configurable per project.
    *  Optional — absent means the project uses C3's default, `"Functions"`
-   *  (`C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`). Observed absent in
-   *  5 of 14 real-world corpus projects. Before #60, c3source could not see
-   *  this attribute at all — a renamed functions object silently produced
-   *  false `event-class-unresolved` issues; see
+   *  (`C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`). Absence is a release
+   *  property, not a per-project opt-out: C3 first serializes it in r437, so a
+   *  project last saved before then simply predates it — absent in all 6 corpus
+   *  projects saved with `savedWithRelease <= 40702`, present in all 8 saved
+   *  `>= 44002` (14 projects total; see
+   *  [domain-fact-audit.md](domain-fact-audit.md)). Before #60,
+   *  c3source could not see this attribute at all — a renamed functions object
+   *  silently produced false `event-class-unresolved` issues; see
    *  [api-guide-references.md](api-guide-references.md#domain-fact-tables). */
   functionsName?: string;
   [key: string]: unknown; // forward-compat: firstLayout, viewportWidth, …
@@ -343,11 +347,29 @@ interface SectionDrift {
   entries: DriftEntry[];
 }
 
+/** A best-effort sub-detector that threw and was skipped. */
+interface DriftDegradation {
+  section: string; // the omitted section, e.g. "images"
+  message: string; // the failure's message text
+}
+
 interface ManifestDrift {
-  sections: SectionDrift[]; // empty when inSync
-  inSync: boolean;
+  sections: SectionDrift[];       // empty when inSync
+  inSync: boolean;                // sections.length === 0 — unaffected by degradation
+  degraded?: DriftDegradation[];  // present only when a best-effort sub-detector threw
 }
 ```
+
+`degraded` is present only when a best-effort sub-detector — currently just
+the images sub-detector, see [Images drift](#images-drift) — threw and was
+skipped (#68); that sub-detector's section is then simply absent from `sections`
+rather than silently missing with no explanation. This is how a caller tells
+"verified, no drift" apart from "never verified": `inSync` does not change
+meaning when a degradation occurs, it stays exactly `sections.length === 0`.
+So `inSync === true` together with a populated `degraded` means "no drift
+among the sections that were actually checked", not "no drift" — the
+**absence** of `degraded` (not `inSync`) is the signal that every section was
+verified.
 
 **Drift kind semantics:**
 
@@ -384,7 +406,10 @@ below) — `ts-defs` is undeclared, so it is invisible to drift before
 `isEditorLocalPath` ever gets a chance to run on it.
 
 `detectManifestDrift` only reports what it finds. The caller decides what to do
-about drift (warn, fail the build, sync).
+about drift (warn, fail the build, sync). The images sub-detector is
+best-effort and can throw (see [Images drift](#images-drift)); when it does,
+`detectManifestDrift` still returns, but records the failure in
+`ManifestDrift.degraded` rather than swallowing it.
 
 ```ts
 import { detectManifestDrift, formatManifestPath } from "@genvidtech/c3source";
@@ -487,9 +512,29 @@ lives in a separate module — see
 ### Images drift
 
 When an `images/` directory exists in the project, `detectManifestDrift`
-automatically appends an `images` section to the result. Expected image
-filenames are derived from all object-type JSON files in `objectTypes/` (see
-`deriveExpectedImageNames`), then diffed against the flat files in `images/`.
+automatically appends an `images` section to the result. Expected images are
+derived from all object-type JSON files in `objectTypes/`, then diffed
+against the flat files in `images/`.
+
+```ts
+/** One expected on-disk image, as derived structurally from an object type. */
+interface ExpectedImage {
+  stem: string;    // filename stem, no extension: "bullet-default-000", "tiledbackground"
+  ext?: string;     // resolved from fileType; absent for pre-r402 nodes that record no MIME
+  context: string; // diagnostic locator: "TiledBackground" or "Bullet/Default#0"
+}
+
+deriveExpectedImages(objectType: Record<string, unknown>): ExpectedImage[]
+deriveExpectedImageNames(objectType: Record<string, unknown>): string[]
+```
+
+`deriveExpectedImages` is the structured form — one `ExpectedImage` per
+expected file, carrying `ext` separately so a caller can tell "resolved from a
+known `fileType`" apart from "no `fileType` recorded" without string-parsing a
+filename. `deriveExpectedImageNames` is a thin renderer over it: it joins
+`stem` and `ext` into a plain filename string, always (see below for what it
+renders when `ext` is absent). `detectImageDrift` calls the structured form
+directly, for the reason covered below.
 
 **Coverage:**
 
@@ -517,11 +562,59 @@ Animation subfolders collapse: the subfolder name does not appear in the
 filename. Animation names are unique within an object type. `frame3` is the
 zero-based frame index zero-padded to 3 digits (`000`, `001`, …).
 
-An absent or unmapped `fileType` is treated as an error: `deriveExpectedImageNames` throws
-(`malformed object type` / `unknown image fileType`). `detectManifestDrift` wraps image
-derivation in a try/catch, so a thrown error degrades gracefully to "images section omitted"
-rather than failing core drift. Call `detectImageDrift` directly if you want to surface
-derivation errors.
+**Absent vs. unmapped `fileType` — two different cases (#68):**
+
+- **Absent `fileType`.** C3 releases **before r402** serialize image nodes with
+  no `fileType` (MIME) field at all — the on-disk file is still a real image,
+  e.g. `bullet-default-000.png`. The pin is exact: diffing the editor's own
+  serializer across `editor.construct.net/r{397…407}/projectResources.js`
+  shows `fileType` first emitted at **r402**, and no `r401.x` sub-release
+  exists. (Note `exportFormat`/`exportQuality` are **not** the older
+  alternative — current C3 writes all three side by side, so their presence
+  says nothing about a file's age.) This absent case is **not** treated as
+  malformed: `ext` on the `ExpectedImage` is `undefined`, and the exported
+  constant `C3_LEGACY_IMAGE_EXTENSION` (`"png"`) is what c3source assumes for
+  these legacy nodes. That value is **not** a guess — C3's own project loader
+  applies the identical fallback (`t.fileType ?? "image/png"`, unchanged from
+  r402 through r447), so c3source is matching the editor's documented
+  behaviour rather than inventing one.
+- **Present but unmapped `fileType`** (e.g. `image/gif`) is still an error:
+  `deriveExpectedImages`/`deriveExpectedImageNames` throw `unknown image
+  fileType "..."`.
+
+**Two APIs, two contracts, over the same absent-`fileType` case:**
+
+- `deriveExpectedImageNames` answers *"what filename would C3 have
+  written?"* — it must always answer with a concrete name, so an absent
+  `fileType` renders as `<stem>.${C3_LEGACY_IMAGE_EXTENSION}` (e.g.
+  `bullet-default-000.png`).
+- `detectImageDrift` answers *"is anything missing or orphaned?"* — it must
+  never *fabricate* a finding from that default, so it does **not** call
+  `deriveExpectedImageNames`. It calls `deriveExpectedImages` directly and
+  matches an entry with a known `ext` on the full filename `<stem>.<ext>`
+  (exact — the #29 regression guard: a real extension mismatch still reports
+  drift), but matches an entry with `ext: undefined` on its **stem** against
+  the on-disk `images/` filenames: if some on-disk file shares that stem
+  (whatever its actual extension), that file counts as present and no drift is
+  reported; only if nothing on disk shares the stem does it fall back to
+  `<stem>.${C3_LEGACY_IMAGE_EXTENSION}`, which then correctly reports as
+  `missing`.
+
+  `detectImageDrift` is strictly the **more conservative** of the two — the
+  labelled default can never *manufacture* drift on its own.
+
+**Do not read `exportFormat` as a format proxy anywhere.** It is an export
+re-encoding setting (`"lossless"` / `"lossy"`), not the source MIME: a real
+corpus project (`burbank`) carries `exportFormat: "lossy"` on 8,448 nodes
+whose actual source format is `image/png`.
+
+`detectManifestDrift` wraps image derivation in a try/catch, so a thrown
+error (the present-but-unmapped `fileType` case above) degrades gracefully
+rather than failing core drift: the `images` section is simply absent from
+`ManifestDrift.sections`, and the failure is recorded in
+[`ManifestDrift.degraded`](#result-types) instead of being silently
+swallowed. Call `detectImageDrift` directly if you want the derivation error
+to propagate instead of degrading.
 
 **Known limits (intentionally incomplete; extensible in future releases):**
 

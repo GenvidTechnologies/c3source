@@ -118,8 +118,9 @@ const NON_ATTRIBUTABLE_ADDON_TYPES: string[] = ["theme"];
 object type and no family **by design**, holding only the **statically**
 known pseudo-classes: `"System"` (the built-in System object). **Known
 incomplete even for the classes it does cover** — it was derived from a
-16-project corpus scan, not from C3's source, and the canonical fixture alone
-yields only `{"System"}` (see
+corpus scan (14 projects as of 2026-08-04; see
+[domain-fact-audit.md](domain-fact-audit.md)), not from C3's source, and the
+canonical fixture alone yields only `{"System"}` (see
 [ADR 0021](decisions/0021-reference-integrity-detection.md), point 4, for the
 corpus evidence). `Mouse`/`Keyboard`/`Touch`/`Audio`/`Browser` are **not**
 pseudo-classes — each is an ordinary object type with its own

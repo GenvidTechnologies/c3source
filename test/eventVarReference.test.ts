@@ -19,16 +19,20 @@ describe("EVENTVAR_REFERENCE_ACES", () => {
     expect(Object.keys(EVENTVAR_REFERENCE_ACES)).to.have.length(8);
   });
 
+  it("does not table the fabricated id 'is-boolean-eventvar-set'", () => {
+    expect(EVENTVAR_REFERENCE_ACES).to.not.have.property("is-boolean-eventvar-set");
+  });
+
   it("maps every expected id to 'variable'", () => {
     const expectedIds = [
       "set-eventvar-value",
       "add-to-eventvar",
       "subtract-from-eventvar",
+      "reset-eventvar",
       "set-boolean-eventvar",
       "toggle-boolean-eventvar",
       "compare-eventvar",
       "compare-boolean-eventvar",
-      "is-boolean-eventvar-set",
     ];
     for (const id of expectedIds) {
       expect(EVENTVAR_REFERENCE_ACES[id], `id "${id}"`).to.equal("variable");
@@ -47,6 +51,16 @@ describe("isEventVarReference", () => {
 
   it("returns null for a non-System object with a known id", () => {
     const ace = { id: "set-eventvar-value", objectClass: "Sprite", parameters: { variable: "x" } };
+    expect(isEventVarReference(ace)).to.be.null;
+  });
+
+  it("returns { nameParamKey: 'variable' } for reset-eventvar", () => {
+    const ace = { id: "reset-eventvar", objectClass: "System", parameters: { variable: "languageCount" } };
+    expect(isEventVarReference(ace)).to.deep.equal({ nameParamKey: "variable" });
+  });
+
+  it("returns null for reset-eventvar on a non-System object", () => {
+    const ace = { id: "reset-eventvar", objectClass: "MyPlugin", parameters: { variable: "languageCount" } };
     expect(isEventVarReference(ace)).to.be.null;
   });
 
@@ -83,6 +97,11 @@ describe("getEventVarReferenceName", () => {
   it("returns null for a non-System object", () => {
     const ace = { id: "set-eventvar-value", objectClass: "Sprite", parameters: { variable: "x" } };
     expect(getEventVarReferenceName(ace)).to.be.null;
+  });
+
+  it("returns the variable name for reset-eventvar", () => {
+    const ace = { id: "reset-eventvar", objectClass: "System", parameters: { variable: "languageCount" } };
+    expect(getEventVarReferenceName(ace)).to.equal("languageCount");
   });
 
   it("returns null for a System ACE with an unknown id", () => {
@@ -151,5 +170,40 @@ describe("getEventVarReferenceName (fixture integration)", () => {
     expect(names).to.have.length(2);
     // Assert as a sorted array to stay robust against ordering changes
     expect([...names].sort()).to.deep.equal(["temp", "temp"]);
+  });
+});
+
+describe("getEventVarReferenceName (boolean event variable, fixture integration)", () => {
+  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Event sheet 2.json`;
+
+  before(function () {
+    if (!fixtureExists(fixturePath)) {
+      this.skip();
+    }
+  });
+
+  // compare-boolean-eventvar is the id C3 actually emits for a boolean event variable —
+  // the table once carried a fabricated `is-boolean-eventvar-set` alongside it (#68).
+  // The golden gained this construct in construct3-sample v0.6.0 so the real id is
+  // exercised against editor-written bytes, not only against hand-built objects.
+  it("resolves the compare-boolean-eventvar reference to its declared variable", () => {
+    const sheet = JSON.parse(loadFixture(fixturePath)) as EventSheet;
+
+    const declared: string[] = [];
+    const refs: string[] = [];
+    visitEvents(sheet.events, (event) => {
+      if (event.eventType === "variable") declared.push(event.name);
+      if (hasConditions(event)) {
+        for (const cond of event.conditions) {
+          const name = getEventVarReferenceName(cond);
+          if (name !== null) refs.push(name);
+        }
+      }
+    });
+
+    expect(refs).to.deep.equal(["isActive"]);
+    // The reference resolves to a variable declared in the same sheet — a dangling
+    // reference here would mean the golden itself drifted.
+    expect(declared).to.include("isActive");
   });
 });

@@ -10,6 +10,8 @@ import {
   collectManifestFileNames,
   detectManifestDrift,
   deriveExpectedImageNames,
+  deriveExpectedImages,
+  C3_LEGACY_IMAGE_EXTENSION,
   detectImageDrift,
   C3_SECTION_FOLDERS,
   C3_ROOT_FILE_FOLDERS,
@@ -20,6 +22,7 @@ import {
   walkDiskFileTree,
   diffNameMaps,
   formatManifestPath,
+  openProject,
   type C3ProjectManifest,
   type C3NameFolder,
   type C3FileFolder,
@@ -28,7 +31,7 @@ import {
   type ManifestShapeRuleId,
   type ManifestValidationIssue,
 } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath, makeTempProject } from "./fixtureHelpers.js";
+import { fixtureProjectExists, fixtureProjectPath, makeTempProject, makeTempImageProject } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "project.c3proj");
@@ -539,16 +542,18 @@ describe("F4: image-derived drift", () => {
     expect(names).to.deep.equal(["bar-run-000.jpg", "bar-run-001.webp"]);
   });
 
-  it("F4-10: absent fileType on single-image branch throws (malformed)", () => {
-    expect(() => deriveExpectedImageNames({ name: "Foo", image: {} })).to.throw(/malformed|fileType/i);
-    expect(() => deriveExpectedImageNames({ name: "Foo", image: { fileType: null } })).to.throw(/malformed|fileType/i);
+  it("F4-10: absent fileType on single-image branch renders the labelled legacy default, no throw", () => {
+    expect(deriveExpectedImageNames({ name: "Foo", image: {} })).to.deep.equal([`foo.${C3_LEGACY_IMAGE_EXTENSION}`]);
+    expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: null } })).to.deep.equal([
+      `foo.${C3_LEGACY_IMAGE_EXTENSION}`,
+    ]);
   });
 
   it("F4-11: unknown MIME on single-image branch throws with 'unknown'", () => {
     expect(() => deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/gif" } })).to.throw(/unknown/i);
   });
 
-  it("F4-12: absent fileType on animation frame throws (malformed)", () => {
+  it("F4-12: absent fileType on animation frame renders the labelled legacy default, no throw", () => {
     const ot = {
       name: "Bar",
       animations: {
@@ -556,7 +561,7 @@ describe("F4: image-derived drift", () => {
         subfolders: [],
       },
     };
-    expect(() => deriveExpectedImageNames(ot)).to.throw(/malformed|fileType/i);
+    expect(deriveExpectedImageNames(ot)).to.deep.equal([`bar-idle-000.${C3_LEGACY_IMAGE_EXTENSION}`]);
   });
 
   it("F4-13: unknown MIME on animation frame throws with 'unknown'", () => {
@@ -602,6 +607,151 @@ describe("F4: image-derived drift", () => {
     // Manifest drift must still be clean (JPEGTileBackground + LevelMaps wired into project.c3proj)
     const manifestDrift = detectManifestDrift(FIXTURE_DIR);
     expect(manifestDrift.inSync).to.equal(true);
+  });
+});
+
+describe("deriveExpectedImages (#68)", () => {
+  it("single-image branch, mapped fileType → one ExpectedImage with the resolved ext", () => {
+    const images = deriveExpectedImages({ name: "Foo", image: { fileType: "image/jpeg" } });
+    expect(images).to.deep.equal([{ stem: "foo", ext: "jpg", context: "Foo" }]);
+  });
+
+  it("single-image branch, absent fileType → one ExpectedImage with ext: undefined (pre-r407 legacy node)", () => {
+    const images = deriveExpectedImages({ name: "Foo", image: {} });
+    expect(images).to.deep.equal([{ stem: "foo", ext: undefined, context: "Foo" }]);
+
+    const imagesNullFileType = deriveExpectedImages({ name: "Foo", image: { fileType: null } });
+    expect(imagesNullFileType).to.deep.equal([{ stem: "foo", ext: undefined, context: "Foo" }]);
+  });
+
+  it("animation frame, mapped fileType → per-frame ExpectedImage with the resolved ext", () => {
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{ fileType: "image/webp" }] }],
+        subfolders: [],
+      },
+    };
+    const images = deriveExpectedImages(ot);
+    expect(images).to.deep.equal([{ stem: "bar-run-000", ext: "webp", context: "Bar/Run#0" }]);
+  });
+
+  it("animation frame, absent fileType → per-frame ExpectedImage with ext: undefined (independent of the single-image branch)", () => {
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{}] }],
+        subfolders: [],
+      },
+    };
+    const images = deriveExpectedImages(ot);
+    expect(images).to.deep.equal([{ stem: "bar-run-000", ext: undefined, context: "Bar/Run#0" }]);
+  });
+
+  it("unmapped fileType still throws, on both the single-image and animation-frame branches", () => {
+    expect(() => deriveExpectedImages({ name: "Foo", image: { fileType: "image/gif" } })).to.throw(/unknown/i);
+
+    const ot = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{ fileType: "image/bmp" }] }],
+        subfolders: [],
+      },
+    };
+    expect(() => deriveExpectedImages(ot)).to.throw(/unknown/i);
+  });
+
+  it("C3_LEGACY_IMAGE_EXTENSION is the documented default extension ('png')", () => {
+    expect(C3_LEGACY_IMAGE_EXTENSION).to.equal("png");
+  });
+});
+
+describe("detectImageDrift: legacy (fileType-less) stem matching (#68)", () => {
+  // A pre-r407-shaped object type: a single animation frame with no fileType field at all.
+  const legacyObjectType = {
+    name: "Bar",
+    animations: {
+      items: [{ name: "Idle", frames: [{}] }],
+      subfolders: [],
+    },
+  };
+
+  it("R8d: legacy end-to-end — fileType-less frame with the matching image present on disk → no drift, no throw", () => {
+    // The on-disk file is .jpg, not the C3_LEGACY_IMAGE_EXTENSION default (.png): stem
+    // matching, not an assumed extension, is what makes this resolve clean.
+    const dir = makeTempImageProject([legacyObjectType], ["bar-idle-000.jpg"]);
+    let result: SectionDrift | null = null;
+    expect(() => {
+      result = detectImageDrift(dir);
+    }).to.not.throw();
+    expect(result).to.not.be.null;
+    expect(result!.entries).to.deep.equal([]);
+  });
+
+  it("R8e: stem matching doesn't hide real drift", () => {
+    // Image absent entirely: no on-disk file shares the stem, so the comparison falls back
+    // to the labelled legacy default and reports exactly one missing entry.
+    const dirMissing = makeTempImageProject([legacyObjectType], []);
+    const missingResult = detectImageDrift(dirMissing);
+    expect(missingResult).to.not.be.null;
+    const missing = missingResult!.entries.filter((e) => e.kind === "missing");
+    expect(missingResult!.entries).to.deep.equal(missing);
+    expect(missing.length).to.equal(1);
+    expect(missing[0].name).to.equal(`bar-idle-000.${C3_LEGACY_IMAGE_EXTENSION}`);
+
+    // Image present but under an unexpected stem: stem matching must not treat "some file
+    // exists somewhere" as satisfying the expectation — the expected stem is still missing,
+    // and the unexpected file is untracked.
+    const dirRenamed = makeTempImageProject([legacyObjectType], ["unexpected-stem.jpg"]);
+    const renamedResult = detectImageDrift(dirRenamed);
+    expect(renamedResult).to.not.be.null;
+    expect(renamedResult!.entries.length).to.equal(2);
+    const renamedMissing = renamedResult!.entries.filter((e) => e.kind === "missing");
+    const renamedUntracked = renamedResult!.entries.filter((e) => e.kind === "untracked");
+    expect(renamedMissing.length).to.equal(1);
+    expect(renamedMissing[0].name).to.equal(`bar-idle-000.${C3_LEGACY_IMAGE_EXTENSION}`);
+    expect(renamedUntracked.length).to.equal(1);
+    expect(renamedUntracked[0].name).to.equal("unexpected-stem.jpg");
+  });
+});
+
+describe("detectManifestDrift: image degradation is reported, not swallowed (#68)", () => {
+  // A valid MIME string that is deliberately NOT in IMAGE_FILE_TYPE_EXTENSIONS.
+  const unmappedObjectType = {
+    name: "Baz",
+    image: { fileType: "image/tiff" },
+  };
+
+  it("R9a: an unmapped fileType degrades the images section instead of throwing, and reports why", () => {
+    const dir = makeTempImageProject([unmappedObjectType], [], {
+      name: "r9a-temp-project",
+      runtime: "c3",
+      projectFormatVersion: 1,
+      savedWithRelease: 49500,
+    });
+    const drift = detectManifestDrift(dir);
+
+    expect(drift.degraded).to.not.be.undefined;
+    expect(drift.degraded!.length).to.equal(1);
+    expect(drift.degraded![0].section).to.equal("images");
+    expect(drift.degraded![0].message).to.match(/image\/tiff/);
+
+    const imagesSection = drift.sections.find((s) => s.section === "images");
+    expect(imagesSection).to.be.undefined;
+  });
+
+  it("R9b: a clean run reports no degradation and stays in sync", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+
+    const drift = detectManifestDrift(FIXTURE_DIR);
+    expect(drift.degraded).to.be.undefined;
+    expect(drift.inSync).to.equal(true);
+  });
+
+  it("R9c: a direct detectImageDrift call still throws on the same input, via both the free function and the C3Project handle", () => {
+    const dir = makeTempImageProject([unmappedObjectType], []);
+    expect(() => detectImageDrift(dir)).to.throw(/unknown/i);
+    expect(() => openProject(dir).detectImageDrift()).to.throw(/unknown/i);
   });
 });
 

@@ -84,8 +84,10 @@ Note it cuts both ways — an undeclared layer effect is a real load failure
 that is now detected, not merely a false-positive fix.
 
 **4. The corpus evidence for `C3_PSEUDO_OBJECT_CLASSES`.** The canonical
-fixture yields only `{"System"}`. Scanning 16 real projects found
-`"Functions"` occurring **212 times in a single project** (ACE ids
+fixture yields only `{"System"}`. Scanning 16 real projects (this figure was
+a miscount at the time of writing; the corpus is 14 projects — corrected
+2026-08-04, see `docs/domain-fact-audit.md`) found `"Functions"` occurring
+**212 times in a single project** (ACE ids
 `set-function-return-value`, `map-function`, `map-function-default`,
 `call-mapped-function`), with zero other unresolved values across ~30k ACEs.
 **Shipping the fixture-derived table would have produced 212 false positives
@@ -135,7 +137,8 @@ layout would be a false clean bill of health.
 - Semver **minor** (1.8.0 → 1.9.0); the bump is a separate release commit.
 - **Unvalidated assumption, recorded honestly:** `NON_ATTRIBUTABLE_ADDON_TYPES
   = ["theme"]` is derived from `C3UsedAddon`'s JSDoc and was **never
-  observed** across the 16-project scan (only `plugin`/`behavior`/`effect`
+  observed** across the 16-project scan (corrected 2026-08-04: the corpus is
+  14 projects, see `docs/domain-fact-audit.md`; only `plugin`/`behavior`/`effect`
   were seen). The failure mode is benign either way — it only *suppresses* an
   `addon-unused` warning, so being wrong costs a missed warning, not a false
   alarm.

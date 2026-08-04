@@ -187,7 +187,7 @@ Four functional areas:
    are thin consumers of the canonical walks `walkManifestNameTree`/`walkManifestFileTree`
    (no parallel recursion). `detectManifestDrift(projectDir, manifest?)` compares
    declared membership against on-disk source (editor-local filtered via `isEditorLocalPath`)
-   and returns `ManifestDrift: {sections: SectionDrift[], inSync}`. Each `SectionDrift`
+   and returns `ManifestDrift: {sections: SectionDrift[], inSync, degraded?}`. Each `SectionDrift`
    carries `entries: DriftEntry[]` — a structured list where every entry has a `kind`
    (`missing` | `untracked` | `moved` | `folder-missing` | `folder-untracked` | `dangling-ref`)
    and path-segment arrays (`manifestPath`, `diskPath`) locating the item within the
@@ -218,7 +218,13 @@ Four functional areas:
    now a real write hazard.
    **Image-derived drift** — `detectImageDrift(projectDir)` is a best-effort sub-detector that
    `detectManifestDrift` appends to its sections (wrapped in try/catch — a throw degrades to
-   "images section omitted", never failing core drift). Unlike the manifest walks it **ignores
+   "images section omitted", never failing core drift). The degradation is **reported, not
+   swallowed**: the catch records a `DriftDegradation {section, message}` on
+   `ManifestDrift.degraded`, so a caller can tell "images verified, no drift" from "image
+   verification threw and was discarded" — previously indistinguishable. `inSync` stays
+   `sections.length === 0` (a degradation is not drift), and `C3Project.detectImageDrift()`
+   still throws on a direct call, because that *is* the caller's request (ADR 0021's policy).
+   Unlike the manifest walks it **ignores
    the manifest**: it walks `objectTypes/` and the flat `images/` folder **directly** and diffs
    derived-expected vs on-disk filenames. `deriveExpectedImageNames(objectType)` derives the
    expected filenames structurally — `<name>.<ext>` for a top-level `image` field, one
@@ -226,8 +232,20 @@ Four functional areas:
    `fileType` MIME via the exported domain fact `IMAGE_FILE_TYPE_EXTENSIONS` (`image/png`→`png`,
    `image/jpeg`→`jpg`, `image/svg+xml`→`svg`, `image/webp`→`webp`; cf. `EVENTVAR_REFERENCE_ACES`).
    The MIME is read from `image.fileType` (single-image) or each frame's own `fileType`
-   (animations — frames may differ). An absent or unmapped `fileType` **throws** (malformed /
-   unknown format) — there is no `.png` fallback (#29). Because the manifest keys object types on
+   (animations — frames may differ). The two failure modes are **not** the same and no longer
+   share a behaviour (#68): a present-but-**unmapped** `fileType` still **throws** (unknown
+   format — #29's decision stands), but an **absent** one does not. C3 first emits `fileType`
+   at **r402**, so an older project records no MIME at all while the on-disk file is a perfectly
+   ordinary image — calling that "malformed" was simply wrong. The structured
+   `deriveExpectedImages(objectType): ExpectedImage[]` (`{stem, ext?, context}`) is now the
+   primitive; `deriveExpectedImageNames` is a one-line renderer over it that fills a missing
+   `ext` with `C3_LEGACY_IMAGE_EXTENSION` (`"png"` — **not a guess**: C3's own loader applies the
+   identical `fileType ?? "image/png"` fallback). The two read paths deliberately diverge —
+   `deriveExpectedImageNames` must answer with a concrete name, while `detectImageDrift` must not
+   fabricate a finding, so it matches `ext`-less entries on their **stem**. The detector is
+   strictly the more conservative of the two, so the default can never *manufacture* drift. See
+   [ADR 0023](docs/decisions/0023-pre-r402-image-serialization-drift-degradation.md).
+   Because the manifest keys object types on
    **names**, not filenames, a fixture's image format can be varied (change `fileType` + rename
    the on-disk image) without churning any manifest-membership test.
    **C3Project handle** (in `src/project.ts`) — `openProject(root): C3Project` is a root-bound handle that
@@ -471,10 +489,47 @@ project **source**, not editor-local — just written in a second, minified form
 — per the `C3_MINIFIED_SOURCE_SUFFIXES`/`isMinifiedSourcePath` domain fact and
 [ADR 0018](docs/decisions/0018-brush-json-minified-source-not-editor-local.md).
 
+## Domain-fact tables: how they are validated (#68)
+
+[ADR 0008](docs/decisions/0008-c3-domain-fact-tables.md) owns *that* C3 facts live
+here as exported tables; [ADR
+0022](docs/decisions/0022-domain-fact-audit-convention.md) owns *how one is
+validated*. Three rules:
+
+1. **Every table's JSDoc carries a confidence label** — `AUDITED` / `KNOWN
+   INCOMPLETE` / `UNVALIDATED` / `NOT CORPUS-AUDITABLE` (the last must name the
+   evidence source that *would* validate it) — **paired with the blast radius of
+   being wrong**, which differs sharply per table: `EDITOR_LOCAL_EXCLUSIONS`
+   contaminates every drift section, `IMAGE_FILE_TYPE_EXTENSIONS` throws, the rest
+   are silent false negatives or cosmetic.
+2. **Numbers never go in JSDoc.** JSDoc ships to consumers in `dist/*.d.ts`, where
+   "audited against 14 projects" is false the day a 15th appears. Counts, releases
+   and the scan date live in [docs/domain-fact-audit.md](docs/domain-fact-audit.md);
+   JSDoc holds only the label and a pointer. A **release pin** (`r402`, `r437`) is
+   the one exception — a fixed historical fact, not a rotting count.
+3. **`scripts/scan-domain-facts.mjs` reports partitions; the maintainer produces the
+   verdict.** It never concludes a table is correct — `scripts/*.mjs` is unlinted,
+   untypechecked, untested and not in CI, so a probe bug must yield odd-looking
+   evidence a human notices, not a wrong conclusion baked into a table. Every verdict
+   line carries its own observation count, and zero observations prints `NOT
+   EXERCISED`, never a pass (a probe once printed "NO CONTRADICTIONS" having scanned
+   nothing).
+
+**Reach for C3's own bundle before a corpus scan.**
+`https://editor.construct.net/r{NNN}/` is permanently hosted and fetchable per
+release (`construct.net`'s human-facing docs are Cloudflare-gated; this is not):
+`plugins/allAces.json` is C3's **authoritative ACE table**, and bisecting
+`c3runtime/projectResources.js` across releases **pins exactly when a field
+appeared**. A corpus answers *what values occur*; the bundle answers *what the
+mechanism is* — the distinction ADR 0008's addendum says a corpus structurally
+cannot make. In #68 it proved `EVENTVAR_REFERENCE_ACES` complete, proved
+`is-boolean-eventvar-set` **fabricated** (not merely unobserved), and converted two
+corpus brackets into exact pins (`fileType`→r402, `functionsName`→r437).
+
 ## Canonical reference fixture (`construct3-sample`)
 
 A **second** git submodule, `construct3-sample/` (pinned at the commit tagged
-`v0.4.1`, added #51), is the **canonical golden C3 project** — the single,
+`v0.6.0`, added #51), is the **canonical golden C3 project** — the single,
 editor-round-tripped
 source of on-disk shape that c3source and its sibling tools consume instead of
 each hand-maintaining a drifting fixture. c3source is the **validator, not the
@@ -502,9 +557,13 @@ for that migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds them 
 `Event sheet 1`, which `eventVarReference.test.ts` needs — and then to **v0.4.1**,
 which adds a **global layer with override** to both layouts (exercising the
 prefix-resetting `global` path in `walkLayerEntries`) plus upstream-owned addon
-sources. The v0.4.1 bump is corpus-neutral: the `.json`/`.c3proj` counts are
-unchanged (29/3/26, 26 kept round-tripping bar the brush file), because it
-edits two existing layout files rather than adding any, and its non-`project/`
+sources. Then **v0.5.0** (#60), adding Functions ACEs to `Event sheet 1`, and
+**v0.6.0** (#68), adding a boolean event variable plus a `compare-boolean-eventvar`
+condition to `Event sheet 2` — the golden had no boolean-event-variable construct at
+all, which is part of how a **fabricated** ACE id survived unnoticed in
+`EVENTVAR_REFERENCE_ACES`. Every bump from v0.4.1 on is corpus-neutral: the
+`.json`/`.c3proj` counts are unchanged (29/3/26, 26 kept round-tripping bar the brush
+file), because each edits existing files rather than adding any, and non-`project/`
 additions are never copied by `prep-fixture`. **When bumping the pin, re-measure
 rather than assume** — a tag that adds or removes a `project/` JSON file moves the
 corpus counts `manifestSerialize.test.ts` asserts.

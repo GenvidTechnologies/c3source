@@ -277,6 +277,40 @@ be a pure internal refactor. (`EDITOR_FIELD_RULES` has no throwing consumer
 today, so it has no equivalent invariant to preserve — but it would gain one
 the day a strict wrapper is added.)
 
+## Evidence-bearing verdicts in audit tooling
+
+Any tool that reports "clean" must make it **impossible to confuse *checked and
+clean* with *never checked***. `scripts/scan-domain-facts.mjs` (#68) enforces this
+two ways:
+
+- **Every verdict line carries its own observation count.** `-> NO CONTRADICTIONS
+  (2 file(s) … observed, all single-line)`, not a bare `NO CONTRADICTIONS`. The
+  evidence volume is inseparable from the claim, so a skimming reader cannot take a
+  thin result for a strong one.
+- **Zero observations prints `NOT EXERCISED`, never a pass.** The probe still emits
+  its line (silence would read as "not run"), but a verdict is structurally
+  unavailable when nothing was seen.
+
+This is not hypothetical: the `minified` probe shipped printing `NO CONTRADICTIONS`
+having scanned **zero** `.brush.json` files, because brush files live under a
+top-level `tilemapBrushes/` folder that is in none of the section tables the walk
+derives from. The conclusion was true and worthless. A blind spot in the *input*
+had become a confident claim in the *output* — the one failure the tool existed to
+prevent.
+
+The companion rule is **evidence, not verdicts**: no probe concludes a table is
+correct. Every classification is either a membership test against a table imported
+from `dist/`, or deliberately dumb bucketing a human reads. `scripts/*.mjs` is
+unlinted, untypechecked, untested and not in CI, so a probe bug must surface as
+odd-looking evidence someone notices — never as a wrong conclusion baked into a
+domain-fact table. See [ADR
+0022](decisions/0022-domain-fact-audit-convention.md).
+
+This is the same shape as the **vacuous-pass trap** in the testing section below,
+one layer out: there, a silently-skipped suite reports "0 failing"; here, an
+unexercised probe reports "no gaps". Both are absence of evidence rendered as
+evidence of absence.
+
 ## Testing: real-export ground truth + inline legibility
 
 Schema-fidelity facts ("which fields does C3 actually write?", "what are a

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -88,6 +88,60 @@ export function canonicalFixtureExists(relPath: string): boolean {
 export function makeTempProject(manifestJson: unknown): string {
   const dir = mkdtempSync(path.join(tmpdir(), "c3source-manifest-"));
   writeC3JsonFile(path.join(dir, "project.c3proj"), manifestJson);
+  return dir;
+}
+
+/**
+ * Create a throwaway project directory with a minimal `project.c3proj`, an
+ * `objectTypes/` directory holding one JSON file per supplied object type (keyed by
+ * `objectType.name`), and an `images/` directory holding the supplied filenames as
+ * zero-byte files. Returns the project directory path.
+ *
+ * TEST-ONLY. Sibling to `makeTempProject`: for tests that need `deriveExpectedImages`/
+ * `detectImageDrift` inputs on disk rather than an in-memory `objectTypes` array, without
+ * hand-authoring bytes into the upstream-owned `test/fixtures/canonical/` golden.
+ */
+export function makeTempImageProject(
+  objectTypes: Record<string, unknown>[],
+  imageFiles: string[] = [],
+  manifestOverrides: Record<string, unknown> = {},
+): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "c3source-image-project-"));
+
+  const manifestJson = {
+    objectTypes: { items: objectTypes.map((ot) => String(ot.name)), subfolders: [] },
+    layouts: { items: [], subfolders: [] },
+    eventSheets: { items: [], subfolders: [] },
+    timelines: { items: [], subfolders: [] },
+    flowcharts: { items: [], subfolders: [] },
+    families: { items: [], subfolders: [] },
+    models3d: { items: [], subfolders: [] },
+    containers: [],
+    rootFileFolders: {
+      script: { items: [], subfolders: [] },
+      sound: { items: [], subfolders: [] },
+      music: { items: [], subfolders: [] },
+      video: { items: [], subfolders: [] },
+      font: { items: [], subfolders: [] },
+      icon: { items: [], subfolders: [] },
+      general: { items: [], subfolders: [] },
+    },
+    ...manifestOverrides,
+  };
+  writeC3JsonFile(path.join(dir, "project.c3proj"), manifestJson);
+
+  const objectTypesDir = path.join(dir, "objectTypes");
+  mkdirSync(objectTypesDir, { recursive: true });
+  for (const ot of objectTypes) {
+    writeC3JsonFile(path.join(objectTypesDir, `${String(ot.name)}.json`), ot);
+  }
+
+  const imagesDir = path.join(dir, "images");
+  mkdirSync(imagesDir, { recursive: true });
+  for (const fileName of imageFiles) {
+    writeFileSync(path.join(imagesDir, fileName), new Uint8Array(0));
+  }
+
   return dir;
 }
 

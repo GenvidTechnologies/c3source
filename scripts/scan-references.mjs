@@ -1,60 +1,53 @@
 // Corpus scanner for the reference-integrity detectors in `src/references.ts`.
 //
 // Why this exists (durable asset, not scaffolding): `C3_PSEUDO_OBJECT_CLASSES`
-// (`["System", "Functions"]`) is a KNOWN-INCOMPLETE domain-fact table —
-// `objectClass` values in an event-sheet ACE that resolve to no object type or
-// family *by design*. `"Functions"` was found only by scanning a corpus of 16
-// real C3 projects, where it occurred 212 times in a single project; the
-// canonical fixture (`test/fixtures/canonical/`) yields only `{"System"}`, so
-// it can never validate this table — shipping the fixture-derived one-element
-// table would have produced 212 false positives on that project alone. This
-// script is the only way to re-validate (or extend) the table on a C3 version
-// bump or when new projects become available. It is dev-only and deliberately
-// not wired into CI or `package.json` — see `scripts/api-surface.mjs` for the
+// (`["System"]`) is a KNOWN-INCOMPLETE domain-fact table — `objectClass`
+// values in an event-sheet ACE that resolve to no object type or family *by
+// design*, statically known members only. `"Functions"` is deliberately NOT
+// in this table: it is the *default* of `project.c3proj`'s per-project
+// `functionsName` setting, not a fixed pseudo-class, so `detectEventClassIssues`
+// resolves it separately (see `src/references.ts`) rather than the table
+// growing a second entry. The table was validated by scanning a corpus of 14
+// real C3 projects under `C:\repos` (see `docs/domain-fact-audit.md` for the
+// corpus inventory); the canonical fixture (`test/fixtures/canonical/`) yields
+// only `{"System"}`, so it alone can never validate this table. This script is
+// the only way to re-validate (or extend) the table on a C3 version bump or
+// when new projects become available. It is dev-only and deliberately not
+// wired into CI or `package.json` — see `scripts/api-surface.mjs` for the
 // sibling dev script this one mirrors.
 //
 // Usage: node scripts/scan-references.mjs <projectDir> [<projectDir> ...]
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
-import {
+import { fileURLToPath } from "node:url";
+
+const distEntry = fileURLToPath(new URL("../dist/index.js", import.meta.url));
+if (!existsSync(distEntry)) {
+  console.error(`scan-references: entry module does not exist: ${distEntry}`);
+  console.error(`scan-references: did the build run?`);
+  process.exit(1);
+}
+
+const {
   C3_PSEUDO_OBJECT_CLASSES,
   C3_SECTION_FOLDERS,
   PROJECT_MANIFEST_FILE,
   detectAddonReferenceIssues,
   detectReferenceIntegrity,
-  find_all_files_path,
   hasActions,
   hasConditions,
-  isEditorLocalPath,
   manifestFamilyNames,
   manifestObjectTypeNames,
   readProjectManifest,
+  readSourceDocs,
   visitEvents,
-} from "../dist/index.js";
+} = await import("../dist/index.js");
 
 const projectDirs = process.argv.slice(2);
 if (projectDirs.length === 0) {
   console.error("usage: node scripts/scan-references.mjs <projectDir> [<projectDir> ...]");
   process.exit(1);
-}
-
-/**
- * Read every `.json` file under `projectDir/folderName`, skipping editor-local
- * artifacts, into a `{file, value}` pair — `file` is project-root-relative and
- * forward-slash-normalized. Mirrors the private `readSourceDocs` in
- * `src/references.ts` byte-for-byte (that helper isn't exported, so the shape
- * is reproduced here rather than re-derived): graceful-empty when the folder
- * is absent.
- */
-function readSourceDocs(projectDir, folderName) {
-  const dir = path.join(projectDir, folderName);
-  if (!existsSync(dir)) return [];
-  const jsonPaths = find_all_files_path(dir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));
-  return jsonPaths.map((absPath) => ({
-    file: path.relative(projectDir, absPath).replace(/\\/g, "/"),
-    value: JSON.parse(readFileSync(absPath, "utf-8")),
-  }));
 }
 
 /**
