@@ -88,6 +88,14 @@ export function writeC3JsonFile(filePath: string, value: unknown): void {
  * here writes under `tilemapBrushes/`; a caller who needs the form writes
  * `JSON.stringify(value)` directly. What this table exists to own is *which*
  * files are minified, not how to minify them.
+ *
+ * **AUDITED, but on thin evidence.** Only a couple of `.brush.json` files exist
+ * corpus-wide, so "no contradictions" rests on very little. No other minified-
+ * source form was found. See `docs/domain-fact-audit.md` (#68) for the evidence
+ * volume.
+ *
+ * **Blast radius:** cosmetic — a downstream may rewrite a minified file in
+ * tab-indented form, producing diff noise, not corruption.
  */
 export const C3_MINIFIED_SOURCE_SUFFIXES: readonly string[] = [".brush.json"];
 

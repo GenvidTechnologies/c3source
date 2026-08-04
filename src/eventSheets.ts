@@ -529,9 +529,32 @@ export interface ExtractedFunction {
   returnType: string;
 }
 
-/** System event-variable ACE id -> the parameter key that holds the variable name.
- *  A C3 platform fact that drifts with C3 versions, owned here so downstream
- *  need not re-hardcode it (issue #26). Exported so callers can introspect/extend. */
+/**
+ * System event-variable ACE id -> the parameter key that holds the variable name.
+ * A C3 platform fact that drifts with C3 versions, owned here so downstream
+ * need not re-hardcode it (issue #26). Exported so callers can introspect/extend.
+ *
+ * **AUDITED** — and stronger than corpus-audited: verified mechanically against
+ * C3's own ACE table, `editor.construct.net/r447/plugins/allAces.json`, which
+ * lists every built-in plugin's ACEs. Exactly eight ACEs product-wide take an
+ * `eventvar`/`eventvarbool`/`eventvarany` parameter; all are System, all key
+ * the name as `"variable"` — precisely this table. A fabricated ninth id
+ * (`is-boolean-eventvar-set`) was removed in this audit: it was a mis-analogy
+ * from the real `is-boolean-instance-variable-set`, which is an *instance*-variable
+ * ACE on the object class, not System.
+ *
+ * Third-party addons are **NOT CORPUS-AUDITABLE**: an addon may declare its own
+ * `eventvar` param (the evidence source that would validate it is
+ * `SDK/plugin-sdk/aces.schema.json`'s `params[].type` enum), but {@link
+ * isEventVarReference} gates on `objectClass === "System"` by deliberate
+ * anti-false-positive design (ADR 0008), so such params are structurally
+ * invisible here.
+ *
+ * **Blast radius:** a missing id is a silent false negative — {@link
+ * getEventVarReferenceName} returns `null` for a real reference. No internal
+ * consumer; this is a pure downstream export. See `docs/domain-fact-audit.md`
+ * (#68) for the evidence volume.
+ */
 export const EVENTVAR_REFERENCE_ACES: Record<string, string> = {
   "set-eventvar-value": "variable",
   "add-to-eventvar": "variable",
@@ -833,6 +856,20 @@ export function extractExpressionReferences(expr: string): ExpressionToken[] {
  *   4 = ">"  (Greater than),   5 = "≥"  (Greater or equal).
  * This is the canonical, version-pinned source of truth owned here so downstream
  * need not re-hardcode the magic numbers (cf. {@link EVENTVAR_REFERENCE_ACES}).
+ *
+ * **AUDITED** — all six values `0`–`5` observed across the corpus, spanning eight
+ * C3 releases, with no seventh value anywhere; the strongest clean result of the
+ * six audited tables (see `docs/domain-fact-audit.md`, #68).
+ *
+ * **Assumption:** {@link comparisonSymbol} (and the DSL renderer built on it) keys
+ * on the *parameter name* `"comparison"` with no `objectClass` gate, but the
+ * serialized key is really the addon author's chosen param `id` for a `type:
+ * "cmp"` parameter — so in principle a `cmp` param could be named otherwise.
+ * Every `cmp` param observed across real third-party addon `aces.json` files
+ * uses `"comparison"`.
+ *
+ * **Blast radius:** cosmetic — an unmapped value renders as the raw number
+ * without annotation.
  */
 export const COMPARISON_OPERATORS: Record<number, string> = {
   0: "=",
@@ -883,6 +920,18 @@ export interface EditorFieldRule {
  * The C3 editor loader's required-field rules, as a machine-readable table.
  * A C3 platform fact owned here so downstream need not re-hardcode it (issue #33).
  * Exported so callers can introspect or contribute rules via array extension.
+ *
+ * **NOT CORPUS-AUDITABLE** — and not for lack of trying: every project on disk
+ * was written by the editor and already loads, so a scan observes which fields
+ * are *present*, never which the loader *requires*. Running the corpus through
+ * these rules produced zero failures, which is the expected and uninformative
+ * result. These rules exist for *writers* (tools synthesizing events), and no
+ * editor-written corpus can contain a violation. The evidence source that would
+ * validate a rule is a deliberate C3-editor import experiment — strip the field,
+ * import, observe rejection (see `docs/domain-fact-audit.md`, #68).
+ *
+ * **Blast radius:** a missing rule is a silent false negative — a real editor
+ * rejection goes unreported until C3 refuses the file.
  */
 export const EDITOR_FIELD_RULES: EditorFieldRule[] = [
   {

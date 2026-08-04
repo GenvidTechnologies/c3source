@@ -103,7 +103,20 @@ export interface Family {
 /** C3's generated-TypeScript-declarations folder under `scripts/` (C3 domain fact, r487+). */
 export const C3_TS_DEFS_FOLDER = "ts-defs";
 
-/** The canonical set of C3-editor-local artifacts that are NOT project source. */
+/**
+ * The canonical set of C3-editor-local artifacts that are NOT project source.
+ *
+ * **AUDITED** — no unflagged editor-local artifact found anywhere in the corpus,
+ * measured with the real {@link isEditorLocalPath} predicate rather than a
+ * re-encoding of this table. Independent corroboration: C3's own editor skips a
+ * `ts-defs` directory at the root of `scripts/` when reconciling a folder project
+ * against disk — the same rule this table encodes. See `docs/domain-fact-audit.md`
+ * (#68) for the evidence volume.
+ *
+ * **Blast radius: the widest of the six — contaminating.** An unlisted
+ * editor-local artifact is treated as project source and surfaces as spurious
+ * `untracked` drift across every section.
+ */
 export const EDITOR_LOCAL_EXCLUSIONS: {
   dirs: readonly string[];
   fileSuffixes: readonly string[];

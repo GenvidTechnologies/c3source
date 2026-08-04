@@ -892,9 +892,26 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
 
 // ─── Image-derived drift ──────────────────────────────────────────────────────
 
-/** C3 image `fileType` (MIME) -> on-disk file extension (no leading dot).
- *  A C3 platform fact owned here so downstream need not re-hardcode it (issue #29).
- *  Exported so callers can introspect/extend. */
+/**
+ * C3 image `fileType` (MIME) -> on-disk file extension (no leading dot).
+ * A C3 platform fact owned here so downstream need not re-hardcode it (issue #29).
+ * Exported so callers can introspect/extend.
+ *
+ * **AUDITED** for values — every `fileType` observed corpus-wide maps to a known
+ * extension.
+ *
+ * **But VERSION-DEPENDENT**, which the value audit alone could not surface: C3
+ * before r402 emits no `fileType` on image nodes at all. Pin exact — the
+ * editor's own serializer (`editor.construct.net/r{397…407}/projectResources.js`)
+ * first emits it at r402. See {@link C3_LEGACY_IMAGE_EXTENSION} for how that
+ * pre-r402 case is handled.
+ *
+ * **Blast radius:** an unmapped MIME throws — via {@link detectManifestDrift}
+ * that throw is caught and reported as a `ManifestDrift.degraded` entry (the
+ * images section is then absent); via {@link detectImageDrift} /
+ * `C3Project.detectImageDrift` it propagates. See `docs/domain-fact-audit.md`
+ * (#68) for the evidence volume.
+ */
 export const IMAGE_FILE_TYPE_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -948,18 +965,19 @@ export interface ExpectedImage {
 }
 
 /**
- * Pre-r407 C3 releases serialize image nodes with no `fileType` (MIME) field at all —
+ * Pre-r402 C3 releases serialize image nodes with no `fileType` (MIME) field at all —
  * they write `exportFormat`/`exportQuality` (export re-encoding settings) instead, and
  * the on-disk file is still a real image, e.g. `bullet-default-000.png`.
- * `C3_LEGACY_IMAGE_EXTENSION` is the DEFAULT this repo assumes for such legacy nodes —
- * NOT A RESOLUTION: a 14-project corpus could not discriminate this default from
- * stem-matching (both scored 0 missing / 0 orphan over all 15 legacy nodes observed
- * across 2 real projects), so it rests on mechanism (pre-r407 serialization omits the
- * field entirely), not evidence.
+ * `C3_LEGACY_IMAGE_EXTENSION` is the DEFAULT this repo assumes for such legacy nodes.
+ *
+ * This default is **not a guess**: C3's own project loader applies the identical
+ * fallback (`t.fileType ?? "image/png"`, unchanged r402 -> r447), so c3source matches
+ * the editor's own behavior rather than inventing a default (see `docs/domain-fact-audit.md`,
+ * #68).
  *
  * Do NOT read `exportFormat` (`"lossless"` / `"lossy"`) as a format proxy anywhere — it
  * is an export re-encoding setting, not the source MIME: `exportFormat: "lossy"` was
- * observed on 8,448 real nodes whose actual source format is `image/png`. (#68)
+ * observed on real nodes whose actual source format is `image/png`. (#68)
  */
 export const C3_LEGACY_IMAGE_EXTENSION = "png";
 
