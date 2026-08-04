@@ -536,6 +536,7 @@ export const EVENTVAR_REFERENCE_ACES: Record<string, string> = {
   "set-eventvar-value": "variable",
   "add-to-eventvar": "variable",
   "subtract-from-eventvar": "variable",
+  "reset-eventvar": "variable",
   "set-boolean-eventvar": "variable",
   "toggle-boolean-eventvar": "variable",
   "compare-eventvar": "variable",

@@ -15,8 +15,8 @@ import { loadFixture, fixtureExists, PROJECT_FIXTURE } from "./fixtureHelpers.js
 // ---------------------------------------------------------------------------
 
 describe("EVENTVAR_REFERENCE_ACES", () => {
-  it("exports a record with 8 entries", () => {
-    expect(Object.keys(EVENTVAR_REFERENCE_ACES)).to.have.length(8);
+  it("exports a record with 9 entries", () => {
+    expect(Object.keys(EVENTVAR_REFERENCE_ACES)).to.have.length(9);
   });
 
   it("maps every expected id to 'variable'", () => {
@@ -24,6 +24,7 @@ describe("EVENTVAR_REFERENCE_ACES", () => {
       "set-eventvar-value",
       "add-to-eventvar",
       "subtract-from-eventvar",
+      "reset-eventvar",
       "set-boolean-eventvar",
       "toggle-boolean-eventvar",
       "compare-eventvar",
@@ -37,7 +38,7 @@ describe("EVENTVAR_REFERENCE_ACES", () => {
 });
 
 describe("isEventVarReference", () => {
-  it("returns { nameParamKey: 'variable' } for each of the 8 System ids", () => {
+  it("returns { nameParamKey: 'variable' } for each of the 9 System ids", () => {
     const ids = Object.keys(EVENTVAR_REFERENCE_ACES);
     for (const id of ids) {
       const ace = { id, objectClass: "System", parameters: { variable: "x" } };
@@ -47,6 +48,16 @@ describe("isEventVarReference", () => {
 
   it("returns null for a non-System object with a known id", () => {
     const ace = { id: "set-eventvar-value", objectClass: "Sprite", parameters: { variable: "x" } };
+    expect(isEventVarReference(ace)).to.be.null;
+  });
+
+  it("returns { nameParamKey: 'variable' } for reset-eventvar", () => {
+    const ace = { id: "reset-eventvar", objectClass: "System", parameters: { variable: "languageCount" } };
+    expect(isEventVarReference(ace)).to.deep.equal({ nameParamKey: "variable" });
+  });
+
+  it("returns null for reset-eventvar on a non-System object", () => {
+    const ace = { id: "reset-eventvar", objectClass: "MyPlugin", parameters: { variable: "languageCount" } };
     expect(isEventVarReference(ace)).to.be.null;
   });
 
@@ -72,7 +83,7 @@ describe("isEventVarReference", () => {
 });
 
 describe("getEventVarReferenceName", () => {
-  it("returns the variable name for each of the 8 System ids", () => {
+  it("returns the variable name for each of the 9 System ids", () => {
     const ids = Object.keys(EVENTVAR_REFERENCE_ACES);
     for (const id of ids) {
       const ace = { id, objectClass: "System", parameters: { variable: "myVar" } };
@@ -83,6 +94,11 @@ describe("getEventVarReferenceName", () => {
   it("returns null for a non-System object", () => {
     const ace = { id: "set-eventvar-value", objectClass: "Sprite", parameters: { variable: "x" } };
     expect(getEventVarReferenceName(ace)).to.be.null;
+  });
+
+  it("returns the variable name for reset-eventvar", () => {
+    const ace = { id: "reset-eventvar", objectClass: "System", parameters: { variable: "languageCount" } };
+    expect(getEventVarReferenceName(ace)).to.equal("languageCount");
   });
 
   it("returns null for a System ACE with an unknown id", () => {
