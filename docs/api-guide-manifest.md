@@ -89,10 +89,13 @@ interface C3ProjectManifest {
   usedAddons?: C3UsedAddon[];
   /** Name of C3's built-in functions object, configurable per project.
    *  Optional — absent means the project uses C3's default, `"Functions"`
-   *  (`C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`). Observed absent in
-   *  5 of 14 real-world corpus projects. Before #60, c3source could not see
-   *  this attribute at all — a renamed functions object silently produced
-   *  false `event-class-unresolved` issues; see
+   *  (`C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`). Absence is a release
+   *  property, not a per-project opt-out: the attribute was introduced between
+   *  r407 and r440 — absent in all 6 corpus projects saved with
+   *  `savedWithRelease <= 40702`, present in all 8 saved `>= 44002` (14 projects
+   *  total; see [domain-fact-audit.md](domain-fact-audit.md)). Before #60,
+   *  c3source could not see this attribute at all — a renamed functions object
+   *  silently produced false `event-class-unresolved` issues; see
    *  [api-guide-references.md](api-guide-references.md#domain-fact-tables). */
   functionsName?: string;
   [key: string]: unknown; // forward-compat: firstLayout, viewportWidth, …

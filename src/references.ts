@@ -157,10 +157,11 @@ export const C3_DEFAULT_FUNCTIONS_NAME = "Functions";
  * source (`AddonAttribution.pluginId`/`behaviorIds`/`effectIds`) — a `theme` has no
  * source-side counterpart to derive.
  *
- * **UNVALIDATED**: `"theme"` was never actually observed across a 16-project real-world
- * corpus (only `plugin`/`behavior`/`effect` were seen). The failure mode if this table
- * is wrong is benign either way — it only *suppresses* an `addon-unused` warning, so
- * being wrong costs a missed warning, never a false alarm.
+ * **UNVALIDATED**: `"theme"` was never actually observed in the real-world corpus
+ * (only `plugin`/`behavior`/`effect` were seen). See `docs/domain-fact-audit.md`
+ * (#68) for the evidence volume. The failure mode if this table is wrong is benign
+ * either way — it only *suppresses* an `addon-unused` warning, so being wrong costs
+ * a missed warning, never a false alarm.
  *
  * REPLACED wholesale (not merged) by {@link ReferenceIntegrityOptions.nonAttributableAddonTypes}
  * when supplied — spread this table in to extend rather than replace.
