@@ -344,7 +344,17 @@ Four functional areas:
    is flagged (originating incident: adding `comment: ""` / `description: ""`
    resolved C3 import failures). Seed rules: `eventvar-comment-required`
    (`variable` → `.comment`) and `group-description-required` (`group` →
-   `.description`) (#33).
+   `.description`) (#33); `custom-ace-name-required` (`custom-ace-block` →
+   `.aceName`) was added in #70 from a **direct C3-editor import experiment** —
+   the table's only non-incident-seeded rule. That experiment also **disproved**
+   the corpus's strongest competing candidate: `function-block.functionDescription`
+   is present on every instance in the corpus and is still optional, so **corpus
+   ubiquity is not evidence of a loader requirement** and an "always-present" field
+   list is a hypothesis generator, not a rule list. C3's own diagnostics vary
+   sharply — a missing `comment` **crashes** the editor, a missing `aceName` yields
+   a generic "Failed to open project" naming no field — which is most of why
+   reporting the exact field + `jsonPath` is worth doing. See
+   [docs/domain-fact-audit.md](docs/domain-fact-audit.md).
    **Comparison operators** — `COMPARISON_OPERATORS: Record<number, string>` is
    the exported C3 domain fact mapping each bare `comparison` ACE parameter value
    to its operator symbol: `0`=`=`, `1`=`≠`, `2`=`<`, `3`=`≤`, `4`=`>`, `5`=`≥`,

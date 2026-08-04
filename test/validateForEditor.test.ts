@@ -6,6 +6,7 @@ import {
   type EventSheetVariable,
   type GroupEvent,
   type BlockEvent,
+  type CustomAceBlockEvent,
   EDITOR_FIELD_RULES,
   validateEventForEditor,
   validateForEditor,
@@ -38,6 +39,27 @@ function makeGroup(overrides: Partial<GroupEvent> & { children?: EventSheetEvent
   };
 }
 
+// Minimal valid CustomAceBlockEvent. `aceName` is typed non-optional, so omitting it
+// requires a cast — which is the point: this rule guards runtime data (a sheet parsed
+// from disk, or an event built as a loose Record), where the type is an assertion and
+// not a guarantee.
+function makeCustomAce(overrides: Partial<CustomAceBlockEvent> = {}): CustomAceBlockEvent {
+  return {
+    eventType: "custom-ace-block",
+    aceType: "action",
+    aceName: "OnClickAction",
+    objectClass: "NavButton",
+    functionReturnType: "none",
+    functionCopyPicked: true,
+    functionIsAsync: false,
+    functionParameters: [],
+    conditions: [],
+    actions: [],
+    sid: 3,
+    ...overrides,
+  };
+}
+
 // Minimal valid BlockEvent with optional children
 function makeBlock(children?: EventSheetEvent[]): BlockEvent {
   return {
@@ -50,11 +72,22 @@ function makeBlock(children?: EventSheetEvent[]): BlockEvent {
 }
 
 describe("EDITOR_FIELD_RULES", () => {
-  it("is exported and contains both expected rule ids", () => {
+  it("is exported and contains every expected rule id", () => {
     const ruleIds = EDITOR_FIELD_RULES.map((r) => r.rule);
     expect(ruleIds).to.include("eventvar-comment-required");
     expect(ruleIds).to.include("group-description-required");
-    expect(EDITOR_FIELD_RULES.length).to.be.at.least(2);
+    expect(ruleIds).to.include("custom-ace-name-required");
+    expect(EDITOR_FIELD_RULES.length).to.be.at.least(3);
+  });
+
+  // #70: functionDescription is present on every function-block in the corpus and is
+  // still optional — C3 loads without it and does not restore it on save. Asserting
+  // its absence keeps a future author from "completing" the table from the corpus's
+  // always-present field list, which is a hypothesis generator, not a rule list.
+  it("does not table function-block.functionDescription, which C3 accepts as absent", () => {
+    const ruleIds = EDITOR_FIELD_RULES.map((r) => r.rule);
+    expect(ruleIds).to.not.include("function-description-required");
+    expect(EDITOR_FIELD_RULES.filter((r) => r.eventType === "function-block")).to.have.length(0);
   });
 });
 
@@ -91,6 +124,30 @@ describe("validateEventForEditor", () => {
   it("returns no issue for a group with description", () => {
     const event = makeGroup({ description: "some desc" });
     const issues = validateEventForEditor(event, "events[1]");
+    expect(issues).to.have.length(0);
+  });
+
+  // #70, verified against the C3 editor: removing aceName makes C3 refuse the whole
+  // project with "Failed to open project. Check it is a valid Construct 3 folder
+  // project." — naming no field, which is why reporting the path here is worth having.
+  it("returns one issue for a custom-ace-block missing aceName", () => {
+    const event = { ...makeCustomAce(), aceName: undefined } as unknown as EventSheetEvent;
+    const issues = validateEventForEditor(event, "events[2]");
+    expect(issues).to.have.length(1);
+    expect(issues[0].rule).to.equal("custom-ace-name-required");
+    expect(issues[0].path).to.equal("events[2]");
+    expect(issues[0].message).to.be.a("string").and.not.be.empty;
+  });
+
+  it("returns no issue for a custom-ace-block with aceName", () => {
+    const issues = validateEventForEditor(makeCustomAce(), "events[2]");
+    expect(issues).to.have.length(0);
+  });
+
+  // Consistent with the other rules: the check is typeof === "string", so an empty
+  // string passes. Only undefined/non-string is flagged.
+  it("returns no issue for a custom-ace-block with aceName: empty string", () => {
+    const issues = validateEventForEditor(makeCustomAce({ aceName: "" }), "events[2]");
     expect(issues).to.have.length(0);
   });
 
