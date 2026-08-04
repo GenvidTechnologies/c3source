@@ -99,10 +99,34 @@ export interface SectionDrift {
   entries: DriftEntry[];
 }
 
+/**
+ * A best-effort sub-detector that threw and was skipped. Its section is absent from
+ * {@link ManifestDrift.sections} — this is how a caller distinguishes "verified, no
+ * drift" from "never verified". Reported rather than swallowed because a rare silent
+ * failure is the worst kind (#68).
+ */
+export interface DriftDegradation {
+  /** The omitted section, e.g. `"images"`. */
+  section: string;
+  /** The failure's message text. */
+  message: string;
+}
+
 /** Result of detectManifestDrift. */
 export interface ManifestDrift {
   sections: SectionDrift[];
+  /**
+   * `sections.length === 0`. A degradation is **not** drift and never flips this —
+   * read {@link ManifestDrift.degraded} to learn whether every section was actually
+   * checked.
+   */
   inSync: boolean;
+  /**
+   * Present only when a best-effort sub-detector threw; absent on a fully-verified
+   * run. `inSync === true` with a populated `degraded` means "no drift among the
+   * sections that were checked", not "no drift".
+   */
+  degraded?: DriftDegradation[];
 }
 
 // ─── Private guards ───────────────────────────────────────────────────────────
