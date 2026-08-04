@@ -172,3 +172,38 @@ describe("getEventVarReferenceName (fixture integration)", () => {
     expect([...names].sort()).to.deep.equal(["temp", "temp"]);
   });
 });
+
+describe("getEventVarReferenceName (boolean event variable, fixture integration)", () => {
+  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Event sheet 2.json`;
+
+  before(function () {
+    if (!fixtureExists(fixturePath)) {
+      this.skip();
+    }
+  });
+
+  // compare-boolean-eventvar is the id C3 actually emits for a boolean event variable —
+  // the table once carried a fabricated `is-boolean-eventvar-set` alongside it (#68).
+  // The golden gained this construct in construct3-sample v0.6.0 so the real id is
+  // exercised against editor-written bytes, not only against hand-built objects.
+  it("resolves the compare-boolean-eventvar reference to its declared variable", () => {
+    const sheet = JSON.parse(loadFixture(fixturePath)) as EventSheet;
+
+    const declared: string[] = [];
+    const refs: string[] = [];
+    visitEvents(sheet.events, (event) => {
+      if (event.eventType === "variable") declared.push(event.name);
+      if (hasConditions(event)) {
+        for (const cond of event.conditions) {
+          const name = getEventVarReferenceName(cond);
+          if (name !== null) refs.push(name);
+        }
+      }
+    });
+
+    expect(refs).to.deep.equal(["isActive"]);
+    // The reference resolves to a variable declared in the same sheet — a dangling
+    // reference here would mean the golden itself drifted.
+    expect(declared).to.include("isActive");
+  });
+});
