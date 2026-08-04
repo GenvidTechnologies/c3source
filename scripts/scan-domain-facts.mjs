@@ -95,6 +95,15 @@ const CANONICAL_SOURCE_FOLDERS = [
   IMAGES_FOLDER,
 ];
 
+// `tilemapBrushes/` is project SOURCE (ADR 0018, src/serialize.ts) but has no
+// exported name constant — it is neither a C3_SECTION_FOLDERS/C3_ROOT_FILE_FOLDERS
+// entry nor IMAGES_FOLDER, so it is absent from CANONICAL_SOURCE_FOLDERS above and
+// must be walked separately for probes that need to actually observe
+// `*.brush.json` files (namely `minified`, the only probe with a C3_MINIFIED_SOURCE_SUFFIXES
+// stake). Hardcoded here per this script's own convention of not adding a new
+// src/ export purely to serve this dev-only scanner.
+const TILEMAP_BRUSHES_FOLDER = "tilemapBrushes";
+
 // ─── generic helpers ────────────────────────────────────────────────────────
 
 function fmtReleases(releases) {
@@ -326,7 +335,11 @@ function scanEditorLocal(result, projectDir) {
 // ─── probe 6: minified ──────────────────────────────────────────────────────
 
 function scanMinified(result, projectDir) {
-  for (const folder of CANONICAL_SOURCE_FOLDERS) {
+  // TILEMAP_BRUSHES_FOLDER is appended (not part of CANONICAL_SOURCE_FOLDERS) —
+  // it is the only source outside those canonical folders this probe cares about,
+  // and it nests (tilemapBrushes/objectTypes/tiles/*.brush.json), so it needs the
+  // same recursive find_all_files_path walk as every other folder here.
+  for (const folder of [...CANONICAL_SOURCE_FOLDERS, TILEMAP_BRUSHES_FOLDER]) {
     const dir = path.join(projectDir, folder);
     if (!existsSync(dir)) continue;
     const files = find_all_files_path(dir, (f) => f.endsWith(".json"));
@@ -592,8 +605,14 @@ function printComparisonRollup(map, count, releaseSet) {
   const nonNumeric = [...map.keys()].filter((v) => typeof v !== "number");
   const unmapped = [...map.entries()].filter(([, e]) => e.symbol === undefined);
   const unmappedCount = unmapped.reduce((n, [, e]) => n + e.count, 0);
+  const verdict =
+    count === 0
+      ? `NOT EXERCISED (0 "comparison" parameter occurrence(s) observed)`
+      : unmappedCount === 0 && nonNumeric.length === 0
+        ? `NO GAPS (${count} "comparison" parameter occurrence(s) observed)`
+        : `${unmapped.length} GAP(S) (${count} "comparison" parameter occurrence(s) observed)`;
   console.log(
-    `TABLE COMPARISON_OPERATORS: values ${values.length > 0 ? `${values[0]}-${values[values.length - 1]}` : "(none)"} observed, ${unmappedCount} unmapped / ${releaseSet.size} releases -> ${unmappedCount === 0 && nonNumeric.length === 0 ? "NO GAPS" : `${unmapped.length} GAP(S)`}`,
+    `TABLE COMPARISON_OPERATORS: values ${values.length > 0 ? `${values[0]}-${values[values.length - 1]}` : "(none)"} observed, ${unmappedCount} unmapped / ${releaseSet.size} releases -> ${verdict}`,
   );
   for (const [value, e] of sortedByCount(map)) {
     console.log(`  ${e.count}\t${value}\t${e.symbol ?? "UNMAPPED"}\treleases ${fmtReleases(e.releases)}`);
@@ -614,9 +633,11 @@ function printImageExtRollup(map, count, releaseSet) {
   );
   const presentUnmapped = [...map.entries()].filter(([key, e]) => key !== ABSENT && !e.mapped);
   console.log(
-    presentUnmapped.length === 0
-      ? "  -> NO GAPS (every present fileType maps to a known extension)"
-      : `  -> ${presentUnmapped.length} present-but-unmapped fileType value(s) observed`,
+    count === 0
+      ? "  -> NOT EXERCISED (0 image node(s) observed)"
+      : presentUnmapped.length === 0
+        ? `  -> NO GAPS (${count} image node(s) observed, every present fileType maps to a known extension)`
+        : `  -> ${presentUnmapped.length} present-but-unmapped fileType value(s) observed (of ${count} image node(s))`,
   );
   if (map.size === 0) console.log("  (no image nodes found across corpus)");
 }
@@ -637,7 +658,13 @@ function printEditorFieldsRollup(byType, byRule, releaseSet) {
     );
     if (e.fail > 0) anyFail = true;
   }
-  console.log(anyFail ? "  -> some EDITOR_FIELD_RULES checks FAILED on real corpus events (see above)" : "  -> NO FAILURES (every EDITOR_FIELD_RULES check passed on every observed instance)");
+  console.log(
+    totalEvents === 0
+      ? "  -> NOT EXERCISED (0 event(s) observed)"
+      : anyFail
+        ? "  -> some EDITOR_FIELD_RULES checks FAILED on real corpus events (see above)"
+        : `  -> NO FAILURES (${totalEvents} event(s) observed, every EDITOR_FIELD_RULES check passed on every observed instance)`,
+  );
 }
 
 function printEditorLocalRollup(map, total) {
@@ -647,9 +674,11 @@ function printEditorLocalRollup(map, total) {
   }
   const everLocal = [...map.entries()].filter(([, e]) => e.local > 0).map(([ext]) => ext);
   console.log(
-    everLocal.length === 0
-      ? "  -> no extension ever classified editor-local across corpus"
-      : `  -> extensions ever classified editor-local: {${everLocal.sort().join(",")}}`,
+    total === 0
+      ? "  -> NOT EXERCISED (0 file(s) scanned)"
+      : everLocal.length === 0
+        ? `  -> no extension ever classified editor-local across corpus (${total} file(s) scanned)`
+        : `  -> extensions ever classified editor-local: {${everLocal.sort().join(",")}} (${total} file(s) scanned)`,
   );
   console.log(
     `  (known exclusions: dirs={${EDITOR_LOCAL_EXCLUSIONS.dirs.join(",")}} suffixes={${EDITOR_LOCAL_EXCLUSIONS.fileSuffixes.join(",")}} exactNames={${EDITOR_LOCAL_EXCLUSIONS.exactNames.join(",")}})`,
@@ -663,10 +692,13 @@ function printMinifiedRollup(m, total) {
   console.log(`  single-line & not-minified-suffix: ${m.singleNotMin}`);
   console.log(`  multi-line  & minified-suffix:     ${m.multiMin}`);
   console.log(`  multi-line  & not-minified-suffix: ${m.multiNotMin}`);
+  const matchedSuffixCount = m.singleMin + m.multiMin;
   console.log(
-    m.multiMin === 0
-      ? "  -> NO CONTRADICTIONS (every file matching C3_MINIFIED_SOURCE_SUFFIXES observed is single-line)"
-      : `  -> ${m.multiMin} CONTRADICTION(S): a minified-suffix file is NOT single-line`,
+    matchedSuffixCount === 0
+      ? "  -> NOT EXERCISED (0 file(s) matching C3_MINIFIED_SOURCE_SUFFIXES in this corpus)"
+      : m.multiMin === 0
+        ? `  -> NO CONTRADICTIONS (${matchedSuffixCount} file(s) matching C3_MINIFIED_SOURCE_SUFFIXES observed, all single-line)`
+        : `  -> ${m.multiMin} CONTRADICTION(S) (of ${matchedSuffixCount} file(s) matching C3_MINIFIED_SOURCE_SUFFIXES): a minified-suffix file is NOT single-line`,
   );
   for (const sample of m.multiMinSamples.slice(0, 5)) console.log(`    e.g. ${sample}`);
 }
