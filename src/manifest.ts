@@ -894,9 +894,16 @@ export const IMAGE_FILE_TYPE_EXTENSIONS: Record<string, string> = {
 };
 
 /**
- * Resolve the on-disk extension for a C3 image `fileType` MIME string.
- * Throws if `fileType` is absent/empty (malformed object type) or unmapped (unknown format).
+ * Resolve the on-disk extension for a C3 image `fileType` MIME string, treating an
+ * absent/empty value as malformed (throws) rather than tolerating it as a pre-r407
+ * legacy node. Unmapped (present but unrecognized) `fileType` also throws.
  * `context` is included in the error message to aid diagnosis.
+ *
+ * As of #68, {@link deriveExpectedImageNames} and {@link deriveExpectedImages} both derive
+ * extensions through {@link extensionForFileTypeOrUndefined} (the absent-tolerant sibling)
+ * instead — this strict variant has no remaining caller in this module. It is kept as the
+ * documented "always throw on absent" contract for any future strict-only call site; it is
+ * not wired into the current derivation path.
  */
 function extensionForFileType(fileType: unknown, context: string): string {
   if (fileType == null || fileType === "") {
@@ -1015,7 +1022,11 @@ export function deriveExpectedImages(objectType: Record<string, unknown>): Expec
 }
 
 /**
- * Derive the expected on-disk image filenames for a single object type.
+ * Derive the expected on-disk image filenames for a single object type — "what filename
+ * would C3 have written?" A thin renderer over {@link deriveExpectedImages}: joins each
+ * `ExpectedImage`'s `stem` and `ext` into a concrete filename, always. It must answer with
+ * a name, so an absent `ext` (pre-r407 legacy node) is not left dangling — it renders with
+ * the labelled default {@link C3_LEGACY_IMAGE_EXTENSION} instead of throwing.
  *
  * **V1 coverage rule (structural detection):**
  * - Object type with a top-level `image` field (NinePatch, TiledBg, Tilemap plugins and
@@ -1031,7 +1042,14 @@ export function deriveExpectedImages(objectType: Record<string, unknown>): Expec
  *   animation names are unique within an object type.
  * - Object types with neither `image` nor `animations` (Text, JSON, etc.): no images.
  *
- * An absent or unmapped `fileType` throws (malformed object type / unknown format).
+ * An **absent** `fileType` no longer throws: it renders as `<stem>.{@link C3_LEGACY_IMAGE_EXTENSION}`.
+ * A **present but unmapped** `fileType` still throws (unknown format) — that throw now
+ * originates in {@link deriveExpectedImages}, not here.
+ *
+ * See {@link detectImageDrift} for the sibling function that answers a different question
+ * ("is anything missing or orphaned?") and deliberately does NOT reuse this rendering for
+ * legacy nodes — it stem-matches instead, so it can never manufacture a finding from the
+ * default alone.
  *
  * **Explicit limits (extensible in future releases):**
  * - Does NOT cover spritesheet/atlas packing (a sprite whose frames are packed into a
@@ -1041,68 +1059,68 @@ export function deriveExpectedImages(objectType: Record<string, unknown>): Expec
  *   third-party single-image plugins but may over-derive for unusual plugin shapes.
  */
 export function deriveExpectedImageNames(objectType: Record<string, unknown>): string[] {
-  const name = String(objectType.name).toLowerCase();
-  if ("image" in objectType) {
-    const img = objectType.image as Record<string, unknown>;
-    const ext = extensionForFileType(img?.fileType, String(objectType.name));
-    return [`${name}.${ext}`];
-  }
-  if ("animations" in objectType) {
-    const result: string[] = [];
-    const collectAnimations = (folder: AnimationFolder): void => {
-      for (const animItem of folder.items) {
-        const animName = String(animItem.name).toLowerCase();
-        const frames = Array.isArray(animItem.frames) ? animItem.frames : [];
-        for (let i = 0; i < frames.length; i++) {
-          const frame = frames[i] as Record<string, unknown>;
-          const ext = extensionForFileType(frame?.fileType, `${String(objectType.name)}/${animItem.name}#${i}`);
-          result.push(`${name}-${animName}-${String(i).padStart(3, "0")}.${ext}`);
-        }
-      }
-      for (const sub of folder.subfolders) {
-        collectAnimations(sub);
-      }
-    };
-    const animationsRoot = objectType.animations as AnimationFolder;
-    if (animationsRoot && typeof animationsRoot === "object") {
-      collectAnimations({
-        items: Array.isArray(animationsRoot.items) ? animationsRoot.items : [],
-        subfolders: Array.isArray(animationsRoot.subfolders) ? animationsRoot.subfolders : [],
-      });
-    }
-    return result;
-  }
-  return [];
+  return deriveExpectedImages(objectType).map((e) => `${e.stem}.${e.ext ?? C3_LEGACY_IMAGE_EXTENSION}`);
+}
+
+/** Strip a filename's extension (the substring after the last `.`); returns the input
+ *  unchanged if there is no extension (or the only `.` is a leading dotfile marker). */
+function stripExt(fileName: string): string {
+  const i = fileName.lastIndexOf(".");
+  return i <= 0 ? fileName : fileName.slice(0, i);
 }
 
 /**
- * Compare derived expected image names against the `images/` folder on disk.
- * Returns a `SectionDrift` for the "images" section, or `null` if `images/` is absent.
- * Expected names are derived from all object-type JSON files under `objectTypes/`.
- * Actual names are the flat files found in `images/` (editor-local entries filtered).
- * All paths are `[]` (images/ is a flat folder — no subfolder nesting for moves).
+ * Compare derived expected image names against the `images/` folder on disk — "is anything
+ * missing or orphaned?" Returns a `SectionDrift` for the "images" section, or `null` if
+ * `images/` is absent. Expected images are derived from all object-type JSON files under
+ * `objectTypes/` via {@link deriveExpectedImages} (not {@link deriveExpectedImageNames}: this
+ * function needs the structured `ext?` field, not a pre-joined name). Actual names are the
+ * flat files found in `images/` (editor-local entries filtered). All paths are `[]` (images/
+ * is a flat folder — no subfolder nesting for moves).
  *
- * Detection is best-effort (see `deriveExpectedImageNames` for coverage limits).
- * A malformed or unknown `fileType` in any object type causes `deriveExpectedImageNames`
- * to throw; that error propagates to the caller. `detectManifestDrift` wraps this
- * function in a try/catch so such a failure degrades gracefully to "images section omitted".
+ * **Ext-aware matching, deliberately more conservative than {@link deriveExpectedImageNames}:**
+ * an `ExpectedImage` with a known `ext` is matched on the full filename `<stem>.<ext>` — exact,
+ * unweakened (the #29 regression guard: a real extension mismatch still reports drift). An
+ * `ExpectedImage` with `ext: undefined` (pre-r407 legacy node — see
+ * {@link C3_LEGACY_IMAGE_EXTENSION}) is instead matched on its **stem** against the on-disk
+ * `images/` filenames: if some on-disk file shares that stem (whatever its actual extension),
+ * that file's real name is used, so it round-trips with no drift; otherwise the comparison
+ * falls back to `<stem>.{@link C3_LEGACY_IMAGE_EXTENSION}`, which reports as `missing` because
+ * nothing on disk can match it. This is the mirror image of `deriveExpectedImageNames`'s
+ * "must answer with a concrete name" contract: that function may never leave a legacy node
+ * unlabeled, while this one may never let the legacy default alone *manufacture* a finding —
+ * stem-matching is the more conservative choice, so an on-disk file in any recognized or
+ * unrecognized format still satisfies a legacy expectation.
+ *
+ * Detection is best-effort (see `deriveExpectedImages` for coverage limits). A malformed or
+ * unknown (present-but-unmapped) `fileType` in any object type causes `deriveExpectedImages` to
+ * throw; that error propagates to the caller. `detectManifestDrift` wraps this function in a
+ * try/catch so such a failure degrades gracefully to "images section omitted".
  */
 export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
   const imagesDir = path.join(projectDir, IMAGES_FOLDER);
   if (!existsSync(imagesDir)) return null;
 
-  const expectedNames: string[] = [];
+  const expectedImages: ExpectedImage[] = [];
   const objectTypesDir = path.join(projectDir, "objectTypes");
   if (existsSync(objectTypesDir)) {
     const jsonPaths = find_all_files_path(objectTypesDir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));
     for (const jsonPath of jsonPaths) {
       const parsed = JSON.parse(readFileSync(jsonPath, "utf-8")) as Record<string, unknown>;
-      expectedNames.push(...deriveExpectedImageNames(parsed));
+      expectedImages.push(...deriveExpectedImages(parsed));
     }
   }
 
   const actualNames = readdirSync(imagesDir).filter(
     (f) => !isEditorLocalPath(f) && statSync(path.join(imagesDir, f)).isFile(),
+  );
+  const actualNameByStem = new Map<string, string>();
+  for (const f of actualNames) actualNameByStem.set(stripExt(f), f);
+
+  const expectedNames = expectedImages.map((e) =>
+    e.ext !== undefined
+      ? `${e.stem}.${e.ext}`
+      : (actualNameByStem.get(e.stem) ?? `${e.stem}.${C3_LEGACY_IMAGE_EXTENSION}`),
   );
 
   const entries = diffNameMaps(
