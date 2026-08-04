@@ -79,10 +79,10 @@ export interface C3ProjectManifest {
   usedAddons?: C3UsedAddon[];
   /** Name of C3's built-in functions object, configurable per project. Defaults to
    *  `"Functions"` (see `C3_DEFAULT_FUNCTIONS_NAME` in `src/references.ts`) when absent.
-   *  Absence is a **release property, not a per-project opt-out**: the attribute was
-   *  introduced between r407 and r440 — absent in every corpus project saved with
-   *  `savedWithRelease <= 40702`, present in every project `>= 44002`. See
-   *  `docs/domain-fact-audit.md` (#68) for the evidence volume. */
+   *  Absence is a **release property, not a per-project opt-out**: C3 first serializes the
+   *  attribute in **r437** (verified by bisecting the editor's own serializer across
+   *  `editor.construct.net/r{NNN}/projectResources.js`; r436 emits none), so any project
+   *  last saved before then simply predates it. See `docs/domain-fact-audit.md` (#68). */
   functionsName?: string;
   [key: string]: unknown; // forward-compat: viewportWidth, firstLayout, …
 }

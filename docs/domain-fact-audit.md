@@ -257,9 +257,16 @@ projects happen to do":
   a field appeared** — this is how the image `fileType` field's introduction
   was pinned to **r402**, a boundary the corpus could only bracket between
   39700 and 40702.
+- The technique held up a second time in the same audit: `functionsName` was
+  pinned to **r437** (r436 emits none; no `r436.x` sub-release exists), where
+  the corpus could only say "somewhere after 40702 and by 44002". Two
+  independent bracket-to-pin conversions is the argument for reaching here
+  first.
 - The same source confirmed `C3_DEFAULT_FUNCTIONS_NAME` and C3's own loader
   fallback (`fileType ?? "image/png"`) directly, rather than inferring them
-  from what happened to be present in scanned projects.
+  from what happened to be present in scanned projects. The r437 bundle
+  carries `t.hasOwnProperty("functionsName") ? … : …("Functions")` verbatim —
+  the default is C3's, not c3source's guess.
 
 `construct.net`'s human-facing documentation is Cloudflare-gated against
 automated fetch; `editor.construct.net` is not. For any future domain-fact
