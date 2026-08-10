@@ -149,8 +149,20 @@ Four functional areas:
    files); overriding it disables inherited editor-local classification for
    the entered subtree, so `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`
    themselves are unchanged (see [ADR
-   0020](docs/decisions/0020-caller-controlled-walk-descent.md), #63). The key
-   pattern: a `LayerVisitor`
+   0020](docs/decisions/0020-caller-controlled-walk-descent.md), #63).
+   **Script source classification** — `SCRIPT_SOURCE_EXTENSIONS` (`[".js", ".ts"]`)
+   is the exported C3 domain fact naming the extensions C3 accepts as authored
+   script source under `scripts/`; `isScriptSourceName(name)` tests a bare
+   basename against it case-insensitively and additionally excludes `.d.ts`
+   (`ts-defs/`, where generated declarations live, is already pruned by
+   directory, so the suffix check only ever fires on a stray hand-authored
+   `.d.ts` sitting loose under `scripts/`). A same-basename `.ts` sibling means
+   C3's own folder-project reconcile treats the `.js` as *generated* build
+   output, not authored source — `isGeneratedScriptOutput(name, siblings)`
+   encodes that rule, and `filterAuthoredScriptPaths(paths)` applies it
+   per-directory over a `find_all_files_path` result, dropping every generated
+   `.js`. See ADR 0024 (#73, #74).
+   The key pattern: a `LayerVisitor`
    returns a _mutation count_ (number) and an `InstanceVisitor` returns a
    _changed_ boolean; `visit_layers_in_layout` sums the counts and **rewrites
    the layout file only when the total is > 0**. So visitors that mutate
@@ -183,7 +195,13 @@ Four functional areas:
    0017](docs/decisions/0017-tolerant-manifest-read.md) and [ADR
    0016](docs/decisions/0016-c3-source-json-serialization-form.md).
    Mapping tables `C3_SECTION_FOLDERS` and `C3_ROOT_FILE_FOLDERS` map manifest
-   section keys to on-disk folder names. `collectManifestItemNames`/`collectManifestFileNames`
+   section keys to on-disk folder names. The exported domain fact
+   `SCRIPT_FILE_TYPE_EXTENSIONS` (`application/javascript`→`.js`,
+   `application/typescript`→`.ts`) maps a script `C3FileEntry.type` MIME — the
+   `rootFileFolders.script` entries' own `type` field — to its on-disk, dotted
+   extension, mirroring `IMAGE_FILE_TYPE_EXTENSIONS`'s role for images; unlike
+   that table, an unmapped MIME is a silent miss in manifest interpretation,
+   not a throw (#73, #74). `collectManifestItemNames`/`collectManifestFileNames`
    are thin consumers of the canonical walks `walkManifestNameTree`/`walkManifestFileTree`
    (no parallel recursion). `detectManifestDrift(projectDir, manifest?)` compares
    declared membership against on-disk source (editor-local filtered via `isEditorLocalPath`)
@@ -227,10 +245,11 @@ Four functional areas:
    Unlike the manifest walks it **ignores
    the manifest**: it walks `objectTypes/` and the flat `images/` folder **directly** and diffs
    derived-expected vs on-disk filenames. `deriveExpectedImageNames(objectType)` derives the
-   expected filenames structurally — `<name>.<ext>` for a top-level `image` field, one
-   `<name>-<anim>-<frame3>.<ext>` per animation frame — where `<ext>` comes from the member's
-   `fileType` MIME via the exported domain fact `IMAGE_FILE_TYPE_EXTENSIONS` (`image/png`→`png`,
-   `image/jpeg`→`jpg`, `image/svg+xml`→`svg`, `image/webp`→`webp`; cf. `EVENTVAR_REFERENCE_ACES`).
+   expected filenames structurally — `<name><ext>` for a top-level `image` field, one
+   `<name>-<anim>-<frame3><ext>` per animation frame — where `<ext>` is a **dotted** extension
+   (issue #74) coming from the member's `fileType` MIME via the exported domain fact
+   `IMAGE_FILE_TYPE_EXTENSIONS` (`image/png`→`.png`, `image/jpeg`→`.jpg`, `image/svg+xml`→`.svg`,
+   `image/webp`→`.webp`; cf. `EVENTVAR_REFERENCE_ACES`).
    The MIME is read from `image.fileType` (single-image) or each frame's own `fileType`
    (animations — frames may differ). The two failure modes are **not** the same and no longer
    share a behaviour (#68): a present-but-**unmapped** `fileType` still **throws** (unknown
@@ -239,7 +258,7 @@ Four functional areas:
    ordinary image — calling that "malformed" was simply wrong. The structured
    `deriveExpectedImages(objectType): ExpectedImage[]` (`{stem, ext?, context}`) is now the
    primitive; `deriveExpectedImageNames` is a one-line renderer over it that fills a missing
-   `ext` with `C3_LEGACY_IMAGE_EXTENSION` (`"png"` — **not a guess**: C3's own loader applies the
+   `ext` with `C3_LEGACY_IMAGE_EXTENSION` (`".png"` — **not a guess**: C3's own loader applies the
    identical `fileType ?? "image/png"` fallback). The two read paths deliberately diverge —
    `deriveExpectedImageNames` must answer with a concrete name, while `detectImageDrift` must not
    fabricate a finding, so it matches `ext`-less entries on their **stem**. The detector is
@@ -264,8 +283,10 @@ Four functional areas:
    timelines, flowcharts, and 3D models; all are graceful-empty (return `[]` when the
    directory is absent). Binary asset dirs (images, sounds, music, videos, fonts, icons,
    files) expose `*Dir` + `has*()` only — no `findAll*`. `findAllFamilies` filters `.json`
-   via `find_all_files_path`; `findAllScripts` filters `.ts` source (excludes `.d.ts` —
-   all generated declaration files live under `ts-defs/`). `detectManifestDrift()` and
+   via `find_all_files_path`; `findAllScripts` selects both `.js` and `.ts` source via
+   `isScriptSourceName` (excludes `.d.ts` — all generated declaration files live under
+   `ts-defs/`), then drops any generated `.js` that shares a basename with a `.ts` sibling
+   via `filterAuthoredScriptPaths` (#73, #74). `detectManifestDrift()` and
    `detectImageDrift()` delegate to the free functions, passing the cached manifest.
    The exported constants `PROJECT_MANIFEST_FILE = "project.c3proj"` (#36) and
    `IMAGES_FOLDER` (#38) are also defined here as C3 domain facts.
@@ -529,8 +550,10 @@ validated*. Three rules:
 `https://editor.construct.net/r{NNN}/` is permanently hosted and fetchable per
 release (`construct.net`'s human-facing docs are Cloudflare-gated; this is not):
 `plugins/allAces.json` is C3's **authoritative ACE table**, and bisecting
-`c3runtime/projectResources.js` across releases **pins exactly when a field
-appeared**. A corpus answers *what values occur*; the bundle answers *what the
+`projectResources.js` (release root, **not** `c3runtime/` — an earlier version
+of this note cited the wrong path, corrected and re-verified 2026-08-10) across
+releases **pins exactly when a field appeared**. A corpus answers *what values
+occur*; the bundle answers *what the
 mechanism is* — the distinction ADR 0008's addendum says a corpus structurally
 cannot make. In #68 it proved `EVENTVAR_REFERENCE_ACES` complete, proved
 `is-boolean-eventvar-set` **fabricated** (not merely unobserved), and converted two

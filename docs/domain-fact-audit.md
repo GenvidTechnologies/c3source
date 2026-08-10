@@ -1,10 +1,15 @@
 # C3 Domain-Fact Audit
 
-Corpus-scan results for the six exported C3 domain-fact tables (ADR 0008):
+Corpus-scan results for eight exported C3 domain-fact tables (ADR 0008):
 `EVENTVAR_REFERENCE_ACES`, `COMPARISON_OPERATORS`, `IMAGE_FILE_TYPE_EXTENSIONS`,
-`EDITOR_FIELD_RULES`, `EDITOR_LOCAL_EXCLUSIONS` (via `isEditorLocalPath`), and
-`C3_MINIFIED_SOURCE_SUFFIXES` (via `isMinifiedSourcePath`). Produced by
-`scripts/scan-domain-facts.mjs` for issue #68.
+`EDITOR_FIELD_RULES`, `EDITOR_LOCAL_EXCLUSIONS` (via `isEditorLocalPath`),
+`C3_MINIFIED_SOURCE_SUFFIXES` (via `isMinifiedSourcePath`),
+`SCRIPT_SOURCE_EXTENSIONS` (via `isScriptSourceName`), and
+`SCRIPT_FILE_TYPE_EXTENSIONS`. The first six were produced by
+`scripts/scan-domain-facts.mjs` for issue #68; the last two were added for
+issue #73/#74 on a later date — see the scan-dates note immediately below,
+since the two groups were not scanned together and should not be read as
+having equal freshness.
 
 **Why this doc exists, and not JSDoc.** The JSDoc on each table carries the
 *label* (`AUDITED`, etc.) and its blast radius — that ships to consumers in
@@ -15,8 +20,13 @@ future audit re-runs the scan, update the numbers here, not in JSDoc. Before
 this doc existed, the corpus size was cited as three different numbers in
 three files; one dated source of truth plus pointers is the fix.
 
-Scan date: **2026-08-04**. Scanner: `scripts/scan-domain-facts.mjs`. Full raw
-output is not committed (the corpus is machine-local — see
+Scan dates — **the six original tables were scanned 2026-08-04 and were NOT
+re-scanned for this update**; their numbers below are exactly as they were on
+that date. `SCRIPT_SOURCE_EXTENSIONS` and `SCRIPT_FILE_TYPE_EXTENSIONS` were
+added **2026-08-10** (issue #73/#74), evidenced by the same 14-project corpus
+(already inventoried below, not re-walked) plus a fresh editor-bundle
+bisection. Scanner: `scripts/scan-domain-facts.mjs`. Full raw output is not
+committed (the corpus is machine-local — see
 [Bounds](#bounds-what-this-cannot-prove)); the tables below are its roll-up.
 
 - [Corpus inventory](#corpus-inventory)
@@ -188,6 +198,106 @@ contradiction turned up.
 corpus-wide, and both are single-line — consistent with ADR 0018's minified,
 project-source (not editor-local) framing.
 
+### `SCRIPT_SOURCE_EXTENSIONS` (via `isScriptSourceName`)
+
+Added issue #73/#74, scanned **2026-08-10** — see the scan-dates note near the
+top of this doc for why this table's evidence carries a separate date from
+the six above.
+
+**Corpus evidence** (same 14-project corpus inventoried above): 136 declared
+script items total, read from each project's `rootFileFolders.script` (note
+the manifest key is singular `script`; the on-disk folder is plural
+`scripts/`):
+
+| extension | occurrences | releases |
+|---|---|---|
+| `.ts` | 131 | 47604, 49500 |
+| `.js` | 5 | 39700, 40702 |
+
+Zero items with an absent `type` field — **NO GAPS** at the value level, every
+declared script item resolves to one of the two tabled extensions.
+
+An adjacent, observed field that is **not** a c3source domain fact:
+`script-info.purpose` takes `main` (5), `imports-for-events` (5), or `none`
+(126) across the corpus. Recorded here purely as a corpus observation — no
+table for it exists or is proposed.
+
+**All 5 `.js` files in the corpus are generated, not authored.** Every one is
+paired with a same-basename `.ts` file in the same directory, so C3's own
+folder-project reconcile rule (`isGeneratedScriptOutput`) drops every one of
+them. This is why rewiring `findAllScripts` to admit `.js` (previously
+`.ts`-only) left its output byte-for-byte unchanged across all 14 corpus
+projects — the newly-admitted extension had nothing left to admit once the
+generated-output filter ran.
+
+**Bundle evidence — stronger than the corpus here, because it answers "what
+can C3 do" rather than "what did 14 projects do".** C3's own editor bundle
+holds a literal `new Set([".js", ".ts"])` as its script import-extension set,
+alongside its audio set (`.wav .flac .m4a .ogg .opus`) and video set (`.webm
+.ogv .mp4`). Bisecting `https://editor.construct.net/r{NNN}/projectResources.js`
+(release root — see [below](#a-better-validation-channel-editorconstructnet)
+for why that path matters) across releases pins **`.ts` support to r433,
+exact**: `application/typescript` occurs 0 times at r432 and 1 time at r433,
+and the import-extension set itself is `new Set([".js"])` at r397, r402 and
+r432, and `new Set([".js", ".ts"])` from r433 through r495. This is a
+**third** bracket-to-pin conversion for this doc, after `fileType`→r402 and
+`functionsName`→r437 — the case for reaching for the bundle first is
+cumulative.
+
+Extension and MIME both come from **one ternary** in C3's source
+(`typescript ? "ts"/"application/typescript" : "js"/"application/javascript"`),
+so exactly two script languages exist in C3 — no `.mjs`, `.cjs`, or `.jsx`.
+One **false-positive trap** worth recording: `.tsx` does appear once in the
+bundle, but it is the Tiled **tileset** format (paired with `.tmx`), unrelated
+to TypeScript.
+
+C3's folder-project reconcile only auto-adopts a bare `.js` from disk into the
+`script` folder when no same-basename `.ts` sits beside it; the identical rule
+is applied to the `general` folder. This is the source fact behind
+`isGeneratedScriptOutput`.
+
+**The `.js`/`.ts` split is one of the clearest cases in this doc of the corpus
+and the bundle agreeing independently, at different resolutions:** the corpus
+can only bracket the change between releases 40702 (all `.js`) and 47604 (all
+`.ts`); the bundle pins it exactly to r433.
+
+**Blast radius:** same shape as its sibling table below — a wrong extension
+set silently over- or under-collects during a script-discovery walk (a false
+negative, or a false positive), **never a throw** — contrast
+`IMAGE_FILE_TYPE_EXTENSIONS`, whose unmapped MIME throws.
+
+### `SCRIPT_FILE_TYPE_EXTENSIONS`
+
+Added issue #73/#74, scanned **2026-08-10** (see the scan-dates note near the
+top of this doc).
+
+Maps a script `C3FileEntry.type` MIME (the `rootFileFolders.script` entries'
+own `type` field) to its on-disk, dotted extension. Same corpus, same 136
+items as `SCRIPT_SOURCE_EXTENSIONS` above:
+
+| `type` (MIME) | mapped extension | occurrences | releases |
+|---|---|---|---|
+| `application/typescript` | `.ts` | 131 | 47604, 49500 |
+| `application/javascript` | `.js` | 5 | 39700, 40702 |
+
+**NO GAPS** — every declared `type` maps to a known extension, and (as above)
+zero items carry an absent `type` field at any release this corpus observes —
+unlike `IMAGE_FILE_TYPE_EXTENSIONS`, where 15 pre-r402 image nodes carry no
+`fileType` at all.
+
+**Bundle evidence.** As established under `SCRIPT_SOURCE_EXTENSIONS` above,
+extension and MIME come from one ternary in C3's serializer — exactly two
+branches, so exactly two script MIME types exist. **Version pin:**
+`application/typescript` exists only from **r433** onward; see the bisection
+above.
+
+**Blast radius — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS`:** an
+unmapped `type` here is a **silent miss** in manifest interpretation, not a
+throw. `IMAGE_FILE_TYPE_EXTENSIONS`'s unmapped-MIME throw is a deliberate #29
+decision (a malformed image node should fail loudly); this table carries no
+such policy and degrades quietly instead. A caller relying on this table for
+anything throw-sensitive should not assume the two tables behave alike.
+
 ## Bounds: what this cannot prove
 
 This corpus is Genvid-authored and skews heavily toward
@@ -274,21 +384,34 @@ projects happen to do":
   confirmed complete against the full System ACE set (not just the corpus's
   8 observed ids) and how the fabricated `is-boolean-eventvar-set` entry was
   proven not to exist, rather than merely unobserved.
-- `https://editor.construct.net/r{NNN}/c3runtime/projectResources.js` holds
-  the `.c3proj` serializer. **Bisecting it across releases pins exactly when
-  a field appeared** — this is how the image `fileType` field's introduction
-  was pinned to **r402**, a boundary the corpus could only bracket between
-  39700 and 40702.
+- `https://editor.construct.net/r{NNN}/projectResources.js` (the **release
+  root** — **not** `c3runtime/projectResources.js`, which 404s at every
+  release tested; this doc cited the wrong path until it was corrected and
+  re-verified against r397, r402, r437, r447, r476 and r495 on **2026-08-10**)
+  holds the `.c3proj` serializer. **Bisecting it across releases pins exactly
+  when a field appeared** — this is how the image `fileType` field's
+  introduction was pinned to **r402**, a boundary the corpus could only
+  bracket between 39700 and 40702. The correct path was found via
+  `https://editor.construct.net/r{NNN}/offline.json`, which lists every asset
+  in a release — reach for that listing first if C3 ever moves things again.
 - The technique held up a second time in the same audit: `functionsName` was
   pinned to **r437** (r436 emits none; no `r436.x` sub-release exists), where
-  the corpus could only say "somewhere after 40702 and by 44002". Two
-  independent bracket-to-pin conversions is the argument for reaching here
-  first.
+  the corpus could only say "somewhere after 40702 and by 44002".
+- And a third time, for issue #73/#74: `.ts` script support was pinned to
+  **r433**, where the corpus could only bracket the change between releases
+  40702 and 47604 — see
+  [`SCRIPT_SOURCE_EXTENSIONS`](#script_source_extensions-via-isscriptsourcename)
+  above. Three independent bracket-to-pin conversions is the cumulative
+  argument for reaching here first.
 - The same source confirmed `C3_DEFAULT_FUNCTIONS_NAME` and C3's own loader
   fallback (`fileType ?? "image/png"`) directly, rather than inferring them
   from what happened to be present in scanned projects. The r437 bundle
   carries `t.hasOwnProperty("functionsName") ? … : …("Functions")` verbatim —
   the default is C3's, not c3source's guess.
+
+The `allAces.json` paths above were always correct and remain so — only the
+`c3runtime/`-prefixed form of `projectResources.js` was ever wrong; do not
+"fix" the former.
 
 `construct.net`'s human-facing documentation is Cloudflare-gated against
 automated fetch; `editor.construct.net` is not. For any future domain-fact
