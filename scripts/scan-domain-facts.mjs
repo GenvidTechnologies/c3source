@@ -37,7 +37,7 @@
 //
 // Every project block is headed with that project's `savedWithRelease`, and
 // every roll-up finding is attributed to the release(s) it was observed in —
-// that release attribution is what would have made the pre-r407 legacy
+// that release attribution is what would have made the pre-r402 legacy
 // `fileType` omission (see `C3_LEGACY_IMAGE_EXTENSION` in `src/manifest.ts`)
 // legible as a version-mechanism fact rather than a plain value gap.
 //
@@ -628,7 +628,7 @@ function printImageExtRollup(map, count, releaseSet) {
   const absent = map.get(ABSENT);
   console.log(
     absent
-      ? `  -> ${absent.count} node(s) with NO fileType (pre-r407 legacy), releases ${fmtReleases(absent.releases)}`
+      ? `  -> ${absent.count} node(s) with NO fileType (pre-r402 legacy), releases ${fmtReleases(absent.releases)}`
       : "  -> 0 nodes with no fileType observed",
   );
   const presentUnmapped = [...map.entries()].filter(([key, e]) => key !== ABSENT && !e.mapped);
