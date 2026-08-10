@@ -202,7 +202,12 @@ project-source (not editor-local) framing.
 
 Added issue #73/#74, scanned **2026-08-10** — see the scan-dates note near the
 top of this doc for why this table's evidence carries a separate date from
-the six above.
+the six above. **Provenance note (#77):** the corpus evidence below
+was originally produced by a hand-rolled, one-off probe on this same date.
+`scripts/scan-domain-facts.mjs` has since been extended with a real partition
+for this table (commit 68c8572); re-running it reproduces every number below
+exactly. The date does not change — only the tool that produced the numbers
+does, from a throwaway script to the committed one of record.
 
 **Corpus evidence** (same 14-project corpus inventoried above): 136 declared
 script items total, read from each project's `rootFileFolders.script` (note
@@ -229,6 +234,51 @@ them. This is why rewiring `findAllScripts` to admit `.js` (previously
 `.ts`-only) left its output byte-for-byte unchanged across all 14 corpus
 projects — the newly-admitted extension had nothing left to admit once the
 generated-output filter ran.
+
+**On-disk evidence — new for this reconciliation.** The scanner's
+`SCRIPT_SOURCE_EXTENSIONS` probe now also walks `scripts/` directly, rather
+than only reading the manifest's `rootFileFolders.script` list, and
+deliberately does **not** apply the `isEditorLocalPath` filter — seeing
+everything under `scripts/` is what makes a genuinely missing table entry
+visible. It finds **150 files**, 14 more than the 136 declared items above:
+
+| extension | count | classification | releases |
+|---|---|---|---|
+| `.ts` | 138 | TABLED | 39700, 40702, 47604, 49500 |
+| `.json` | 6 | UNTABLED | 39700, 40702, 47604, 49500 |
+| `.js` | 5 | TABLED | 39700, 40702 |
+| *(none)* | 1 | UNTABLED | 47604 |
+
+Neither `UNTABLED` row is a gap in this table. The 6 `.json` files are all
+`tsconfig.json` — already an `EDITOR_LOCAL_EXCLUSIONS.exactNames` member (see
+[above](#editor_local_exclusions-via-iseditorlocalpath)), i.e. a known
+editor-local file, not C3 source. The 1 extensionless file is a `.gitkeep`
+git placeholder, not a C3 artifact at all. A future reader should not read
+either `UNTABLED` row as "table incomplete."
+
+The 138-vs-131 `.ts` gap (7 files) is real and decomposes exactly, with no
+remainder:
+
+| project | release | on disk under `scripts/` | declared in `rootFileFolders.script` |
+|---|---|---|---|
+| construct3-poc | 39700 | 3 `.js` + 3 `.ts` | 3 items, all `application/javascript` |
+| c3addon-genvid-datadog-rum | 40702 | 2 `.js` + 2 `.ts` | 2 items, all `application/javascript` |
+| ts-example | 39700 | 2 `.ts` | none — `{items: [], subfolders: []}` |
+
+The first two rows are the `.ts` counterpart of the same generated/authored
+pairs the paragraph above already accounts for on the `.js` side: present on
+disk, but with no manifest representation of their own, because pre-r433 C3
+had no `application/typescript` type to declare them with (see the bundle
+evidence below). `ts-example` is different — its two `.ts` files have **no**
+declared script item at all, on a project whose `rootFileFolders.script` is
+empty. That is a genuine manifest/disk divergence in this corpus project,
+exactly what `detectManifestDrift` exists to find, not a gap in this table.
+
+Every number this doc previously stated for `SCRIPT_SOURCE_EXTENSIONS` — 136
+declared items, the 131/5 split, 5 generated-and-paired `.js` files, 0 items
+with an absent `type` — is reproduced exactly by this run of the now-committed
+scanner. There is no discrepancy to record here, unlike the image-node count
+[below](#honesty-note-a-discrepancy-in-the-image-node-count).
 
 **Bundle evidence — stronger than the corpus here, because it answers "what
 can C3 do" rather than "what did 14 projects do".** C3's own editor bundle
@@ -257,9 +307,18 @@ is applied to the `general` folder. This is the source fact behind
 `isGeneratedScriptOutput`.
 
 **The `.js`/`.ts` split is one of the clearest cases in this doc of the corpus
-and the bundle agreeing independently, at different resolutions:** the corpus
-can only bracket the change between releases 40702 (all `.js`) and 47604 (all
-`.ts`); the bundle pins it exactly to r433.
+and the bundle agreeing independently, at different resolutions:** at the
+level of *declared* items, the corpus can only bracket the change between
+releases 40702 (all `.js`) and 47604 (all `.ts`); the bundle pins it exactly
+to r433. The on-disk walk above sharpens this without itself pinning a
+release: both pre-r433 projects that author TypeScript
+(`construct3-poc` at 39700, `c3addon-genvid-datadog-rum` at 40702) already
+have `.ts` files sitting beside their declared `.js` items — the authored
+language had already changed; only the manifest's ability to *declare* it as
+`application/typescript` was release-gated. This corroborates the mechanism
+the bundle bisection pins; it does not by itself establish r433 — the corpus
+alone still cannot resolve which release, only that a `.ts`-declaring
+capability arrived somewhere inside the bracket.
 
 **Blast radius:** same shape as its sibling table below — a wrong extension
 set silently over- or under-collects during a script-discovery walk (a false
@@ -269,7 +328,14 @@ negative, or a false positive), **never a throw** — contrast
 ### `SCRIPT_FILE_TYPE_EXTENSIONS`
 
 Added issue #73/#74, scanned **2026-08-10** (see the scan-dates note near the
-top of this doc).
+top of this doc). **Provenance note (#77):** as with
+`SCRIPT_SOURCE_EXTENSIONS` above, this table's corpus evidence was originally
+a hand-rolled probe run on the same date; `scripts/scan-domain-facts.mjs` now
+carries a committed partition for it (commit 68c8572) and reproduces the
+numbers below exactly. This table has no on-disk walk of its own — `type` is
+a manifest field, not a file-existence fact — so the new on-disk findings
+under `SCRIPT_SOURCE_EXTENSIONS` above do not add anything here beyond
+confirming the same 136-item corpus.
 
 Maps a script `C3FileEntry.type` MIME (the `rootFileFolders.script` entries'
 own `type` field) to its on-disk, dotted extension. Same corpus, same 136
@@ -447,5 +513,20 @@ governing rule `scripts/scan-references.mjs` follows for
 `C3_PSEUDO_OBJECT_CLASSES`. On any future C3 version bump, re-run it against
 whatever real, varied projects are available and update this doc's numbers —
 never the JSDoc labels (see the top of this doc).
+
+**Two provenances, one doc — do not conflate them.** Several sections above
+mix corpus-derived numbers with bundle-derived facts, most visibly
+`SCRIPT_SOURCE_EXTENSIONS` and `SCRIPT_FILE_TYPE_EXTENSIONS`. Only the
+corpus numbers — occurrence counts, release lists, the on-disk file
+breakdown — are scanner-refreshable; re-running the scanner and updating
+those numbers is correct and expected. The `.ts`→r433 exact pin, the
+one-ternary fact, and the `.tsx`-is-a-Tiled-tileset false-positive trap are
+**bundle-derived**: a corpus scan cannot reproduce, confirm, or refute them,
+and a future re-run must never overwrite them with anything the scanner
+prints. Re-verify those against `https://editor.construct.net/r{NNN}/`
+instead (see [A better validation
+channel](#a-better-validation-channel-editorconstructnet)). As of #77 the
+scanner covers all eight tables — a run no longer silently skips the two
+script tables the way the earlier, hand-rolled probe did.
 
 See issue #68 for the audit that produced this document.
