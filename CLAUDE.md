@@ -559,6 +559,22 @@ cannot make. In #68 it proved `EVENTVAR_REFERENCE_ACES` complete, proved
 `is-boolean-eventvar-set` **fabricated** (not merely unobserved), and converted two
 corpus brackets into exact pins (`fileType`→r402, `functionsName`→r437).
 
+**The corollary: a table's findings section carries *two* provenances, and only
+one half is scanner-refreshable.** Because both evidence sources are in play, a
+section in [docs/domain-fact-audit.md](docs/domain-fact-audit.md) typically mixes
+corpus-derived **numbers** (occurrence counts, release lists, on-disk breakdowns)
+with bundle-derived **facts** (an exact release pin, a "there are exactly two
+branches" proof, a false-positive trap). Re-running the scanner refreshes the
+first and cannot reproduce, confirm, or refute the second — so the doc's own
+"re-run it … and update this doc's numbers" instruction, followed literally,
+**deletes the stronger evidence**. Refresh the numbers; re-verify the bundle
+facts against `editor.construct.net/r{NNN}/` instead; never overwrite them with
+anything the scanner prints. This was not hypothetical: #77 shipped with an
+acceptance criterion asking for exactly that wholesale refresh, which would have
+destroyed `SCRIPT_SOURCE_EXTENSIONS`'s `.ts`→r433 pin, its one-ternary proof and
+its `.tsx`/Tiled trap — the criterion was corrected rather than executed, and
+`## How to re-run` now carries the warning at the point of use.
+
 ## Canonical reference fixture (`construct3-sample`)
 
 A **second** git submodule, `construct3-sample/` (pinned at the commit tagged
