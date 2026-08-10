@@ -896,7 +896,8 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
 // ─── Image-derived drift ──────────────────────────────────────────────────────
 
 /**
- * C3 image `fileType` (MIME) -> on-disk file extension (no leading dot).
+ * C3 image `fileType` (MIME) -> on-disk file extension, dotted (`".png"`, matching
+ * `path.extname`/`.suffix` convention — see issue #74).
  * A C3 platform fact owned here so downstream need not re-hardcode it (issue #29).
  * Exported so callers can introspect/extend.
  *
@@ -916,10 +917,38 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
  * (#68) for the evidence volume.
  */
 export const IMAGE_FILE_TYPE_EXTENSIONS: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/svg+xml": "svg",
-  "image/webp": "webp",
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/svg+xml": ".svg",
+  "image/webp": ".webp",
+};
+
+/**
+ * C3 script `type` (MIME, on a {@link C3FileEntry} under `rootFileFolders.script`) ->
+ * on-disk file extension, dotted (`".js"`/`".ts"`, matching `path.extname`/`.suffix`
+ * convention — see issue #74). A C3 platform fact owned here so downstream need not
+ * re-hardcode it. Exported so callers can introspect/extend — deliberately kept
+ * `Record<string, string>` rather than narrowed to a union, matching
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS}.
+ *
+ * **AUDITED** — matches C3's own editor bundle, which derives both extension and MIME
+ * from a single ternary (`typescript ? "ts"/application/typescript :
+ * "js"/application/javascript`) at `https://editor.construct.net/r{NNN}/projectResources.js`
+ * (note: the root path, not `c3runtime/`), corroborated by the project corpus. That
+ * ternary is exactly two branches — there is no `.mjs`/`.cjs`/`.jsx` script language in
+ * C3, and these two dotted values are members of `SCRIPT_SOURCE_EXTENSIONS` (exported
+ * from `./layouts.js`).
+ *
+ * **Version pin:** `application/typescript` exists only from **r433** onward; r432 has
+ * no TypeScript MIME at all.
+ *
+ * **Blast radius:** an unmapped MIME is a silent miss in manifest interpretation, NOT a
+ * throw — unlike {@link IMAGE_FILE_TYPE_EXTENSIONS}, which throws. See
+ * `docs/domain-fact-audit.md` for the evidence volume.
+ */
+export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
+  "application/javascript": ".js",
+  "application/typescript": ".ts",
 };
 
 /**
@@ -961,7 +990,7 @@ interface AnimationFolder {
 export interface ExpectedImage {
   /** Filename stem, no extension: "bullet-default-000", "tiledbackground". */
   stem: string;
-  /** Extension resolved from `fileType` via IMAGE_FILE_TYPE_EXTENSIONS; absent for pre-r407 nodes that record no MIME. */
+  /** Dotted extension resolved from `fileType` via IMAGE_FILE_TYPE_EXTENSIONS (e.g. ".png"); absent for pre-r407 nodes that record no MIME. */
   ext?: string;
   /** Locator for diagnostics: "TiledBackground" or "Bullet/Default#0". */
   context: string;
@@ -982,7 +1011,7 @@ export interface ExpectedImage {
  * is an export re-encoding setting, not the source MIME: `exportFormat: "lossy"` was
  * observed on real nodes whose actual source format is `image/png`. (#68)
  */
-export const C3_LEGACY_IMAGE_EXTENSION = "png";
+export const C3_LEGACY_IMAGE_EXTENSION = ".png";
 
 /**
  * Resolve the on-disk extension for a C3 image `fileType` MIME string, tolerating an
@@ -1061,18 +1090,18 @@ export function deriveExpectedImages(objectType: Record<string, unknown>): Expec
  * **V1 coverage rule (structural detection):**
  * - Object type with a top-level `image` field (NinePatch, TiledBg, Tilemap plugins and
  *   any future single-image plugin): exactly one expected image
- *   `<lowercased-name>.<ext>`, where `ext` is derived from `image.fileType` via
- *   {@link IMAGE_FILE_TYPE_EXTENSIONS}.
+ *   `<lowercased-name><ext>` (`ext` is dotted), where `ext` is derived from `image.fileType`
+ *   via {@link IMAGE_FILE_TYPE_EXTENSIONS}.
  * - Object type with a top-level `animations` field (Sprite plugin and compatible):
- *   one `<lowercased-name>-<lowercased-animation-name>-<frame3>.<ext>` per animation frame,
- *   where `frame3` is the zero-based frame index zero-padded to 3 digits (000, 001, …) and
- *   `ext` is derived from each frame's own `fileType` field via {@link IMAGE_FILE_TYPE_EXTENSIONS}
- *   (frames in the same animation may differ in format).
+ *   one `<lowercased-name>-<lowercased-animation-name>-<frame3><ext>` per animation frame
+ *   (`ext` is dotted), where `frame3` is the zero-based frame index zero-padded to 3 digits
+ *   (000, 001, …) and `ext` is derived from each frame's own `fileType` field via
+ *   {@link IMAGE_FILE_TYPE_EXTENSIONS} (frames in the same animation may differ in format).
  *   Animation subfolders **collapse** — the subfolder name does NOT appear in the filename;
  *   animation names are unique within an object type.
  * - Object types with neither `image` nor `animations` (Text, JSON, etc.): no images.
  *
- * An **absent** `fileType` no longer throws: it renders as `<stem>.{@link C3_LEGACY_IMAGE_EXTENSION}`.
+ * An **absent** `fileType` no longer throws: it renders as `<stem>{@link C3_LEGACY_IMAGE_EXTENSION}`.
  * A **present but unmapped** `fileType` still throws (unknown format) — that throw now
  * originates in {@link deriveExpectedImages}, not here.
  *
@@ -1089,7 +1118,7 @@ export function deriveExpectedImages(objectType: Record<string, unknown>): Expec
  *   third-party single-image plugins but may over-derive for unusual plugin shapes.
  */
 export function deriveExpectedImageNames(objectType: Record<string, unknown>): string[] {
-  return deriveExpectedImages(objectType).map((e) => `${e.stem}.${e.ext ?? C3_LEGACY_IMAGE_EXTENSION}`);
+  return deriveExpectedImages(objectType).map((e) => `${e.stem}${e.ext ?? C3_LEGACY_IMAGE_EXTENSION}`);
 }
 
 /** Strip a filename's extension (the substring after the last `.`); returns the input
@@ -1109,13 +1138,13 @@ function stripExt(fileName: string): string {
  * is a flat folder — no subfolder nesting for moves).
  *
  * **Ext-aware matching, deliberately more conservative than {@link deriveExpectedImageNames}:**
- * an `ExpectedImage` with a known `ext` is matched on the full filename `<stem>.<ext>` — exact,
+ * an `ExpectedImage` with a known `ext` is matched on the full filename `<stem><ext>` — exact,
  * unweakened (the #29 regression guard: a real extension mismatch still reports drift). An
  * `ExpectedImage` with `ext: undefined` (pre-r407 legacy node — see
  * {@link C3_LEGACY_IMAGE_EXTENSION}) is instead matched on its **stem** against the on-disk
  * `images/` filenames: if some on-disk file shares that stem (whatever its actual extension),
  * that file's real name is used, so it round-trips with no drift; otherwise the comparison
- * falls back to `<stem>.{@link C3_LEGACY_IMAGE_EXTENSION}`, which reports as `missing` because
+ * falls back to `<stem>{@link C3_LEGACY_IMAGE_EXTENSION}`, which reports as `missing` because
  * nothing on disk can match it. This is the mirror image of `deriveExpectedImageNames`'s
  * "must answer with a concrete name" contract: that function may never leave a legacy node
  * unlabeled, while this one may never let the legacy default alone *manufacture* a finding —
@@ -1149,8 +1178,8 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
 
   const expectedNames = expectedImages.map((e) =>
     e.ext !== undefined
-      ? `${e.stem}.${e.ext}`
-      : (actualNameByStem.get(e.stem) ?? `${e.stem}.${C3_LEGACY_IMAGE_EXTENSION}`),
+      ? `${e.stem}${e.ext}`
+      : (actualNameByStem.get(e.stem) ?? `${e.stem}${C3_LEGACY_IMAGE_EXTENSION}`),
   );
 
   const entries = diffNameMaps(
