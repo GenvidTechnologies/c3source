@@ -17,6 +17,10 @@ Each entry should be a one-line description. Only list docs that exist.
 - `api-guide-references.md` — reference-integrity detection: the five ReferenceIssue kinds, C3_PSEUDO_OBJECT_CLASSES/NON_ATTRIBUTABLE_ADDON_TYPES domain-fact tables, the four pure detectors + detectReferenceIntegrity orchestrator, C3Project.detectReferenceIntegrity, error policy, ownership boundary vs. construct3-chef (#60)
 - `domain-fact-audit.md` — 14-project corpus-scan results for the six domain-fact tables: corpus inventory, per-table findings, two defects found and fixed, bounds on what a corpus can prove, and the editor.construct.net validation channel (#68)
 
+## Process
+
+- `issue-triage.md` — issue-triage conventions (flat GitHub label set, no priority/area scheme): categories, required fields, splitting, duplicates, dependencies, and the `gh` mutation recipes consumed by `/gvt-dev:triage-issues`
+
 ## Decision Records
 
 Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.md`](decisions/README.md). Backfilled 2026-07-17 from commit history.
