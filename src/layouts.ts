@@ -142,6 +142,81 @@ export function isEditorLocalPath(name: string): boolean {
 const descendSourceDirs = (name: string): boolean => !isEditorLocalPath(name);
 
 /**
+ * The file extensions C3 accepts as authored script source under `scripts/`.
+ *
+ * **AUDITED** — matches C3's own editor bundle, which holds
+ * `new Set([".js",".ts"])` at `https://editor.construct.net/r{NNN}/projectResources.js`
+ * (note: the root path, not `c3runtime/`), corroborated by the project corpus.
+ *
+ * **Version pin:** `.ts` is only accepted from **r433** onward; r397-r432 accept
+ * `.js` only.
+ *
+ * **Blast radius:** silent over- or under-collection during script discovery — a
+ * false negative (or positive) in a walk, never a throw (contrast
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS}, which throws). See `docs/domain-fact-audit.md`
+ * for the evidence volume.
+ */
+export const SCRIPT_SOURCE_EXTENSIONS = [".js", ".ts"] as const;
+
+/**
+ * True if a bare basename is authored C3 script source: ends in a
+ * {@link SCRIPT_SOURCE_EXTENSIONS} extension, tested case-insensitively (C3
+ * lowercases the extension before testing), and is not a `.d.ts` declaration
+ * file. `ts-defs/` — where C3 writes its generated `.d.ts` typings — is already
+ * pruned by directory in `find_all_files_path`, so the `.d.ts` exclusion here
+ * only ever fires on a stray declaration file sitting loose directly under
+ * `scripts/`.
+ */
+export function isScriptSourceName(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".d.ts")) return false;
+  return SCRIPT_SOURCE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/**
+ * True if `name` is a `.js` file that C3 would treat as a generated build
+ * output rather than authored source, because a same-basename `.ts` exists
+ * among `siblings` (bare basenames from the same directory).
+ *
+ * This is C3's own rule, not a heuristic: when reconciling a folder project
+ * against disk, C3 only auto-adopts a `.js` file into the `script`/`general`
+ * folders when no same-basename `.ts` sits alongside it — a `.ts` sibling
+ * means the `.js` is that TypeScript file's compiled output. (Issue #73's
+ * "Note on scope" mischaracterized this as consumer policy; it is C3's own
+ * reconcile behavior.) A `.ts` file is never treated as generated, regardless
+ * of any `.js` sibling. Extension comparison is case-insensitive.
+ */
+export function isGeneratedScriptOutput(name: string, siblings: Iterable<string>): boolean {
+  const lower = name.toLowerCase();
+  if (!lower.endsWith(".js")) return false;
+  const stem = lower.slice(0, -".js".length);
+  for (const sibling of siblings) {
+    const siblingLower = sibling.toLowerCase();
+    if (siblingLower.endsWith(".ts") && siblingLower.slice(0, -".ts".length) === stem) return true;
+  }
+  return false;
+}
+
+/**
+ * Filter a list of file paths (as returned by {@link find_all_files_path}) down
+ * to authored script source, dropping generated `.js` build output. The
+ * generated/authored comparison in {@link isGeneratedScriptOutput} is scoped
+ * **per directory** — paths are grouped by `path.dirname` first, so a `.js` in
+ * one directory is never cancelled by a same-basename `.ts` in another. Input
+ * order is preserved.
+ */
+export function filterAuthoredScriptPaths(paths: string[]): string[] {
+  const byDir = new Map<string, string[]>();
+  for (const p of paths) {
+    const dir = path.dirname(p);
+    const siblings = byDir.get(dir);
+    if (siblings) siblings.push(path.basename(p));
+    else byDir.set(dir, [path.basename(p)]);
+  }
+  return paths.filter((p) => !isGeneratedScriptOutput(path.basename(p), byDir.get(path.dirname(p)) ?? []));
+}
+
+/**
  * The single recursive file walk behind every `find_all_*_path` collector, and
  * the generic primitive for discovering files c3source has no named collector
  * for (e.g. generated `.dsl.txt` artifacts): collect file paths under `dir` for
