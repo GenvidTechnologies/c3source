@@ -953,7 +953,7 @@ export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
 
 /**
  * Resolve the on-disk extension for a C3 image `fileType` MIME string, treating an
- * absent/empty value as malformed (throws) rather than tolerating it as a pre-r407
+ * absent/empty value as malformed (throws) rather than tolerating it as a pre-r402
  * legacy node. Unmapped (present but unrecognized) `fileType` also throws.
  * `context` is included in the error message to aid diagnosis.
  *
@@ -990,7 +990,7 @@ interface AnimationFolder {
 export interface ExpectedImage {
   /** Filename stem, no extension: "bullet-default-000", "tiledbackground". */
   stem: string;
-  /** Dotted extension resolved from `fileType` via IMAGE_FILE_TYPE_EXTENSIONS (e.g. ".png"); absent for pre-r407 nodes that record no MIME. */
+  /** Dotted extension resolved from `fileType` via IMAGE_FILE_TYPE_EXTENSIONS (e.g. ".png"); absent for pre-r402 nodes that record no MIME. */
   ext?: string;
   /** Locator for diagnostics: "TiledBackground" or "Bullet/Default#0". */
   context: string;
@@ -1015,7 +1015,7 @@ export const C3_LEGACY_IMAGE_EXTENSION = ".png";
 
 /**
  * Resolve the on-disk extension for a C3 image `fileType` MIME string, tolerating an
- * absent/empty value (pre-r407 legacy nodes — see {@link C3_LEGACY_IMAGE_EXTENSION}) by
+ * absent/empty value (pre-r402 legacy nodes — see {@link C3_LEGACY_IMAGE_EXTENSION}) by
  * returning `undefined` rather than throwing. Still throws when `fileType` is present but
  * unmapped (unknown format). `context` is included in the error message to aid diagnosis.
  */
@@ -1084,7 +1084,7 @@ export function deriveExpectedImages(objectType: Record<string, unknown>): Expec
  * Derive the expected on-disk image filenames for a single object type — "what filename
  * would C3 have written?" A thin renderer over {@link deriveExpectedImages}: joins each
  * `ExpectedImage`'s `stem` and `ext` into a concrete filename, always. It must answer with
- * a name, so an absent `ext` (pre-r407 legacy node) is not left dangling — it renders with
+ * a name, so an absent `ext` (pre-r402 legacy node) is not left dangling — it renders with
  * the labelled default {@link C3_LEGACY_IMAGE_EXTENSION} instead of throwing.
  *
  * **V1 coverage rule (structural detection):**
@@ -1140,7 +1140,7 @@ function stripExt(fileName: string): string {
  * **Ext-aware matching, deliberately more conservative than {@link deriveExpectedImageNames}:**
  * an `ExpectedImage` with a known `ext` is matched on the full filename `<stem><ext>` — exact,
  * unweakened (the #29 regression guard: a real extension mismatch still reports drift). An
- * `ExpectedImage` with `ext: undefined` (pre-r407 legacy node — see
+ * `ExpectedImage` with `ext: undefined` (pre-r402 legacy node — see
  * {@link C3_LEGACY_IMAGE_EXTENSION}) is instead matched on its **stem** against the on-disk
  * `images/` filenames: if some on-disk file shares that stem (whatever its actual extension),
  * that file's real name is used, so it round-trips with no drift; otherwise the comparison

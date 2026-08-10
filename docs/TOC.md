@@ -15,7 +15,7 @@ Each entry should be a one-line description. Only list docs that exist.
 - `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
 - `api-guide-addons.md` — addon domain layer: usedAddons manifest support, addon attribution (behaviorTypes/effectTypes), findAllAddons, readAddonPackage, parseAcesModel/parseAddonMetadata (#44)
 - `api-guide-references.md` — reference-integrity detection: the five ReferenceIssue kinds, C3_PSEUDO_OBJECT_CLASSES/NON_ATTRIBUTABLE_ADDON_TYPES domain-fact tables, the four pure detectors + detectReferenceIntegrity orchestrator, C3Project.detectReferenceIntegrity, error policy, ownership boundary vs. construct3-chef (#60)
-- `domain-fact-audit.md` — 14-project corpus-scan results for the six domain-fact tables: corpus inventory, per-table findings, two defects found and fixed, bounds on what a corpus can prove, and the editor.construct.net validation channel (#68)
+- `domain-fact-audit.md` — 14-project corpus-scan results for the eight domain-fact tables: corpus inventory, per-table findings, two defects found and fixed, bounds on what a corpus can prove, and the editor.construct.net validation channel. The two script tables (`SCRIPT_SOURCE_EXTENSIONS`, `SCRIPT_FILE_TYPE_EXTENSIONS`) were added #73/#74; the scanner grew to match and the sections gained a two-provenance warning in #77 (#68 #73 #74 #77)
 
 ## Process
 

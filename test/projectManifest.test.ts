@@ -617,7 +617,7 @@ describe("deriveExpectedImages (#68)", () => {
     expect(images).to.deep.equal([{ stem: "foo", ext: ".jpg", context: "Foo" }]);
   });
 
-  it("single-image branch, absent fileType → one ExpectedImage with ext: undefined (pre-r407 legacy node)", () => {
+  it("single-image branch, absent fileType → one ExpectedImage with ext: undefined (pre-r402 legacy node)", () => {
     const images = deriveExpectedImages({ name: "Foo", image: {} });
     expect(images).to.deep.equal([{ stem: "foo", ext: undefined, context: "Foo" }]);
 
@@ -668,7 +668,7 @@ describe("deriveExpectedImages (#68)", () => {
 });
 
 describe("detectImageDrift: legacy (fileType-less) stem matching (#68)", () => {
-  // A pre-r407-shaped object type: a single animation frame with no fileType field at all.
+  // A pre-r402-shaped object type: a single animation frame with no fileType field at all.
   const legacyObjectType = {
     name: "Bar",
     animations: {
