@@ -686,3 +686,53 @@ describe("openProject — crash fix: non-.json files under objectTypes/ and layo
     }
   });
 });
+
+// ─── F5: findAllScripts() authored vs. generated .js (T4, #73) ──────────────
+
+describe("openProject — findAllScripts() selects .js/.ts source and drops generated .js output", () => {
+  it("OP-77: returns main.ts, unpaired standalone.js, legacy.ts (not legacy.js), and sub/helper.js; excludes objects.d.ts and ts-defs/generated.d.ts", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-scriptexts-"));
+    try {
+      const scriptsDir = path.join(tmpDir, C3_ROOT_FILE_FOLDERS.script);
+      const subDir = path.join(scriptsDir, "sub");
+      const tsDefsDir = path.join(scriptsDir, "ts-defs");
+      mkdirSync(subDir, { recursive: true });
+      mkdirSync(tsDefsDir, { recursive: true });
+
+      // Authored .ts — always returned.
+      writeFileSync(path.join(scriptsDir, "main.ts"), "export {};");
+      // Authored .js with no same-basename .ts beside it — genuinely authored, now returned
+      // (the behaviour change: findAllScripts previously omitted this incorrectly).
+      writeFileSync(path.join(scriptsDir, "standalone.js"), "export {};");
+      // A .js/.ts pair — the .js is compiled output and must be dropped; the .ts is kept.
+      writeFileSync(path.join(scriptsDir, "legacy.js"), "export {};");
+      writeFileSync(path.join(scriptsDir, "legacy.ts"), "export {};");
+      // A stray hand-authored .d.ts sitting loose directly under scriptsDir — excluded.
+      writeFileSync(path.join(scriptsDir, "objects.d.ts"), "export {};");
+      // A generated .d.ts under ts-defs/ — the directory is pruned, never even reached.
+      writeFileSync(path.join(tsDefsDir, "generated.d.ts"), "export {};");
+      // A nested subfolder with its own unpaired .js — proves the per-directory grouping
+      // holds through recursion: this helper.js must NOT be cancelled by legacy.ts's sibling
+      // .js in a different directory, nor cancel out with any .ts of the same basename
+      // elsewhere.
+      writeFileSync(path.join(subDir, "helper.js"), "export {};");
+
+      const proj = openProject(tmpDir);
+      const basenames = proj.findAllScripts().map((p) => path.basename(p)).sort();
+
+      expect(basenames).to.deep.equal(["helper.js", "legacy.ts", "main.ts", "standalone.js"]);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("OP-78: findAllScripts() on a temp dir with no scripts subfolder returns [] (graceful-empty)", () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-noscripts2-"));
+    try {
+      const emptyProj = openProject(tmpDir);
+      expect(emptyProj.findAllScripts()).to.deep.equal([]);
+    } finally {
+      rmdirSync(tmpDir);
+    }
+  });
+});
