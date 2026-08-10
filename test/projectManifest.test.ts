@@ -17,6 +17,7 @@ import {
   C3_ROOT_FILE_FOLDERS,
   TIMELINE_TRANSITIONS_FOLDER,
   IMAGE_FILE_TYPE_EXTENSIONS,
+  SCRIPT_FILE_TYPE_EXTENSIONS,
   walkManifestNameTree,
   walkDiskNameTree,
   walkDiskFileTree,
@@ -517,10 +518,10 @@ describe("F4: image-derived drift", () => {
   });
 
   it("F4-7: IMAGE_FILE_TYPE_EXTENSIONS exports png/jpeg/svg+xml/webp", () => {
-    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/png"]).to.equal("png");
-    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/jpeg"]).to.equal("jpg");
-    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/svg+xml"]).to.equal("svg");
-    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/webp"]).to.equal("webp");
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/png"]).to.equal(".png");
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/jpeg"]).to.equal(".jpg");
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/svg+xml"]).to.equal(".svg");
+    expect(IMAGE_FILE_TYPE_EXTENSIONS["image/webp"]).to.equal(".webp");
   });
 
   it("F4-8: single-image branch resolves extension from fileType (jpeg→.jpg, svg→.svg, webp→.webp, png→.png)", () => {
@@ -543,9 +544,9 @@ describe("F4: image-derived drift", () => {
   });
 
   it("F4-10: absent fileType on single-image branch renders the labelled legacy default, no throw", () => {
-    expect(deriveExpectedImageNames({ name: "Foo", image: {} })).to.deep.equal([`foo.${C3_LEGACY_IMAGE_EXTENSION}`]);
+    expect(deriveExpectedImageNames({ name: "Foo", image: {} })).to.deep.equal([`foo${C3_LEGACY_IMAGE_EXTENSION}`]);
     expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: null } })).to.deep.equal([
-      `foo.${C3_LEGACY_IMAGE_EXTENSION}`,
+      `foo${C3_LEGACY_IMAGE_EXTENSION}`,
     ]);
   });
 
@@ -561,7 +562,7 @@ describe("F4: image-derived drift", () => {
         subfolders: [],
       },
     };
-    expect(deriveExpectedImageNames(ot)).to.deep.equal([`bar-idle-000.${C3_LEGACY_IMAGE_EXTENSION}`]);
+    expect(deriveExpectedImageNames(ot)).to.deep.equal([`bar-idle-000${C3_LEGACY_IMAGE_EXTENSION}`]);
   });
 
   it("F4-13: unknown MIME on animation frame throws with 'unknown'", () => {
@@ -613,7 +614,7 @@ describe("F4: image-derived drift", () => {
 describe("deriveExpectedImages (#68)", () => {
   it("single-image branch, mapped fileType → one ExpectedImage with the resolved ext", () => {
     const images = deriveExpectedImages({ name: "Foo", image: { fileType: "image/jpeg" } });
-    expect(images).to.deep.equal([{ stem: "foo", ext: "jpg", context: "Foo" }]);
+    expect(images).to.deep.equal([{ stem: "foo", ext: ".jpg", context: "Foo" }]);
   });
 
   it("single-image branch, absent fileType → one ExpectedImage with ext: undefined (pre-r407 legacy node)", () => {
@@ -633,7 +634,7 @@ describe("deriveExpectedImages (#68)", () => {
       },
     };
     const images = deriveExpectedImages(ot);
-    expect(images).to.deep.equal([{ stem: "bar-run-000", ext: "webp", context: "Bar/Run#0" }]);
+    expect(images).to.deep.equal([{ stem: "bar-run-000", ext: ".webp", context: "Bar/Run#0" }]);
   });
 
   it("animation frame, absent fileType → per-frame ExpectedImage with ext: undefined (independent of the single-image branch)", () => {
@@ -661,8 +662,8 @@ describe("deriveExpectedImages (#68)", () => {
     expect(() => deriveExpectedImages(ot)).to.throw(/unknown/i);
   });
 
-  it("C3_LEGACY_IMAGE_EXTENSION is the documented default extension ('png')", () => {
-    expect(C3_LEGACY_IMAGE_EXTENSION).to.equal("png");
+  it("C3_LEGACY_IMAGE_EXTENSION is the documented default extension ('.png')", () => {
+    expect(C3_LEGACY_IMAGE_EXTENSION).to.equal(".png");
   });
 });
 
@@ -697,7 +698,7 @@ describe("detectImageDrift: legacy (fileType-less) stem matching (#68)", () => {
     const missing = missingResult!.entries.filter((e) => e.kind === "missing");
     expect(missingResult!.entries).to.deep.equal(missing);
     expect(missing.length).to.equal(1);
-    expect(missing[0].name).to.equal(`bar-idle-000.${C3_LEGACY_IMAGE_EXTENSION}`);
+    expect(missing[0].name).to.equal(`bar-idle-000${C3_LEGACY_IMAGE_EXTENSION}`);
 
     // Image present but under an unexpected stem: stem matching must not treat "some file
     // exists somewhere" as satisfying the expectation — the expected stem is still missing,
@@ -709,7 +710,7 @@ describe("detectImageDrift: legacy (fileType-less) stem matching (#68)", () => {
     const renamedMissing = renamedResult!.entries.filter((e) => e.kind === "missing");
     const renamedUntracked = renamedResult!.entries.filter((e) => e.kind === "untracked");
     expect(renamedMissing.length).to.equal(1);
-    expect(renamedMissing[0].name).to.equal(`bar-idle-000.${C3_LEGACY_IMAGE_EXTENSION}`);
+    expect(renamedMissing[0].name).to.equal(`bar-idle-000${C3_LEGACY_IMAGE_EXTENSION}`);
     expect(renamedUntracked.length).to.equal(1);
     expect(renamedUntracked[0].name).to.equal("unexpected-stem.jpg");
   });
@@ -945,5 +946,50 @@ describe("validateProjectManifest — shape validation (#58)", () => {
       expect(issue.path === "" || issue.message.startsWith(issue.path), JSON.stringify(issue)).to.equal(true);
       expect(ALL_RULE_IDS.includes(issue.rule), JSON.stringify(issue)).to.equal(true);
     }
+  });
+});
+
+describe("dotted-extension convention (#73/#74)", () => {
+  it("A5: SCRIPT_FILE_TYPE_EXTENSIONS maps both C3 script MIMEs to dotted extensions", () => {
+    expect(SCRIPT_FILE_TYPE_EXTENSIONS["application/javascript"]).to.equal(".js");
+    expect(SCRIPT_FILE_TYPE_EXTENSIONS["application/typescript"]).to.equal(".ts");
+  });
+
+  it("A6: every SCRIPT_FILE_TYPE_EXTENSIONS value starts with a leading dot", () => {
+    for (const ext of Object.values(SCRIPT_FILE_TYPE_EXTENSIONS)) {
+      expect(ext.startsWith("."), ext).to.equal(true);
+    }
+  });
+
+  it("A8: IMAGE_FILE_TYPE_EXTENSIONS, C3_LEGACY_IMAGE_EXTENSION, and a derived ExpectedImage.ext all start with a leading dot", () => {
+    for (const ext of Object.values(IMAGE_FILE_TYPE_EXTENSIONS)) {
+      expect(ext.startsWith("."), ext).to.equal(true);
+    }
+    expect(C3_LEGACY_IMAGE_EXTENSION.startsWith(".")).to.equal(true);
+
+    const images = deriveExpectedImages({ name: "Foo", image: { fileType: "image/jpeg" } });
+    expect(typeof images[0].ext).to.equal("string");
+    expect((images[0].ext as string).startsWith(".")).to.equal(true);
+  });
+
+  it("A9: deriveExpectedImageNames output is byte-identical to the pre-#74 filenames despite the dotted intermediate representation", () => {
+    // Single top-level image, mapped fileType.
+    expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/png" } })).to.deep.equal(["foo.png"]);
+
+    // Animation with frames, mixed formats.
+    const animOt = {
+      name: "Bar",
+      animations: {
+        items: [{ name: "Run", frames: [{ fileType: "image/jpeg" }, { fileType: "image/webp" }] }],
+        subfolders: [],
+      },
+    };
+    expect(deriveExpectedImageNames(animOt)).to.deep.equal(["bar-run-000.jpg", "bar-run-001.webp"]);
+
+    // Absent fileType (legacy fallback to C3_LEGACY_IMAGE_EXTENSION).
+    expect(deriveExpectedImageNames({ name: "Foo", image: {} })).to.deep.equal(["foo.png"]);
+
+    // Non-default (.jpg) case.
+    expect(deriveExpectedImageNames({ name: "Foo", image: { fileType: "image/jpeg" } })).to.deep.equal(["foo.jpg"]);
   });
 });

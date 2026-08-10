@@ -3,10 +3,12 @@ import path from "node:path";
 import {
   Family,
   ObjectType,
+  filterAuthoredScriptPaths,
   find_all_files_path,
   find_all_layouts_path,
   find_all_objectTypes_path,
   isEditorLocalPath,
+  isScriptSourceName,
 } from "./layouts.js";
 import { find_all_eventsheets_path } from "./eventSheets.js";
 import { AddonAttribution, collectAddonAttribution, findAllAddons } from "./addons.js";
@@ -209,14 +211,19 @@ export interface C3Project {
   findAllFamilies(sub?: string): string[];
 
   /**
-   * Return all source script paths under `scriptsDir` (or its `sub` subdirectory).
-   * Returns only `.ts` source files — excludes generated `.d.ts` declaration files.
+   * Return all authored source script paths under `scriptsDir` (or its `sub` subdirectory).
+   * Selects both {@link SCRIPT_SOURCE_EXTENSIONS} (`.js` and `.ts`) via
+   * {@link isScriptSourceName}, which also excludes generated `.d.ts` declaration files.
    * `ts-defs/` (where those declaration files live) is an editor-local directory
    * (`EDITOR_LOCAL_EXCLUSIONS.dirs`), so {@link find_all_files_path} never descends into
    * it — the tree is excluded by the directory prune, not by the `.d.ts` suffix filter.
    * The suffix filter independently excludes a stray hand-authored declaration file sitting
    * directly under `scriptsDir`. A caller that deliberately needs the `ts-defs/` contents
    * passes {@link find_all_files_path}'s `descend` parameter (issue #63; see ADR 0020).
+   * The result is then passed through {@link filterAuthoredScriptPaths}, which drops a
+   * generated `.js` build output sitting beside its same-basename `.ts` — C3's own
+   * folder-project reconcile rule (see {@link isGeneratedScriptOutput}), applied per
+   * directory. A `.js` with no `.ts` sibling is genuinely authored and is returned.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `scriptsDir` (default `""`).
@@ -424,13 +431,18 @@ export function openProject(root: string): C3Project {
     },
 
     findAllScripts(sub?: string): string[] {
-      // Source scripts are .ts files. ts-defs/ (where generated .d.ts declaration files live)
-      // is an editor-local dir, so find_all_files_path prunes it before recursing — no
-      // generated .d.ts ever reaches this predicate. The !file.endsWith(".d.ts") clause is
-      // what excludes a stray hand-authored .d.ts sitting directly under scriptsDir. A caller
-      // who needs ts-defs/ passes find_all_files_path's descend parameter (#63; see ADR 0020).
-      return findInSection(scriptsDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".ts") && !file.endsWith(".d.ts") && !isEditorLocalPath(file)),
+      // Source scripts are .js/.ts files (isScriptSourceName), which also excludes .d.ts.
+      // ts-defs/ (where generated .d.ts declaration files live) is an editor-local dir, so
+      // find_all_files_path prunes it before recursing — no generated .d.ts ever reaches this
+      // predicate. isScriptSourceName's own .d.ts exclusion is what excludes a stray
+      // hand-authored .d.ts sitting directly under scriptsDir. A caller who needs ts-defs/
+      // passes find_all_files_path's descend parameter (#63; see ADR 0020). The path list is
+      // then filtered through filterAuthoredScriptPaths, which drops a generated .js sitting
+      // beside its same-basename .ts — C3's own folder-project reconcile rule.
+      return filterAuthoredScriptPaths(
+        findInSection(scriptsDir, sub, (dir) =>
+          find_all_files_path(dir, (file) => isScriptSourceName(file) && !isEditorLocalPath(file)),
+        ),
       );
     },
 

@@ -228,18 +228,35 @@ project.findAllTimelines();
 | `findAllTimelines` | `find_all_files_path` | `.json` non-editor-local files |
 | `findAllFlowcharts` | `find_all_files_path` | `.json` non-editor-local files |
 | `findAllModels3d` | `find_all_files_path` | `.json` non-editor-local files |
-| `findAllScripts` | `find_all_files_path` | `.ts` source files only — excludes `.d.ts` declaration files (all of which live under `ts-defs/`) |
+| `findAllScripts` | `find_all_files_path` + `filterAuthoredScriptPaths` | `.js`/`.ts` source files (`isScriptSourceName`) — excludes `.d.ts` declarations, then drops generated `.js` build output |
 
-`findAllScripts` returns only `.ts` source files, which independently excludes
-`ts-defs/`'s `.d.ts` files by extension — but the directory is also pruned
-before the walk ever reaches it: `ts-defs` is in `EDITOR_LOCAL_EXCLUSIONS.dirs`,
-so `find_all_files_path`'s directory-descent rule skips the whole subtree, and
-no basename inside it is ever offered to the `.ts` predicate. The `.d.ts`
-suffix clause is not dead weight, though — it independently guards a stray
-hand-authored declaration file placed directly under `scriptsDir`, outside
-`ts-defs/`, which the directory prune would not catch. A caller that needs
-`ts-defs/`'s `.d.ts` files can opt into descending there; see [api-guide.md —
+> [!NOTE]
+> **Behavior change (issue #73/#74).** `findAllScripts` previously returned
+> `.ts` files only. It now returns **both** `.js` and `.ts` authored source —
+> see below for what "authored" excludes.
+
+`findAllScripts` selects both `.js` and `.ts` files via `isScriptSourceName`
+(see [api-guide.md — Script source classification](api-guide.md#script-source-classification)),
+which independently excludes `.d.ts` files by suffix — but `ts-defs/`, where
+C3 writes its generated `.d.ts` typings, is also pruned before the walk ever
+reaches it: `ts-defs` is in `EDITOR_LOCAL_EXCLUSIONS.dirs`, so
+`find_all_files_path`'s directory-descent rule skips the whole subtree, and no
+basename inside it is ever offered to the predicate. The `.d.ts` suffix clause
+is not dead weight, though — it independently guards a stray hand-authored
+declaration file placed directly under `scriptsDir`, outside `ts-defs/`,
+which the directory prune would not catch. A caller that needs `ts-defs/`'s
+`.d.ts` files can opt into descending there; see [api-guide.md —
 Reachability is not classification](api-guide.md#reachability-is-not-classification).
+
+The raw `.js`/`.ts` list is then passed through `filterAuthoredScriptPaths`,
+which drops a generated `.js` sitting beside its same-basename `.ts` — C3's
+own folder-project reconcile rule (`isGeneratedScriptOutput`), applied per
+directory. A `.js` with no `.ts` sibling is genuinely authored and is
+returned. See [api-guide.md — Script source classification](api-guide.md#script-source-classification)
+for the full contract and [domain-fact-audit.md](domain-fact-audit.md#script_source_extensions-via-isscriptsourcename)
+for the corpus evidence that this widening left every corpus project's
+`findAllScripts` output byte-for-byte unchanged (every corpus `.js` has a
+`.ts` sibling).
 
 ## Drift detection
 

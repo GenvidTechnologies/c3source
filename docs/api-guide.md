@@ -6,6 +6,7 @@ that work with C3 folder-project files outside the editor.
 - [SID traversal](#sid-traversal) — collect and path-label every `sid` in a JSON subtree
 - [Editor-local classification](#editor-local-classification) — filter `uistate/`, `ts-defs/`, generated files
 - [Minified-source classification](#minified-source-classification) — identify project source C3 writes minified (`*.brush.json`)
+- [Script source classification](#script-source-classification) — identify authored `.js`/`.ts` script source and drop generated `.js` build output
 - [Project handle](api-guide-project.md) — openProject(root), C3Project path fields, file finders, drift delegation
 - [Project manifest model and drift detection](api-guide-manifest.md) — parse `project.c3proj`, detect manifest/disk divergence
 - [Event-sheet extraction](api-guide-extraction.md) — visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions
@@ -239,3 +240,71 @@ because they are editor-local and therefore out of this predicate's scope
 
 Detection only — c3source ships no minified writer. A caller that needs to
 write a `.brush.json` file composes `JSON.stringify(value)` directly.
+
+---
+
+## Script source classification
+
+C3 accepts two script languages under `scripts/` — JavaScript and
+TypeScript — and its own folder-project reconcile treats a `.js` file as
+**generated** build output, not authored source, whenever a same-basename
+`.ts` file sits beside it. These functions classify script basenames the same
+way C3 does, so a walk over `scripts/` doesn't have to hardcode the extension
+set or re-derive the generated/authored distinction.
+
+### Exports
+
+```ts
+const SCRIPT_SOURCE_EXTENSIONS: readonly [".js", ".ts"]
+
+function isScriptSourceName(name: string): boolean
+function isGeneratedScriptOutput(name: string, siblings: Iterable<string>): boolean
+function filterAuthoredScriptPaths(paths: string[]): string[]
+```
+
+`isScriptSourceName` accepts a **bare basename** (matching
+`isEditorLocalPath`'s and `isMinifiedSourcePath`'s argument contract) and
+returns `true` for a `SCRIPT_SOURCE_EXTENSIONS` extension, tested
+case-insensitively, **excluding** `.d.ts` declaration files. `ts-defs/` —
+where C3 writes its generated `.d.ts` typings — is already pruned by
+directory in `find_all_files_path`, so the `.d.ts` exclusion here only ever
+fires on a stray hand-authored declaration file sitting loose directly under
+`scripts/`.
+
+`isGeneratedScriptOutput(name, siblings)` is C3's own folder-project reconcile
+rule, not a heuristic: a `.js` file is treated as generated build output when
+`siblings` (bare basenames from the same directory) contains a same-basename
+`.ts` file. A `.ts` file is never treated as generated, regardless of any
+`.js` sibling.
+
+`filterAuthoredScriptPaths(paths)` applies that rule over a list of file paths
+(as returned by `find_all_files_path`), grouping by `path.dirname` first so a
+`.js` in one directory is never cancelled by a same-basename `.ts` in
+another — dropping every generated `.js` while preserving input order.
+
+### Usage: walking `scripts/` for authored source only
+
+```ts
+import {
+  find_all_files_path,
+  isScriptSourceName,
+  filterAuthoredScriptPaths,
+  isEditorLocalPath,
+} from "@genvidtech/c3source";
+
+const scripts = filterAuthoredScriptPaths(
+  find_all_files_path(scriptsDir, (name) => isScriptSourceName(name) && !isEditorLocalPath(name)),
+);
+// "main.ts"              → included (authored TypeScript)
+// "main.js"               → excluded (generated: "main.ts" is a sibling)
+// "legacy.js"             → included (no ".ts" sibling — genuinely authored)
+// "objects.d.ts"          → excluded (declaration file)
+// "ts-defs/objects.d.ts"  → never reached — ts-defs/ is editor-local, pruned before the walk
+```
+
+This is exactly how `C3Project.findAllScripts` is built — see
+[api-guide-project.md — File finders](api-guide-project.md#file-finders).
+
+Added for issue #73/#74; see [domain-fact-audit.md](domain-fact-audit.md#script_source_extensions-via-isscriptsourcename)
+for the corpus/bundle evidence behind the extension set and the r433 version
+pin, and ADR 0024 for the design rationale.

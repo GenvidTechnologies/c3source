@@ -12,6 +12,7 @@ APIs see [api-guide.md](api-guide.md).
 - [Flatteners](#flatteners)
 - [Drift detection](#drift-detection)
 - [Migrating from 0.x](#migrating-from-0x)
+- [Migrating to 2.0](#migrating-to-20)
 
 ---
 
@@ -140,6 +141,25 @@ keys; the on-disk folders are `scripts`/`icons`. The five inferred mappings
 (`sound`, `music`, `video`, `font`, `general`) follow the same pattern but have
 not been validated against a fixture with those assets populated. If a mapping
 is wrong for your project, open an issue.
+
+### Script file types
+
+```ts
+/** C3 script C3FileEntry.type MIME -> on-disk extension, dotted. */
+const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
+  "application/javascript": ".js",
+  "application/typescript": ".ts",
+};
+```
+
+Maps the `type` MIME on a `rootFileFolders.script` entry (a `C3FileEntry`) to
+its on-disk extension — the script-source counterpart of
+`IMAGE_FILE_TYPE_EXTENSIONS` below, with one behavioral difference: an
+unmapped `type` here is a **silent miss**, never a throw (`IMAGE_FILE_TYPE_EXTENSIONS`
+throws on an unmapped MIME — see [Images drift](#images-drift)). C3 derives
+both the extension and the MIME from a single ternary, so exactly two script
+languages exist; `.ts` is only recognized from C3 release r433 onward. See
+[domain-fact-audit.md](domain-fact-audit.md) for the corpus/bundle evidence.
 
 ## Parsing
 
@@ -520,7 +540,7 @@ against the flat files in `images/`.
 /** One expected on-disk image, as derived structurally from an object type. */
 interface ExpectedImage {
   stem: string;    // filename stem, no extension: "bullet-default-000", "tiledbackground"
-  ext?: string;     // resolved from fileType; absent for pre-r402 nodes that record no MIME
+  ext?: string;     // dotted (".png"), resolved from fileType; absent for pre-r402 nodes that record no MIME
   context: string; // diagnostic locator: "TiledBackground" or "Bullet/Default#0"
 }
 
@@ -528,11 +548,16 @@ deriveExpectedImages(objectType: Record<string, unknown>): ExpectedImage[]
 deriveExpectedImageNames(objectType: Record<string, unknown>): string[]
 ```
 
+> [!NOTE]
+> **Breaking change in 2.0.0.** `ext` is now a **dotted** extension (`".png"`,
+> not `"png"`) — see [Migrating to 2.0](#migrating-to-20) below.
+
 `deriveExpectedImages` is the structured form — one `ExpectedImage` per
 expected file, carrying `ext` separately so a caller can tell "resolved from a
 known `fileType`" apart from "no `fileType` recorded" without string-parsing a
-filename. `deriveExpectedImageNames` is a thin renderer over it: it joins
-`stem` and `ext` into a plain filename string, always (see below for what it
+filename. `deriveExpectedImageNames` is a thin renderer over it: it
+concatenates `stem` and `ext` directly (no separator — `ext` already carries
+its leading dot) into a plain filename string, always (see below for what it
 renders when `ext` is absent). `detectImageDrift` calls the structured form
 directly, for the reason covered below.
 
@@ -540,8 +565,8 @@ directly, for the reason covered below.
 
 | Object type shape | Expected images |
 |---|---|
-| Has `image` field (NinePatch, TiledBackground, Tilemap, …) | `<lowercased-name>.<ext>` |
-| Has `animations` field (Sprite, …) | `<lowercased-name>-<lowercased-animation>-<frame3>.<ext>` per frame |
+| Has `image` field (NinePatch, TiledBackground, Tilemap, …) | `<lowercased-name><ext>` |
+| Has `animations` field (Sprite, …) | `<lowercased-name>-<lowercased-animation>-<frame3><ext>` per frame |
 | Neither (Text, JSON, …) | None |
 
 The file extension `<ext>` is derived from each image member's `fileType` MIME via the exported
@@ -549,10 +574,10 @@ The file extension `<ext>` is derived from each image member's `fileType` MIME v
 
 | MIME | Extension |
 |---|---|
-| `image/png` | `png` |
-| `image/jpeg` | `jpg` |
-| `image/svg+xml` | `svg` |
-| `image/webp` | `webp` |
+| `image/png` | `.png` |
+| `image/jpeg` | `.jpg` |
+| `image/svg+xml` | `.svg` |
+| `image/webp` | `.webp` |
 
 For the `image` case the MIME comes from the top-level `image.fileType` field. For the
 `animations` case it comes from each individual frame's own `fileType` field (frames within the
@@ -573,7 +598,7 @@ zero-based frame index zero-padded to 3 digits (`000`, `001`, …).
   alternative — current C3 writes all three side by side, so their presence
   says nothing about a file's age.) This absent case is **not** treated as
   malformed: `ext` on the `ExpectedImage` is `undefined`, and the exported
-  constant `C3_LEGACY_IMAGE_EXTENSION` (`"png"`) is what c3source assumes for
+  constant `C3_LEGACY_IMAGE_EXTENSION` (`".png"`) is what c3source assumes for
   these legacy nodes. That value is **not** a guess — C3's own project loader
   applies the identical fallback (`t.fileType ?? "image/png"`, unchanged from
   r402 through r447), so c3source is matching the editor's documented
@@ -586,18 +611,18 @@ zero-based frame index zero-padded to 3 digits (`000`, `001`, …).
 
 - `deriveExpectedImageNames` answers *"what filename would C3 have
   written?"* — it must always answer with a concrete name, so an absent
-  `fileType` renders as `<stem>.${C3_LEGACY_IMAGE_EXTENSION}` (e.g.
+  `fileType` renders as `${stem}${C3_LEGACY_IMAGE_EXTENSION}` (e.g.
   `bullet-default-000.png`).
 - `detectImageDrift` answers *"is anything missing or orphaned?"* — it must
   never *fabricate* a finding from that default, so it does **not** call
   `deriveExpectedImageNames`. It calls `deriveExpectedImages` directly and
-  matches an entry with a known `ext` on the full filename `<stem>.<ext>`
+  matches an entry with a known `ext` on the full filename `<stem><ext>`
   (exact — the #29 regression guard: a real extension mismatch still reports
   drift), but matches an entry with `ext: undefined` on its **stem** against
   the on-disk `images/` filenames: if some on-disk file shares that stem
   (whatever its actual extension), that file counts as present and no drift is
   reported; only if nothing on disk shares the stem does it fall back to
-  `<stem>.${C3_LEGACY_IMAGE_EXTENSION}`, which then correctly reports as
+  `${stem}${C3_LEGACY_IMAGE_EXTENSION}`, which then correctly reports as
   `missing`.
 
   `detectImageDrift` is strictly the **more conservative** of the two — the
@@ -695,3 +720,42 @@ The structured result additionally exposes:
 - **Container referential integrity** — container members naming absent object types (`kind: "dangling-ref"`, `section: "containers"`).
 - **Images drift** — expected vs actual `images/` files derived from object types (`section: "images"`).
 - **`families` and `models3d`** sections (previously omitted from drift detection).
+
+## Migrating to 2.0
+
+Version 2.0.0 is a **breaking major** (issue #74). The change: every C3
+domain-fact table and field that represents a file extension now carries a
+**leading dot**, matching Node's own `path.extname`/`path.parse().ext`
+convention instead of a bare suffix:
+
+| Symbol | 1.x | 2.x |
+|---|---|---|
+| `IMAGE_FILE_TYPE_EXTENSIONS` values | `"png"`, `"jpg"`, `"svg"`, `"webp"` | `".png"`, `".jpg"`, `".svg"`, `".webp"` |
+| `C3_LEGACY_IMAGE_EXTENSION` | `"png"` | `".png"` |
+| `ExpectedImage.ext` | `"png"` (no dot) | `".png"` (dotted) |
+| `SCRIPT_FILE_TYPE_EXTENSIONS` values | *(did not exist in 1.x)* | `".js"`, `".ts"` |
+
+**Migration:** any code that built a filename by joining stem and extension
+with an explicit dot now double-dots. Change
+
+```ts
+const filename = `${stem}.${ext}`; // 1.x — WRONG in 2.x: yields "bullet-default-000..png"
+```
+
+to
+
+```ts
+const filename = `${stem}${ext}`; // 2.x — ext already carries its leading dot
+```
+
+**Rendered output did not change.** `deriveExpectedImageNames` still returns
+`"bullet-default-000.png"` byte-for-byte in 2.x — only the *intermediate*
+`ExpectedImage.ext` representation moved from `"png"` to `".png"`. A caller
+that only ever consumed `deriveExpectedImageNames`'s string output (not the
+structured `ExpectedImage.ext` field, and not `IMAGE_FILE_TYPE_EXTENSIONS`
+directly) is unaffected by this migration.
+
+See ADR 0024 (`docs/decisions/`) for the rationale — consistency with
+`path.extname`, and the new `SCRIPT_FILE_TYPE_EXTENSIONS` table adopting the
+dotted form from the start rather than shipping inconsistent with the tables
+that came before it.
