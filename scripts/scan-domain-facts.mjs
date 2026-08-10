@@ -1,7 +1,9 @@
-// Corpus scanner for SIX exported C3 domain-fact tables (ADR 0008):
+// Corpus scanner for EIGHT exported C3 domain-fact tables (ADR 0008):
 // EVENTVAR_REFERENCE_ACES, COMPARISON_OPERATORS, IMAGE_FILE_TYPE_EXTENSIONS,
-// EDITOR_FIELD_RULES, EDITOR_LOCAL_EXCLUSIONS (via isEditorLocalPath), and
-// C3_MINIFIED_SOURCE_SUFFIXES (via isMinifiedSourcePath).
+// EDITOR_FIELD_RULES, EDITOR_LOCAL_EXCLUSIONS (via isEditorLocalPath),
+// C3_MINIFIED_SOURCE_SUFFIXES (via isMinifiedSourcePath),
+// SCRIPT_SOURCE_EXTENSIONS (via isScriptSourceName), and
+// SCRIPT_FILE_TYPE_EXTENSIONS.
 //
 // Why this exists (durable asset, not scaffolding): ADR 0008's "Consequences"
 // section (docs/decisions/0008-c3-domain-fact-tables.md:52-79) records that the
@@ -11,7 +13,7 @@
 // was actually a per-project *default* (the `"Functions"` incident). The rule
 // that leaves: before pinning a value, ask what in C3 determines it, and
 // re-validate on every C3 version bump against real, varied projects. This
-// script is the mechanism — one scanner per version bump, not six ad hoc ones.
+// script is the mechanism — one scanner per version bump, not eight ad hoc ones.
 //
 // THE GOVERNING RULE this script is built around: the scanner reports
 // PARTITIONS, the maintainer produces the VERDICT. Every classification below
@@ -28,7 +30,7 @@
 // signal that first surfaced `Functions`." Every probe here does the same:
 // raw frequency, never a deduped or normalized view.
 //
-// Corpus confinement: all six probes walk ONLY the canonical C3 source folders
+// Corpus confinement: all eight probes walk ONLY the canonical C3 source folders
 // (derived from `C3_SECTION_FOLDERS` / `C3_ROOT_FILE_FOLDERS` / `IMAGES_FOLDER`),
 // via the exported `find_all_files_path`. Most corpus repos have `project.c3proj`
 // sitting at a *repo* root next to build output (e.g. `burbank-build-android/`,
@@ -69,12 +71,16 @@ const {
   IMAGES_FOLDER,
   IMAGE_FILE_TYPE_EXTENSIONS,
   PROJECT_MANIFEST_FILE,
+  SCRIPT_FILE_TYPE_EXTENSIONS,
+  SCRIPT_SOURCE_EXTENSIONS,
   comparisonSymbol,
   find_all_files_path,
   hasActions,
   hasConditions,
   isEditorLocalPath,
+  isGeneratedScriptOutput,
   isMinifiedSourcePath,
+  isScriptSourceName,
   readProjectManifest,
   readSourceDocs,
   visitEvents,
@@ -359,6 +365,114 @@ function scanMinified(result, projectDir) {
   }
 }
 
+// ─── probe 7: scriptSource ──────────────────────────────────────────────────
+
+/** Bucket a bare basename into the extension key used by the scriptSource partition.
+ *  `.d.ts` is its own bucket (never merged into `.ts`) because `path.extname` alone
+ *  returns `.ts` for `foo.d.ts` — collapsing that would put UNTABLED (`.d.ts`, per
+ *  `isScriptSourceName`) and TABLED (`.ts`) files under one key with one verdict,
+ *  which the {count, tabled} shape below cannot represent. */
+function scriptExtBucket(base) {
+  const lower = base.toLowerCase();
+  if (lower.endsWith(".d.ts")) return ".d.ts";
+  return path.extname(lower) || "(none)";
+}
+
+function bumpScriptSource(map, key, tabled, release) {
+  let e = map.get(key);
+  if (!e) {
+    e = { count: 0, tabled, releases: new Set() };
+    map.set(key, e);
+  }
+  e.count++;
+  if (release !== undefined) e.releases.add(release);
+}
+
+/**
+ * Walks the project's on-disk `scripts/` folder (`C3_ROOT_FILE_FOLDERS.script`,
+ * NOT hardcoded) and partitions every file found by `extension x isScriptSourceName`
+ * verdict — any extension present that is not classified as script source is the
+ * shape of a missing table entry. Additionally tallies, among `.js` files, how many
+ * are paired with a same-basename `.ts` sibling (generated build output, per the
+ * imported `isGeneratedScriptOutput` — never re-derived here) vs unpaired.
+ */
+function scanScriptSource(result, projectDir, release) {
+  const scriptsDir = path.join(projectDir, C3_ROOT_FILE_FOLDERS.script);
+  if (!existsSync(scriptsDir)) return;
+  const files = find_all_files_path(scriptsDir, () => true);
+
+  const siblingsByDir = new Map();
+  for (const f of files) {
+    const dir = path.dirname(f);
+    const base = path.basename(f);
+    const siblings = siblingsByDir.get(dir);
+    if (siblings) siblings.push(base);
+    else siblingsByDir.set(dir, [base]);
+  }
+
+  for (const f of files) {
+    const base = path.basename(f);
+    result.scriptSourceFileCount++;
+    const bucket = scriptExtBucket(base);
+    const tabled = isScriptSourceName(base);
+    bumpScriptSource(result.scriptSource, bucket, tabled, release);
+
+    if (bucket === ".js") {
+      const siblings = siblingsByDir.get(path.dirname(f)) ?? [];
+      if (isGeneratedScriptOutput(base, siblings)) result.scriptPairing.paired++;
+      else result.scriptPairing.unpaired++;
+    }
+  }
+}
+
+// ─── probe 8: scriptFileType ────────────────────────────────────────────────
+
+/**
+ * Structural walk over `manifest.rootFileFolders.script`'s `{items, subfolders}`
+ * tree, mirroring `walkManifestFileTree`'s recursion but returning the raw `type`
+ * (MIME) field that walk drops — this probe needs the raw value (or its absence)
+ * as evidence, not just the name.
+ */
+function collectScriptFileTypeNodes(folder) {
+  const nodes = [];
+  if (!folder || typeof folder !== "object") return nodes;
+  for (const item of Array.isArray(folder.items) ? folder.items : []) {
+    nodes.push({ type: item && typeof item === "object" ? item.type : undefined, name: item?.name });
+  }
+  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
+    nodes.push(...collectScriptFileTypeNodes(sub));
+  }
+  return nodes;
+}
+
+function bumpScriptFileType(map, key, mapped, release) {
+  let e = map.get(key);
+  if (!e) {
+    e = { count: 0, mapped, releases: new Set() };
+    map.set(key, e);
+  }
+  e.count++;
+  if (release !== undefined) e.releases.add(release);
+}
+
+/**
+ * Walks the MANIFEST's `rootFileFolders.script` (note: manifest key is singular
+ * `script`; the on-disk folder is plural `scripts/`), partitioning declared items
+ * by `item.type` (MIME) x whether `SCRIPT_FILE_TYPE_EXTENSIONS` maps it. Items with
+ * an absent `type` bucket under the shared `ABSENT` sentinel, mirroring `imageExt`'s
+ * pre-r402 legacy-`fileType` bucket — the same shape could exist here pre-r433.
+ */
+function scanScriptFileType(result, projectDir, release, manifest) {
+  const scriptFolder = manifest && typeof manifest === "object" ? manifest.rootFileFolders?.script : undefined;
+  for (const node of collectScriptFileTypeNodes(scriptFolder)) {
+    result.scriptFileTypeCount++;
+    const key = node.type === undefined ? ABSENT : String(node.type);
+    const mapped =
+      node.type !== undefined && Object.prototype.hasOwnProperty.call(SCRIPT_FILE_TYPE_EXTENSIONS, String(node.type));
+    bumpScriptFileType(result.scriptFileType, key, mapped, release);
+  }
+}
+
 // ─── per-project orchestration ──────────────────────────────────────────────
 
 function newResult() {
@@ -371,6 +485,8 @@ function newResult() {
     imageNodeCount: 0,
     editorLocalFileCount: 0,
     minifiedJsonCount: 0,
+    scriptSourceFileCount: 0,
+    scriptFileTypeCount: 0,
     eventvar: new Map(),
     comparison: new Map(),
     imageExt: new Map(),
@@ -378,6 +494,9 @@ function newResult() {
     editorFieldsByRule: new Map(),
     editorLocal: new Map(),
     minified: { singleMin: 0, singleNotMin: 0, multiMin: 0, multiNotMin: 0, multiMinSamples: [] },
+    scriptSource: new Map(),
+    scriptPairing: { paired: 0, unpaired: 0 },
+    scriptFileType: new Map(),
     failedProbes: [],
   };
 }
@@ -441,6 +560,23 @@ function printMinifiedTable(m, total, heading) {
   }
 }
 
+function printScriptSourceTable(map, count, pairing, heading) {
+  console.log(`${heading}: ${count} file(s) under scripts/`);
+  for (const [key, e] of sortedByCount(map)) {
+    console.log(`  ${e.count}\t${key}\t${e.tabled ? "TABLED" : "UNTABLED"}`);
+  }
+  if (map.size === 0) console.log("  (no files found under scripts/)");
+  console.log(`  .js pairing (isGeneratedScriptOutput): paired=${pairing.paired}\tunpaired=${pairing.unpaired}`);
+}
+
+function printScriptFileTypeTable(map, count, heading) {
+  console.log(`${heading}: ${count} declared script item(s)`);
+  for (const [key, e] of sortedByCount(map)) {
+    console.log(`  ${e.count}\t${key}\t${e.mapped ? "MAPPED" : "UNMAPPED"}`);
+  }
+  if (map.size === 0) console.log("  (no declared script items found)");
+}
+
 /** Scan one project directory. Returns `{status:"skipped"}` or the populated result. */
 function scanProject(projectDir) {
   const manifestPath = path.join(projectDir, PROJECT_MANIFEST_FILE);
@@ -469,6 +605,10 @@ function scanProject(projectDir) {
   runProbe(projectDir, result.failedProbes, "imageExt", () => scanImageExt(result, projectDir, release));
   runProbe(projectDir, result.failedProbes, "editorLocal", () => scanEditorLocal(result, projectDir));
   runProbe(projectDir, result.failedProbes, "minified", () => scanMinified(result, projectDir));
+  runProbe(projectDir, result.failedProbes, "scriptSource", () => scanScriptSource(result, projectDir, release));
+  runProbe(projectDir, result.failedProbes, "scriptFileType", () =>
+    scanScriptFileType(result, projectDir, release, manifest),
+  );
 
   printEventVarTable(result.eventvar, result.sheetCount, result.aceCount, "TABLE EVENTVAR_REFERENCE_ACES");
   printComparisonTable(result.comparison, result.comparisonCount, "TABLE COMPARISON_OPERATORS");
@@ -476,11 +616,14 @@ function scanProject(projectDir) {
   printEditorFieldsTable(result.editorFieldsByType, result.editorFieldsByRule, "TABLE EDITOR_FIELD_RULES");
   printEditorLocalTable(result.editorLocal, result.editorLocalFileCount, "TABLE isEditorLocalPath");
   printMinifiedTable(result.minified, result.minifiedJsonCount, "TABLE isMinifiedSourcePath");
+  printScriptSourceTable(result.scriptSource, result.scriptSourceFileCount, result.scriptPairing, "TABLE SCRIPT_SOURCE_EXTENSIONS");
+  printScriptFileTypeTable(result.scriptFileType, result.scriptFileTypeCount, "TABLE SCRIPT_FILE_TYPE_EXTENSIONS");
 
   console.log(
     `SUMMARY ${projectDir}: release=${release ?? "UNKNOWN"}, sheets=${result.sheetCount}, aces=${result.aceCount}, ` +
       `comparisons=${result.comparisonCount}, imageNodes=${result.imageNodeCount}, ` +
       `editorLocalFiles=${result.editorLocalFileCount}, minifiedJson=${result.minifiedJsonCount}, ` +
+      `scriptSourceFiles=${result.scriptSourceFileCount}, scriptFileTypeItems=${result.scriptFileTypeCount}, ` +
       `failedProbes=${result.failedProbes.length > 0 ? result.failedProbes.join(",") : "none"}`,
   );
 
@@ -577,6 +720,35 @@ function mergeMinified(target, source) {
   target.multiMin += source.multiMin;
   target.multiNotMin += source.multiNotMin;
   target.multiMinSamples.push(...source.multiMinSamples);
+}
+
+function mergeScriptSource(target, source) {
+  for (const [key, e] of source) {
+    let t = target.get(key);
+    if (!t) {
+      t = { count: 0, tabled: e.tabled, releases: new Set() };
+      target.set(key, t);
+    }
+    t.count += e.count;
+    for (const r of e.releases) t.releases.add(r);
+  }
+}
+
+function mergeScriptPairing(target, source) {
+  target.paired += source.paired;
+  target.unpaired += source.unpaired;
+}
+
+function mergeScriptFileType(target, source) {
+  for (const [key, e] of source) {
+    let t = target.get(key);
+    if (!t) {
+      t = { count: 0, mapped: e.mapped, releases: new Set() };
+      target.set(key, t);
+    }
+    t.count += e.count;
+    for (const r of e.releases) t.releases.add(r);
+  }
 }
 
 function printEventVarRollup(map, aceCount, sheetCount, releaseSet) {
@@ -703,6 +875,51 @@ function printMinifiedRollup(m, total) {
   for (const sample of m.multiMinSamples.slice(0, 5)) console.log(`    e.g. ${sample}`);
 }
 
+function printScriptSourceRollup(map, count, pairing, releaseSet) {
+  console.log(
+    `TABLE SCRIPT_SOURCE_EXTENSIONS ({${SCRIPT_SOURCE_EXTENSIONS.join(",")}}): ${count} file(s) under scripts/ / ${releaseSet.size} releases`,
+  );
+  for (const [key, e] of sortedByCount(map)) {
+    console.log(`  ${e.count}\t${key}\t${e.tabled ? "TABLED" : "UNTABLED"}\treleases ${fmtReleases(e.releases)}`);
+  }
+  const untabled = [...map.entries()].filter(([, e]) => !e.tabled);
+  const untabledCount = untabled.reduce((n, [, e]) => n + e.count, 0);
+  console.log(
+    count === 0
+      ? "  -> NOT EXERCISED (0 file(s) under scripts/ observed)"
+      : untabled.length === 0
+        ? `  -> NO GAPS (${count} file(s) observed, every file under scripts/ classifies via isScriptSourceName)`
+        : `  -> ${untabled.length} extension(s) present under scripts/ NOT classified as script source (${untabledCount} of ${count} file(s))`,
+  );
+  if (map.size === 0) console.log("  (no files found under scripts/ across corpus)");
+  console.log(
+    `  .js pairing (isGeneratedScriptOutput): paired=${pairing.paired}\tunpaired=${pairing.unpaired}` +
+      (pairing.unpaired > 0 ? "  <- unpaired .js has no same-basename .ts sibling (possibly hand-authored)" : ""),
+  );
+}
+
+function printScriptFileTypeRollup(map, count, releaseSet) {
+  console.log(`TABLE SCRIPT_FILE_TYPE_EXTENSIONS: ${count} declared script item(s) / ${releaseSet.size} releases`);
+  for (const [key, e] of sortedByCount(map)) {
+    console.log(`  ${e.count}\t${key}\t${e.mapped ? "MAPPED" : "UNMAPPED"}\treleases ${fmtReleases(e.releases)}`);
+  }
+  const absent = map.get(ABSENT);
+  console.log(
+    absent
+      ? `  -> ${absent.count} item(s) with NO type field, releases ${fmtReleases(absent.releases)}`
+      : "  -> 0 items with no type field observed",
+  );
+  const presentUnmapped = [...map.entries()].filter(([key, e]) => key !== ABSENT && !e.mapped);
+  console.log(
+    count === 0
+      ? "  -> NOT EXERCISED (0 declared script item(s) observed)"
+      : presentUnmapped.length === 0
+        ? `  -> NO GAPS (${count} declared script item(s) observed, every present type maps to a known extension)`
+        : `  -> ${presentUnmapped.length} present-but-unmapped type value(s) observed (of ${count} declared script item(s))`,
+  );
+  if (map.size === 0) console.log("  (no declared script items found across corpus)");
+}
+
 let scannedCount = 0;
 let failedCount = 0;
 let skippedCount = 0;
@@ -715,6 +932,8 @@ const corpus = {
   imageNodeCount: 0,
   editorLocalFileCount: 0,
   minifiedJsonCount: 0,
+  scriptSourceFileCount: 0,
+  scriptFileTypeCount: 0,
   eventvar: new Map(),
   comparison: new Map(),
   imageExt: new Map(),
@@ -722,6 +941,9 @@ const corpus = {
   editorFieldsByRule: new Map(),
   editorLocal: new Map(),
   minified: { singleMin: 0, singleNotMin: 0, multiMin: 0, multiNotMin: 0, multiMinSamples: [] },
+  scriptSource: new Map(),
+  scriptPairing: { paired: 0, unpaired: 0 },
+  scriptFileType: new Map(),
 };
 
 for (const projectDir of projectDirs) {
@@ -749,6 +971,8 @@ for (const projectDir of projectDirs) {
   corpus.imageNodeCount += result.imageNodeCount;
   corpus.editorLocalFileCount += result.editorLocalFileCount;
   corpus.minifiedJsonCount += result.minifiedJsonCount;
+  corpus.scriptSourceFileCount += result.scriptSourceFileCount;
+  corpus.scriptFileTypeCount += result.scriptFileTypeCount;
   mergeEventVar(corpus.eventvar, result.eventvar);
   mergeComparison(corpus.comparison, result.comparison);
   mergeImageExt(corpus.imageExt, result.imageExt);
@@ -756,6 +980,9 @@ for (const projectDir of projectDirs) {
   mergeEditorFieldsByRule(corpus.editorFieldsByRule, result.editorFieldsByRule);
   mergeEditorLocal(corpus.editorLocal, result.editorLocal);
   mergeMinified(corpus.minified, result.minified);
+  mergeScriptSource(corpus.scriptSource, result.scriptSource);
+  mergeScriptPairing(corpus.scriptPairing, result.scriptPairing);
+  mergeScriptFileType(corpus.scriptFileType, result.scriptFileType);
 }
 
 console.log("\n=== corpus roll-up ===");
@@ -769,5 +996,7 @@ printImageExtRollup(corpus.imageExt, corpus.imageNodeCount, releaseSet);
 printEditorFieldsRollup(corpus.editorFieldsByType, corpus.editorFieldsByRule, releaseSet);
 printEditorLocalRollup(corpus.editorLocal, corpus.editorLocalFileCount);
 printMinifiedRollup(corpus.minified, corpus.minifiedJsonCount);
+printScriptSourceRollup(corpus.scriptSource, corpus.scriptSourceFileCount, corpus.scriptPairing, releaseSet);
+printScriptFileTypeRollup(corpus.scriptFileType, corpus.scriptFileTypeCount, releaseSet);
 
 process.exit(failedCount > 0 ? 1 : 0);
