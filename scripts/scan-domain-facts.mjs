@@ -1,9 +1,12 @@
-// Corpus scanner for EIGHT exported C3 domain-fact tables (ADR 0008):
+// Corpus scanner for NINE exported C3 domain-fact tables (ADR 0008):
 // EVENTVAR_REFERENCE_ACES, COMPARISON_OPERATORS, IMAGE_FILE_TYPE_EXTENSIONS,
 // EDITOR_FIELD_RULES, EDITOR_LOCAL_EXCLUSIONS (via isEditorLocalPath),
 // C3_MINIFIED_SOURCE_SUFFIXES (via isMinifiedSourcePath),
-// SCRIPT_SOURCE_EXTENSIONS (via isScriptSourceName), and
-// SCRIPT_FILE_TYPE_EXTENSIONS.
+// SCRIPT_SOURCE_EXTENSIONS (via isScriptSourceName),
+// SCRIPT_FILE_TYPE_EXTENSIONS, and C3_SECTION_ITEM_EXTENSION (via
+// isSectionItemName). The last probe additionally doubles as the STRAY-FILE
+// INVENTORY (src/manifest.ts's `detectStrayFiles`), since it walks the seven
+// name-section roots with that exact same predicate.
 //
 // Why this exists (durable asset, not scaffolding): ADR 0008's "Consequences"
 // section (docs/decisions/0008-c3-domain-fact-tables.md:52-79) records that the
@@ -13,7 +16,7 @@
 // was actually a per-project *default* (the `"Functions"` incident). The rule
 // that leaves: before pinning a value, ask what in C3 determines it, and
 // re-validate on every C3 version bump against real, varied projects. This
-// script is the mechanism — one scanner per version bump, not eight ad hoc ones.
+// script is the mechanism — one scanner per version bump, not nine ad hoc ones.
 //
 // THE GOVERNING RULE this script is built around: the scanner reports
 // PARTITIONS, the maintainer produces the VERDICT. Every classification below
@@ -30,7 +33,7 @@
 // signal that first surfaced `Functions`." Every probe here does the same:
 // raw frequency, never a deduped or normalized view.
 //
-// Corpus confinement: all eight probes walk ONLY the canonical C3 source folders
+// Corpus confinement: all nine probes walk ONLY the canonical C3 source folders
 // (derived from `C3_SECTION_FOLDERS` / `C3_ROOT_FILE_FOLDERS` / `IMAGES_FOLDER`),
 // via the exported `find_all_files_path`. Most corpus repos have `project.c3proj`
 // sitting at a *repo* root next to build output (e.g. `burbank-build-android/`,
@@ -81,6 +84,7 @@ const {
   isGeneratedScriptOutput,
   isMinifiedSourcePath,
   isScriptSourceName,
+  isSectionItemName,
   readProjectManifest,
   readSourceDocs,
   visitEvents,
@@ -473,6 +477,55 @@ function scanScriptFileType(result, projectDir, release, manifest) {
   }
 }
 
+// ─── probe 9: sectionItem (doubles as the stray-file inventory) ───────────────
+
+function bumpSectionItemExt(map, ext, release) {
+  let e = map.get(ext);
+  if (!e) {
+    e = { count: 0, releases: new Set() };
+    map.set(ext, e);
+  }
+  e.count++;
+  if (release !== undefined) e.releases.add(release);
+}
+
+/**
+ * Walks each of the seven name-section roots (`C3_SECTION_FOLDERS`) and
+ * partitions every non-editor-local file into a section item (`isSectionItemName`
+ * true) or a stray (`isSectionItemName` false) — the EXACT predicate
+ * `detectStrayFiles` (src/manifest.ts) uses, never re-derived here. So this one
+ * probe answers two questions at once: does `C3_SECTION_ITEM_EXTENSION` (via
+ * `isSectionItemName`) hold across the corpus, AND how many strays would
+ * `detectStrayFiles` report over these same projects. A section whose directory
+ * does not exist on disk (e.g. `models3d/`, absent from every project seen so
+ * far) contributes zero items and zero strays — see `printSectionItemRollup`'s
+ * NOT EXERCISED handling, which must not read that as "clean".
+ */
+function scanSectionItem(result, projectDir, release) {
+  for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
+    let e = result.sectionItem.get(section);
+    if (!e) {
+      e = { itemCount: 0, strayCount: 0, strayExt: new Map() };
+      result.sectionItem.set(section, e);
+    }
+
+    const dir = path.join(projectDir, folderName);
+    if (!existsSync(dir)) continue;
+
+    const items = find_all_files_path(dir, (f) => isSectionItemName(f) && !isEditorLocalPath(f));
+    e.itemCount += items.length;
+    result.sectionItemCount += items.length;
+
+    const strays = find_all_files_path(dir, (f) => !isSectionItemName(f) && !isEditorLocalPath(f));
+    for (const stray of strays) {
+      e.strayCount++;
+      result.strayFileCount++;
+      const ext = path.extname(stray).toLowerCase() || "(none)";
+      bumpSectionItemExt(e.strayExt, ext, release);
+    }
+  }
+}
+
 // ─── per-project orchestration ──────────────────────────────────────────────
 
 function newResult() {
@@ -487,6 +540,8 @@ function newResult() {
     minifiedJsonCount: 0,
     scriptSourceFileCount: 0,
     scriptFileTypeCount: 0,
+    sectionItemCount: 0,
+    strayFileCount: 0,
     eventvar: new Map(),
     comparison: new Map(),
     imageExt: new Map(),
@@ -497,6 +552,7 @@ function newResult() {
     scriptSource: new Map(),
     scriptPairing: { paired: 0, unpaired: 0 },
     scriptFileType: new Map(),
+    sectionItem: new Map(),
     failedProbes: [],
   };
 }
@@ -577,6 +633,22 @@ function printScriptFileTypeTable(map, count, heading) {
   if (map.size === 0) console.log("  (no declared script items found)");
 }
 
+function printSectionItemTable(map, itemCount, strayCount, heading) {
+  console.log(`${heading}: ${itemCount} section item(s) / ${strayCount} stray file(s)`);
+  for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
+    const e = map.get(section);
+    const scanned = e ? e.itemCount + e.strayCount : 0;
+    if (scanned === 0) {
+      console.log(`  ${section} (${folderName})\tNOT EXERCISED (directory absent or empty)`);
+      continue;
+    }
+    console.log(`  ${section} (${folderName})\titems=${e.itemCount}\tstrays=${e.strayCount}`);
+    for (const [ext, se] of sortedByCount(e.strayExt)) {
+      console.log(`    ${se.count}\t${ext}`);
+    }
+  }
+}
+
 /** Scan one project directory. Returns `{status:"skipped"}` or the populated result. */
 function scanProject(projectDir) {
   const manifestPath = path.join(projectDir, PROJECT_MANIFEST_FILE);
@@ -609,6 +681,7 @@ function scanProject(projectDir) {
   runProbe(projectDir, result.failedProbes, "scriptFileType", () =>
     scanScriptFileType(result, projectDir, release, manifest),
   );
+  runProbe(projectDir, result.failedProbes, "sectionItem", () => scanSectionItem(result, projectDir, release));
 
   printEventVarTable(result.eventvar, result.sheetCount, result.aceCount, "TABLE EVENTVAR_REFERENCE_ACES");
   printComparisonTable(result.comparison, result.comparisonCount, "TABLE COMPARISON_OPERATORS");
@@ -618,12 +691,19 @@ function scanProject(projectDir) {
   printMinifiedTable(result.minified, result.minifiedJsonCount, "TABLE isMinifiedSourcePath");
   printScriptSourceTable(result.scriptSource, result.scriptSourceFileCount, result.scriptPairing, "TABLE SCRIPT_SOURCE_EXTENSIONS");
   printScriptFileTypeTable(result.scriptFileType, result.scriptFileTypeCount, "TABLE SCRIPT_FILE_TYPE_EXTENSIONS");
+  printSectionItemTable(
+    result.sectionItem,
+    result.sectionItemCount,
+    result.strayFileCount,
+    "TABLE C3_SECTION_ITEM_EXTENSION / STRAY-FILE INVENTORY",
+  );
 
   console.log(
     `SUMMARY ${projectDir}: release=${release ?? "UNKNOWN"}, sheets=${result.sheetCount}, aces=${result.aceCount}, ` +
       `comparisons=${result.comparisonCount}, imageNodes=${result.imageNodeCount}, ` +
       `editorLocalFiles=${result.editorLocalFileCount}, minifiedJson=${result.minifiedJsonCount}, ` +
       `scriptSourceFiles=${result.scriptSourceFileCount}, scriptFileTypeItems=${result.scriptFileTypeCount}, ` +
+      `sectionItems=${result.sectionItemCount}, strayFiles=${result.strayFileCount}, ` +
       `failedProbes=${result.failedProbes.length > 0 ? result.failedProbes.join(",") : "none"}`,
   );
 
@@ -748,6 +828,27 @@ function mergeScriptFileType(target, source) {
     }
     t.count += e.count;
     for (const r of e.releases) t.releases.add(r);
+  }
+}
+
+function mergeSectionItem(target, source) {
+  for (const [section, e] of source) {
+    let t = target.get(section);
+    if (!t) {
+      t = { itemCount: 0, strayCount: 0, strayExt: new Map() };
+      target.set(section, t);
+    }
+    t.itemCount += e.itemCount;
+    t.strayCount += e.strayCount;
+    for (const [ext, se] of e.strayExt) {
+      let tse = t.strayExt.get(ext);
+      if (!tse) {
+        tse = { count: 0, releases: new Set() };
+        t.strayExt.set(ext, tse);
+      }
+      tse.count += se.count;
+      for (const r of se.releases) tse.releases.add(r);
+    }
   }
 }
 
@@ -920,6 +1021,39 @@ function printScriptFileTypeRollup(map, count, releaseSet) {
   if (map.size === 0) console.log("  (no declared script items found across corpus)");
 }
 
+/**
+ * Per-section rollup: NOT EXERCISED for a section with zero files scanned
+ * (directory absent from every project, e.g. `models3d/`) is distinct from a
+ * scanned-and-clean section (NO STRAYS) — collapsing the two would misreport
+ * "never observed" as "validated", exactly the "NO CONTRADICTIONS having
+ * scanned nothing" failure mode this convention exists to avoid (ADR 0022).
+ * Doubles as the stray-file inventory: strays here are exactly what
+ * `detectStrayFiles` would report over this corpus.
+ */
+function printSectionItemRollup(map, itemCount, strayCount, releaseSet) {
+  console.log(
+    `TABLE C3_SECTION_ITEM_EXTENSION (via isSectionItemName) / STRAY-FILE INVENTORY (detectStrayFiles): ` +
+      `${itemCount} section item(s) / ${strayCount} stray file(s) / ${releaseSet.size} releases`,
+  );
+  for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
+    const e = map.get(section);
+    const scanned = e ? e.itemCount + e.strayCount : 0;
+    if (scanned === 0) {
+      console.log(`  ${section} (${folderName})\t-> NOT EXERCISED (0 file(s) scanned across corpus)`);
+      continue;
+    }
+    const verdict =
+      e.strayCount === 0
+        ? `NO STRAYS (${e.itemCount} item(s) scanned)`
+        : `${e.strayCount} STRAY(S) (of ${scanned} file(s) scanned)`;
+    console.log(`  ${section} (${folderName})\titems=${e.itemCount}\tstrays=${e.strayCount}\t-> ${verdict}`);
+    for (const [ext, se] of sortedByCount(e.strayExt)) {
+      console.log(`    ${se.count}\t${ext}\treleases ${fmtReleases(se.releases)}`);
+    }
+  }
+  if (map.size === 0) console.log("  (no name-section directories found across corpus)");
+}
+
 let scannedCount = 0;
 let failedCount = 0;
 let skippedCount = 0;
@@ -934,6 +1068,8 @@ const corpus = {
   minifiedJsonCount: 0,
   scriptSourceFileCount: 0,
   scriptFileTypeCount: 0,
+  sectionItemCount: 0,
+  strayFileCount: 0,
   eventvar: new Map(),
   comparison: new Map(),
   imageExt: new Map(),
@@ -944,6 +1080,7 @@ const corpus = {
   scriptSource: new Map(),
   scriptPairing: { paired: 0, unpaired: 0 },
   scriptFileType: new Map(),
+  sectionItem: new Map(),
 };
 
 for (const projectDir of projectDirs) {
@@ -973,6 +1110,8 @@ for (const projectDir of projectDirs) {
   corpus.minifiedJsonCount += result.minifiedJsonCount;
   corpus.scriptSourceFileCount += result.scriptSourceFileCount;
   corpus.scriptFileTypeCount += result.scriptFileTypeCount;
+  corpus.sectionItemCount += result.sectionItemCount;
+  corpus.strayFileCount += result.strayFileCount;
   mergeEventVar(corpus.eventvar, result.eventvar);
   mergeComparison(corpus.comparison, result.comparison);
   mergeImageExt(corpus.imageExt, result.imageExt);
@@ -983,6 +1122,7 @@ for (const projectDir of projectDirs) {
   mergeScriptSource(corpus.scriptSource, result.scriptSource);
   mergeScriptPairing(corpus.scriptPairing, result.scriptPairing);
   mergeScriptFileType(corpus.scriptFileType, result.scriptFileType);
+  mergeSectionItem(corpus.sectionItem, result.sectionItem);
 }
 
 console.log("\n=== corpus roll-up ===");
@@ -998,5 +1138,6 @@ printEditorLocalRollup(corpus.editorLocal, corpus.editorLocalFileCount);
 printMinifiedRollup(corpus.minified, corpus.minifiedJsonCount);
 printScriptSourceRollup(corpus.scriptSource, corpus.scriptSourceFileCount, corpus.scriptPairing, releaseSet);
 printScriptFileTypeRollup(corpus.scriptFileType, corpus.scriptFileTypeCount, releaseSet);
+printSectionItemRollup(corpus.sectionItem, corpus.sectionItemCount, corpus.strayFileCount, releaseSet);
 
 process.exit(failedCount > 0 ? 1 : 0);
