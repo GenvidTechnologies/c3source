@@ -135,6 +135,14 @@ export interface ManifestDrift {
    * sections that were checked", not "no drift".
    */
   degraded?: DriftDegradation[];
+  /**
+   * Non-item files found under the name-section roots. **Informational, never drift**:
+   * populated independently of the manifest, never counted by {@link ManifestDrift.inSync},
+   * and never a mappable item (see {@link StrayFile}). Present only when non-empty —
+   * same convention as {@link ManifestDrift.degraded}, so a clean project's result object
+   * is byte-identical to a pre-2.0.0 one.
+   */
+  strays?: StrayFile[];
 }
 
 // ─── Private guards ───────────────────────────────────────────────────────────
@@ -877,7 +885,16 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     // failure either. The section is omitted AND the reason is reported (#68).
     (degraded ??= []).push({ section: "images", message: err instanceof Error ? err.message : String(err) });
   }
-  return { sections, inSync: sections.length === 0, ...(degraded ? { degraded } : {}) };
+  // Strays are manifest-independent and are NOT drift: collected outside the
+  // sections loop, never counted by inSync, omitted entirely when empty (the
+  // `degraded` convention). See ADR 0025.
+  const strayFiles = detectStrayFiles(projectDir);
+  return {
+    sections,
+    inSync: sections.length === 0,
+    ...(degraded ? { degraded } : {}),
+    ...(strayFiles.length ? { strays: strayFiles } : {}),
+  };
 }
 
 /**

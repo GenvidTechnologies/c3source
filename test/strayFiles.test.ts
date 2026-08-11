@@ -10,12 +10,15 @@ import {
   find_all_files_path,
   isEditorLocalPath,
   writeC3JsonFile,
+  openProject,
   C3_SECTION_FOLDERS,
   type StrayFile,
   type C3ProjectManifest,
   type C3NameFolder,
   type C3FileFolder,
+  type DriftKind,
 } from "../src/c3source.js";
+import { fixtureProjectPath, fixtureProjectExists, makeTempImageProject } from "./fixtureHelpers.js";
 
 /** Write `content` at `root`/`rel`, creating any intermediate directories. */
 function write(root: string, rel: string, content = ""): void {
@@ -213,3 +216,154 @@ describe("detectStrayFiles (#76 Task 3)", () => {
     expect(detectStrayFiles(root)).to.deep.equal([]);
   });
 });
+
+describe("detectManifestDrift: strays wiring (#76 Task 5)", () => {
+  let root: string | undefined;
+
+  afterEach(() => {
+    if (root) {
+      rmSync(root, { recursive: true, force: true });
+      root = undefined;
+    }
+  });
+
+  it("SF9 (R26): inSync stays keyed on sections only — a stray-only anomaly is inSync, and removing a stray never flips a drift-caused inSync", () => {
+    root = mkdtempSync(path.join(tmpdir(), "c3source-strays-r26-"));
+    write(root, "layouts/Real.json", "{}");
+    write(root, "layouts/notes.md", "stray");
+    const declaredManifest = minimalManifest({ layouts: { items: ["Real"], subfolders: [] } });
+
+    // A project whose only anomaly is a stray file: inSync stays true, sections stays [],
+    // and the stray is still reported.
+    const strayOnly = detectManifestDrift(root, declaredManifest);
+    expect(strayOnly.inSync).to.equal(true);
+    expect(strayOnly.sections).to.deep.equal([]);
+    expect(strayOnly.strays).to.not.be.undefined;
+    expect(strayOnly.strays!.length).to.equal(1);
+
+    // Add real drift (an undeclared item) alongside the existing stray: inSync flips to false.
+    write(root, "layouts/Undeclared.json", "{}");
+    const driftAndStray = detectManifestDrift(root, declaredManifest);
+    expect(driftAndStray.inSync).to.equal(false);
+    expect(driftAndStray.strays).to.not.be.undefined;
+    expect(driftAndStray.strays!.length).to.equal(1);
+
+    // Removing the stray does not change inSync — it is still driven by the real drift.
+    rmSync(path.join(root, "layouts", "notes.md"));
+    const driftOnly = detectManifestDrift(root, declaredManifest);
+    expect(driftOnly.inSync).to.equal(false);
+    expect(driftOnly.strays).to.be.undefined;
+  });
+
+  it("SF10 (R27): strays is omitted when empty — canonical fixture's drift payload is byte-identical to a pre-2.0.0 clean result", function () {
+    if (!fixtureProjectExists("project.c3proj")) return this.skip();
+
+    const drift = detectManifestDrift(fixtureProjectPath());
+    expect(Object.prototype.hasOwnProperty.call(drift, "strays"), "strays must not be an own property when empty").to
+      .equal(false);
+    expect(drift.strays).to.equal(undefined);
+    // Whole-object equality: proves no OTHER surprise member snuck onto a clean result either.
+    expect(drift).to.deep.equal({ sections: [], inSync: true });
+  });
+
+  it("SF11 (R31): degradation and strays are independent — an unmapped image fileType degrades images while a stray elsewhere is reported normally", () => {
+    // A valid MIME deliberately absent from IMAGE_FILE_TYPE_EXTENSIONS — forces detectImageDrift to throw.
+    const unmappedObjectType = { name: "Baz", image: { fileType: "image/tiff" } };
+    root = makeTempImageProject([unmappedObjectType], [], {
+      name: "r31-temp-project",
+      runtime: "c3",
+      projectFormatVersion: 1,
+      savedWithRelease: 49500,
+    });
+    write(root, "layouts/notes.md", "stray");
+
+    const drift = detectManifestDrift(root);
+
+    expect(drift.degraded).to.not.be.undefined;
+    expect(drift.degraded!.length).to.equal(1);
+    expect(drift.degraded![0].section).to.equal("images");
+    const imagesSection = drift.sections.find((s) => s.section === "images");
+    expect(imagesSection, "images section must be absent, not just empty").to.be.undefined;
+
+    expect(drift.strays).to.not.be.undefined;
+    expect(drift.strays).to.deep.equal([{ section: "layouts", folder: "layouts", name: "notes.md", diskPath: [] }]);
+
+    // No declared item and no on-disk item under layouts/ other than the stray -> no drift entries.
+    expect(drift.inSync).to.equal(drift.sections.length === 0);
+    expect(drift.inSync).to.equal(true);
+  });
+
+  it("SF12 (R33): the three surfaces agree — free detectStrayFiles, C3Project.detectStrayFiles(), and detectManifestDrift().strays, deterministically ordered", () => {
+    root = mkdtempSync(path.join(tmpdir(), "c3source-strays-r33-"));
+    const withStrays = path.join(root, "with-strays");
+    const withoutStrays = path.join(root, "without-strays");
+
+    for (const folder of Object.values(C3_SECTION_FOLDERS)) {
+      write(withStrays, `${folder}/Real.json`, "{}");
+      write(withStrays, `${folder}/notes.md`, "x");
+      write(withStrays, `${folder}/sub/other.md`, "x");
+      write(withoutStrays, `${folder}/Real.json`, "{}");
+    }
+    const fullManifest = (): C3ProjectManifest =>
+      minimalManifest({
+        layouts: { items: ["Real"], subfolders: [] },
+        eventSheets: { items: ["Real"], subfolders: [] },
+        objectTypes: { items: ["Real"], subfolders: [] },
+        timelines: { items: ["Real"], subfolders: [] },
+        flowcharts: { items: ["Real"], subfolders: [] },
+        families: { items: ["Real"], subfolders: [] },
+        models3d: { items: ["Real"], subfolders: [] },
+      });
+    writeC3JsonFile(path.join(withStrays, "project.c3proj"), fullManifest());
+    writeC3JsonFile(path.join(withoutStrays, "project.c3proj"), fullManifest());
+
+    // Free function vs. C3Project.detectStrayFiles().
+    const directStrays = detectStrayFiles(withStrays);
+    expect(directStrays.length).to.be.greaterThan(0);
+    expect(openProject(withStrays).detectStrayFiles()).to.deep.equal(directStrays);
+
+    // detectManifestDrift().strays agrees with the free function, both directly and via the handle.
+    expect(detectManifestDrift(withStrays).strays).to.deep.equal(directStrays);
+    expect(openProject(withStrays).detectManifestDrift().strays).to.deep.equal(directStrays);
+
+    // Ordering is deterministic across two consecutive runs.
+    expect(detectStrayFiles(withStrays)).to.deep.equal(detectStrayFiles(withStrays));
+
+    // Empty case: all three surfaces agree strays is absent/undefined, not an empty array leaking through.
+    expect(detectStrayFiles(withoutStrays)).to.deep.equal([]);
+    expect(openProject(withoutStrays).detectStrayFiles()).to.deep.equal([]);
+    expect(detectManifestDrift(withoutStrays).strays).to.equal(undefined);
+    expect(openProject(withoutStrays).detectManifestDrift().strays).to.equal(undefined);
+  });
+});
+
+// ─── R28: DriftKind must stay exhaustive at compile time ──────────────────────
+//
+// Purpose: this function is never called at runtime — it exists purely so
+// `npm run typecheck` fails the moment a member is ever added to `DriftKind`.
+// The `default` arm assigns the narrowed (impossible, once every case is listed)
+// value to a `never`-typed binding; if a new DriftKind member appears without a
+// matching `case`, the narrowed type in `default` stops being `never` and the
+// assignment becomes a compile error. This function does not exercise runtime
+// behaviour and MUST NOT be deleted just because it looks unused.
+function assertDriftKindExhaustive_r28(kind: DriftKind): string {
+  switch (kind) {
+    case "missing":
+      return "missing";
+    case "untracked":
+      return "untracked";
+    case "moved":
+      return "moved";
+    case "folder-missing":
+      return "folder-missing";
+    case "folder-untracked":
+      return "folder-untracked";
+    case "dangling-ref":
+      return "dangling-ref";
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+void assertDriftKindExhaustive_r28;

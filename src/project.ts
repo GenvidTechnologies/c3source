@@ -23,8 +23,10 @@ import {
   ManifestReadResult,
   PROJECT_MANIFEST_FILE,
   SectionDrift,
+  StrayFile,
   detectImageDrift,
   detectManifestDrift,
+  detectStrayFiles,
   readProjectManifest,
   readProjectManifestTolerant,
   writeProjectManifest,
@@ -279,6 +281,16 @@ export interface C3Project {
   detectImageDrift(): SectionDrift | null;
 
   /**
+   * Detect stray files for this project (see {@link StrayFile}).
+   * Delegates to {@link detectStrayFiles} with the project root — and, unlike its
+   * manifest-dependent siblings above, passes no manifest: stray detection is
+   * manifest-independent by design (item-hood and provenance are decided purely from
+   * a basename), so this method works even on a project whose `project.c3proj` is
+   * missing or malformed.
+   */
+  detectStrayFiles(): StrayFile[];
+
+  /**
    * Detect reference-integrity issues for this project.
    * Delegates to {@link detectReferenceIntegrity} with the project root and the handle's
    * cached manifest (reuses the already-parsed manifest instead of re-reading disk).
@@ -336,6 +348,7 @@ export function openProject(root: string): C3Project {
   // infinite recursion when the method tries to call `detectManifestDrift(...)`.
   const freeDetectManifestDrift = detectManifestDrift;
   const freeDetectImageDrift = detectImageDrift;
+  const freeDetectStrayFiles = detectStrayFiles;
   const freeDetectReferenceIntegrity = detectReferenceIntegrity;
   const freeCollectAddonAttribution = collectAddonAttribution;
   const freeFindAllAddons = findAllAddons;
@@ -470,6 +483,13 @@ export function openProject(root: string): C3Project {
 
     detectImageDrift(): SectionDrift | null {
       return freeDetectImageDrift(root);
+    },
+
+    detectStrayFiles(): StrayFile[] {
+      // Manifest-independent by design — passes no manifest, unlike detectManifestDrift/
+      // detectReferenceIntegrity above, so this works even when project.c3proj is missing
+      // or malformed.
+      return freeDetectStrayFiles(root);
     },
 
     detectReferenceIntegrity(options?: ReferenceIntegrityOptions): ReferenceIntegrityResult {
