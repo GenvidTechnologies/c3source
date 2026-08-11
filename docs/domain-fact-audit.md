@@ -26,10 +26,9 @@ re-scanned for this update**; their numbers below are exactly as they were on
 that date. `SCRIPT_SOURCE_EXTENSIONS` and `SCRIPT_FILE_TYPE_EXTENSIONS` were
 added **2026-08-10** (issue #73/#74), evidenced by the same 14-project corpus
 (already inventoried below, not re-walked) plus a fresh editor-bundle
-bisection. `C3_SECTION_ITEM_EXTENSION` was added for issue #76; its corpus
-occurrence table is filled in by the validation-phase scan (the scanner's
-ninth probe — see [its findings section](#c3_section_item_extension-via-issectionitemname)
-below for what is and is not yet measured). Scanner: `scripts/scan-domain-facts.mjs`.
+bisection. `C3_SECTION_ITEM_EXTENSION` was added for issue #76 and scanned
+**2026-08-11** against the same 14-project corpus (the scanner's ninth probe —
+see [its findings section](#c3_section_item_extension-via-issectionitemname)). Scanner: `scripts/scan-domain-facts.mjs`.
 Full raw output is not committed (the corpus is machine-local — see
 [Bounds](#bounds-what-this-cannot-prove)); the tables below are its roll-up.
 
@@ -373,11 +372,12 @@ anything throw-sensitive should not assume the two tables behave alike.
 Added issue #76. Evidence comes from `scripts/scan-domain-facts.mjs`'s ninth
 probe, which doubles as the stray-file inventory (`detectStrayFiles`'s exact
 complement — see [ADR 0025](decisions/0025-section-item-hood-and-stray-files.md)).
-**This section is written ahead of the validation-phase run that produces its
-measured numbers** — the corpus subsection below states the partition
-established at the #76 design checkpoint (zero vs. NOT EXERCISED) without
-inventing a precise project count or release list; the full occurrence table
-is added once that run's output is available.
+
+**Scan of 2026-08-11: the same 14-project corpus inventoried above, releases
+37900, 38802, 39700, 40702, 44002, 44902, 47604, 49500. 2282 section items,
+0 stray files.** The 207 `eventSheets` items below reconcile with the corpus
+inventory's 207 sheets, which is the cross-check that the same corpus was
+walked.
 
 **Corpus evidence (scanner-refreshable).** For each of the seven name
 sections (`layouts`, `eventSheets`, `objectTypes`, `families`, `timelines`,
@@ -396,11 +396,36 @@ same status this doc gives any table branch the corpus is structurally unable
 to exercise (contrast a `NO GAPS`/`NO CONTRADICTIONS` verdict elsewhere in
 this doc, which requires at least one observation).
 
-*Precise project count, release list, and the full per-section occurrence
-table (mirroring the layout used for [`EDITOR_LOCAL_EXCLUSIONS`](#editor_local_exclusions-via-iseditorlocalpath)
-above) are produced by re-running the scanner — see [How to
-re-run](#how-to-re-run). The probe to run is `scripts/scan-domain-facts.mjs`'s
-ninth probe.*
+Per-section occurrence table, 2026-08-11:
+
+| Section | Items | Strays | Verdict |
+|---|---|---|---|
+| `objectTypes` | 1868 | 0 | NO STRAYS |
+| `eventSheets` | 207 | 0 | NO STRAYS |
+| `layouts` | 92 | 0 | NO STRAYS |
+| `families` | 92 | 0 | NO STRAYS |
+| `timelines` | 19 | 0 | NO STRAYS |
+| `flowcharts` | 4 | 0 | NO STRAYS |
+| `models3d` | 0 | 0 | **NOT EXERCISED** |
+
+Note `models3d`'s row is the reason the probe prints an observation count on
+every verdict line: its `0 / 0` is indistinguishable from a clean result unless
+the count is shown, and reporting it as `NO STRAYS` would claim a validation the
+corpus cannot supply.
+
+**Scan the inventoried corpus, not every `project.c3proj` on the machine.** A
+naive `find` for `project.c3proj` under the workstation's repo root returns 17
+directories, not 14: `bb-backup/previews/` holds copies of `burbank` and
+`construct3-poc`, and `c3source/construct3-sample/project` is the same project
+as the top-level `construct3-sample` checkout, reached through the submodule.
+Scanning all 17 inflates this table to 2282 → 4403 items — double-counting the
+corpus's largest project — and adds a phantom ninth release (46602) that exists
+only in a backup copy. The [Bounds](#bounds-what-this-cannot-prove) section's
+warning about burbank dominating the corpus's volume is exactly why that
+duplication matters.
+
+*These numbers are refreshed by re-running the scanner — see [How to
+re-run](#how-to-re-run). The probe is `scripts/scan-domain-facts.mjs`'s ninth.*
 
 **Bundle evidence (NOT scanner-refreshable — a re-run cannot reproduce,
 confirm, or refute this and must never overwrite it).** C3's own editor
@@ -410,7 +435,7 @@ release root, **not** `c3runtime/`) saves every name-section item as `folder
 construction: `.uistate.json` alongside (already excluded by
 `isEditorLocalPath`), images to `images/`. This is a **mechanism** proof — no
 C3 code path writes a non-`.json` file into any of the seven name-section
-folders — not a corpus observation about what 14 (or 20) projects happened to
+folders — not a corpus observation about what the scanned projects happened to
 contain. See [A better validation channel:
 editor.construct.net](#a-better-validation-channel-editorconstructnet).
 
