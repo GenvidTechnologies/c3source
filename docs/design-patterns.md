@@ -72,19 +72,36 @@ descended only one level). `visitLayout`/`findLayerEntryInLayout` seed the
 dotted prefix with the layout name (`LayoutName.LayerName`); a layer flagged
 `global` resets the prefix to `global`.
 
-## One file-walker, three collectors
+## One file-walker, one item-hood collector, seven finders
 
-The on-disk collectors `find_all_layouts_path`, `find_all_objectTypes_path`,
-and `find_all_eventsheets_path` share one internal recursive walk,
-`find_all_files_path(dir, predicate)`. It owns the recursion and the skip rules
+`find_all_files_path(dir, predicate, descend?)` is the single recursive walk
+every on-disk collector is built on. It owns the recursion and the skip rules
 every collector needs: it never descends into `uistate/` subfolders (C3 r487+
 writes editor UI state there, and its non-source `.json` would crash the
-parsers) and it applies a per-file `predicate`. The public collectors are
-one-line wrappers differing only in that predicate (event sheets additionally
-require a `.json` extension). Add a new collector as another wrapper; never
-re-implement the recursion or the `uistate/` / `.uistate.json` skip —
-duplicating it is exactly how a self-recursion bug once slipped in
-(`find_all_objectTypes_path` recursing via the layouts collector).
+parsers), and it applies a per-file `predicate` and a per-level
+`readdirSync().sort()` ordering.
+
+`find_all_section_items_path(dir)` is the single owner of the **name-section
+item policy** built on that walk — `isSectionItemName(file) &&
+!isEditorLocalPath(file)`. All seven name-section finders are thin consumers
+of this one collector: `find_all_layouts_path`, `find_all_objectTypes_path`,
+and `find_all_eventsheets_path` are one-line wrapper functions; `C3Project`'s
+`findAllFamilies`, `findAllTimelines`, `findAllFlowcharts`, and
+`findAllModels3d` pass `find_all_section_items_path` directly as their
+underlying finder (no separate per-section free function exists for those
+four). So the `.json` policy cannot drift between sections again — which is
+exactly what had happened before 2.0.0: two of the seven finders
+(`find_all_layouts_path`, `find_all_objectTypes_path`) returned every
+non-editor-local file regardless of extension, a split inherited from three
+independently hand-written functions rather than any design decision. See
+[ADR 0025](decisions/0025-section-item-hood-and-stray-files.md).
+
+Add a new name-section collector as another wrapper over
+`find_all_section_items_path`; never re-implement the recursion, the
+`uistate/` / `.uistate.json` skip, or the `.json` extension check —
+duplicating any of them is exactly how a self-recursion bug once slipped in
+(`find_all_objectTypes_path` recursing via the layouts collector) and how the
+item-hood divergence above went unnoticed for as long as it did.
 
 ## One canonical editor-local filter
 

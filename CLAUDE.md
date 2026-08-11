@@ -150,6 +150,32 @@ Four functional areas:
    the entered subtree, so `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`
    themselves are unchanged (see [ADR
    0020](docs/decisions/0020-caller-controlled-walk-descent.md), #63).
+   **Section item-hood** — the third axis, alongside provenance
+   (`isEditorLocalPath`, above) and reachability (`descend`, above).
+   `C3_SECTION_ITEM_EXTENSION = ".json"` is the exported C3 domain fact
+   naming the on-disk extension every item of a `C3_SECTION_FOLDERS` name
+   section carries; `isSectionItemName(name)` tests a bare basename against
+   it, **case-sensitively** — unlike `isScriptSourceName`'s case-insensitive
+   match, since C3's lowercasing-before-testing rule is unverified for
+   `.json` and matching case-insensitively here would silently widen every
+   consumer with no evidence backing the widening.
+   `find_all_section_items_path(dir)` is the single owner of the combined
+   item-hood + provenance policy (`isSectionItemName(file) &&
+   !isEditorLocalPath(file)`, built on `find_all_files_path`); all seven
+   name-section finders — `find_all_eventsheets_path`,
+   `find_all_layouts_path`, `find_all_objectTypes_path`, and the four
+   `C3Project` finders for families, timelines, flowcharts, and 3D models —
+   are thin consumers, so the policy cannot drift between sections again.
+   **Narrowed in 2.0.0** — `find_all_layouts_path`/`find_all_objectTypes_path`
+   previously returned every non-editor-local file regardless of extension
+   (inherited drift from three independently hand-written functions, not a
+   design decision); they now delegate like their five siblings always did,
+   a breaking change in behaviour, not signature. `findAllScripts` (ADR 0024)
+   and `findAllAddons` (`.c3addon`) are explicitly excluded from this axis —
+   both already had a correct, section-specific item-hood rule of their own.
+   The pre-2.0.0 permissive result is recoverable verbatim as
+   `find_all_files_path(dir, (f) => !isEditorLocalPath(f))`. See [ADR
+   0025](docs/decisions/0025-section-item-hood-and-stray-files.md).
    **Script source classification** — `SCRIPT_SOURCE_EXTENSIONS` (`[".js", ".ts"]`)
    is the exported C3 domain fact naming the extensions C3 accepts as authored
    script source under `scripts/`; `isScriptSourceName(name)` tests a bare
@@ -267,6 +293,24 @@ Four functional areas:
    Because the manifest keys object types on
    **names**, not filenames, a fixture's image format can be varied (change `fileType` + rename
    the on-disk image) without churning any manifest-membership test.
+   **Stray files** — `detectStrayFiles(projectDir)` is the exact complement of
+   `find_all_section_items_path` over the same seven `C3_SECTION_FOLDERS`
+   walks: a non-editor-local file under a name-section root that fails
+   `isSectionItemName` is a `StrayFile` (`section`, `folder`, `name`,
+   `diskPath` — deliberately **no** `manifestPath`, since a stray has no
+   manifest position to map). It is **manifest-independent** (reads no
+   `project.c3proj`, takes none) and scoped to the seven name sections only —
+   `scripts/`/`images/`/other root file folders are out of scope by design,
+   since file-folder membership is extension-agnostic and there is no
+   item-hood rule for a stray to violate there. `detectManifestDrift` appends
+   the result as the optional `ManifestDrift.strays?` field, populated only
+   when non-empty (the same convention as `degraded`, so a clean project's
+   result stays byte-identical to a pre-2.0.0 one); a stray is **never
+   drift** — `inSync` and `DriftKind` are both unaffected. `C3Project.detectStrayFiles()`
+   wraps it, passing **no** manifest — unlike its `detectManifestDrift()`/
+   `detectReferenceIntegrity()` siblings, it works even when `project.c3proj`
+   is missing or malformed. See [ADR
+   0025](docs/decisions/0025-section-item-hood-and-stray-files.md).
    **C3Project handle** (in `src/project.ts`) — `openProject(root): C3Project` is a root-bound handle that
    unifies the previously-split API: callers no longer assemble section paths by
    hardcoding `"eventSheets"`/`"layouts"`/etc., because the handle derives all path
@@ -288,9 +332,15 @@ Four functional areas:
    `ts-defs/`), then drops any generated `.js` that shares a basename with a `.ts` sibling
    via `filterAuthoredScriptPaths` (#73, #74). `detectManifestDrift()` and
    `detectImageDrift()` delegate to the free functions, passing the cached manifest.
-   The exported constants `PROJECT_MANIFEST_FILE = "project.c3proj"` (#36) and
-   `IMAGES_FOLDER` (#38) are also defined here as C3 domain facts.
-   The free functions remain exported and unchanged — the handle is additive.
+   `detectStrayFiles()` delegates likewise but, unlike those two, passes **no**
+   manifest — it works even on a project whose `project.c3proj` is missing or
+   malformed. The exported constants `PROJECT_MANIFEST_FILE = "project.c3proj"`
+   (#36) and `IMAGES_FOLDER` (#38) are also defined here as C3 domain facts.
+   The free functions remain exported — names, arities, and types unchanged —
+   and the handle stays additive; the one exception is `find_all_layouts_path`/
+   `find_all_objectTypes_path`'s 2.0.0 result-set narrowing above, a
+   behavioural change the handle's `findAllLayouts`/`findAllObjectTypes`
+   inherit automatically since they delegate to those same functions.
    **Write surface** (#57, #58) — `writeManifest(m?)` writes `m` (or, with no
    argument, the already-cached manifest) via `writeProjectManifest`, and only
    *after* the write succeeds assigns `cachedManifest = m`: a **write-through,

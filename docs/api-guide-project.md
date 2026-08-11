@@ -219,16 +219,16 @@ project.findAllTimelines();
 
 **Delegation and filtering:**
 
-| Method | Delegates to | Filter |
-|--------|-------------|--------|
-| `findAllEventSheets` | `find_all_eventsheets_path` | `.json` non-editor-local files |
-| `findAllLayouts` | `find_all_layouts_path` | non-editor-local files (all extensions) |
-| `findAllObjectTypes` | `find_all_objectTypes_path` | non-editor-local files (all extensions) |
-| `findAllFamilies` | `find_all_files_path` | `.json` non-editor-local files |
-| `findAllTimelines` | `find_all_files_path` | `.json` non-editor-local files |
-| `findAllFlowcharts` | `find_all_files_path` | `.json` non-editor-local files |
-| `findAllModels3d` | `find_all_files_path` | `.json` non-editor-local files |
-| `findAllScripts` | `find_all_files_path` + `filterAuthoredScriptPaths` | `.js`/`.ts` source files (`isScriptSourceName`) — excludes `.d.ts` declarations, then drops generated `.js` build output |
+| Method | Delegates to | Filter | Why |
+|--------|-------------|--------|-----|
+| `findAllEventSheets` | `find_all_eventsheets_path` | `.json` non-editor-local files | ADR 0025 — name-section item policy |
+| `findAllLayouts` | `find_all_layouts_path` | `.json` non-editor-local files | ADR 0025 — narrowed in 2.0.0 |
+| `findAllObjectTypes` | `find_all_objectTypes_path` | `.json` non-editor-local files | ADR 0025 — narrowed in 2.0.0 |
+| `findAllFamilies` | `find_all_section_items_path` | `.json` non-editor-local files | ADR 0025 — name-section item policy |
+| `findAllTimelines` | `find_all_section_items_path` | `.json` non-editor-local files | ADR 0025 — name-section item policy |
+| `findAllFlowcharts` | `find_all_section_items_path` | `.json` non-editor-local files | ADR 0025 — name-section item policy |
+| `findAllModels3d` | `find_all_section_items_path` | `.json` non-editor-local files | ADR 0025 — name-section item policy |
+| `findAllScripts` | `find_all_files_path` + `filterAuthoredScriptPaths` | `.js`/`.ts` source files (`isScriptSourceName`) — excludes `.d.ts` declarations, then drops generated `.js` build output | ADR 0024 — script generated/authored distinction, not item-hood |
 
 > [!NOTE]
 > **Behavior change (issue #73/#74).** `findAllScripts` previously returned
@@ -263,12 +263,22 @@ for the corpus evidence that this widening left every corpus project's
 ```ts
 project.detectManifestDrift(): ManifestDrift
 project.detectImageDrift(): SectionDrift | null
+project.detectStrayFiles(): StrayFile[]
 ```
 
-These delegate to the free functions `detectManifestDrift` and `detectImageDrift`
-with the project root. `detectManifestDrift` on the handle passes the cached
-manifest (from `manifest()`) to avoid re-reading `project.c3proj`. For the
-result types and semantics see [api-guide-manifest.md — Drift detection](api-guide-manifest.md#drift-detection).
+`detectManifestDrift` and `detectImageDrift` delegate to the like-named free
+functions with the project root; `detectManifestDrift` on the handle passes
+the cached manifest (from `manifest()`) to avoid re-reading `project.c3proj`.
+For the result types and semantics see [api-guide-manifest.md — Drift
+detection](api-guide-manifest.md#drift-detection).
+
+`detectStrayFiles` delegates to the free `detectStrayFiles` with the project
+root, and — unlike its two siblings above — passes **no manifest**: stray
+detection is manifest-independent by design (item-hood and provenance are
+both decided from a bare basename), so it works even on a project whose
+`project.c3proj` is missing or malformed. A stray is a diagnostic, never
+drift; see [api-guide-manifest.md — Stray
+files](api-guide-manifest.md#stray-files).
 
 ```ts
 const drift = project.detectManifestDrift();
@@ -285,6 +295,11 @@ if (drift.inSync) {
 const imageDrift = project.detectImageDrift();
 if (imageDrift) {
   console.log(imageDrift.entries);
+}
+
+const strays = project.detectStrayFiles();
+for (const s of strays) {
+  console.warn(`[${s.section}] stray file: ${s.name}`);
 }
 ```
 
@@ -317,6 +332,18 @@ if (!result.ok) {
 `detectImageDrift`, `detectReferenceIntegrity` — remain exported and
 unchanged. The handle is a thin consumer of those same functions; it adds
 nothing they cannot already do.
+
+> [!NOTE]
+> **The promise above breaks in behaviour, not signature, in 2.0.0.** Names,
+> arities, and types of `find_all_layouts_path` and `find_all_objectTypes_path`
+> are genuinely unchanged — but their **result sets narrow**: both now return
+> `.json` section items only, like their five name-section siblings always
+> did. This ships inside an already-breaking major (2.0.0 also carries ADR
+> 0024's dotted-extension change), and the narrowed behavior is what
+> `README.md` always documented, so it is the code catching up to its own
+> contract rather than the contract moving. See [ADR
+> 0025](decisions/0025-section-item-hood-and-stray-files.md) for the full
+> rationale and the escape hatch that recovers the pre-2.0.0 result verbatim.
 
 Use the handle when you are working with a project root across multiple
 operations (finders, manifest reads, drift checks). Use the free functions

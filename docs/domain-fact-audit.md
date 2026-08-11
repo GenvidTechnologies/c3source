@@ -1,15 +1,16 @@
 # C3 Domain-Fact Audit
 
-Corpus-scan results for eight exported C3 domain-fact tables (ADR 0008):
+Corpus-scan results for nine exported C3 domain-fact tables (ADR 0008):
 `EVENTVAR_REFERENCE_ACES`, `COMPARISON_OPERATORS`, `IMAGE_FILE_TYPE_EXTENSIONS`,
 `EDITOR_FIELD_RULES`, `EDITOR_LOCAL_EXCLUSIONS` (via `isEditorLocalPath`),
 `C3_MINIFIED_SOURCE_SUFFIXES` (via `isMinifiedSourcePath`),
-`SCRIPT_SOURCE_EXTENSIONS` (via `isScriptSourceName`), and
-`SCRIPT_FILE_TYPE_EXTENSIONS`. The first six were produced by
-`scripts/scan-domain-facts.mjs` for issue #68; the last two were added for
-issue #73/#74 on a later date — see the scan-dates note immediately below,
-since the two groups were not scanned together and should not be read as
-having equal freshness.
+`SCRIPT_SOURCE_EXTENSIONS` (via `isScriptSourceName`),
+`SCRIPT_FILE_TYPE_EXTENSIONS`, and `C3_SECTION_ITEM_EXTENSION` (via
+`isSectionItemName`). The first six were produced by
+`scripts/scan-domain-facts.mjs` for issue #68; the next two were added for
+issue #73/#74; the ninth was added for issue #76 — see the scan-dates note
+immediately below, since the three groups were not scanned together and
+should not be read as having equal freshness.
 
 **Why this doc exists, and not JSDoc.** The JSDoc on each table carries the
 *label* (`AUDITED`, etc.) and its blast radius — that ships to consumers in
@@ -25,8 +26,11 @@ re-scanned for this update**; their numbers below are exactly as they were on
 that date. `SCRIPT_SOURCE_EXTENSIONS` and `SCRIPT_FILE_TYPE_EXTENSIONS` were
 added **2026-08-10** (issue #73/#74), evidenced by the same 14-project corpus
 (already inventoried below, not re-walked) plus a fresh editor-bundle
-bisection. Scanner: `scripts/scan-domain-facts.mjs`. Full raw output is not
-committed (the corpus is machine-local — see
+bisection. `C3_SECTION_ITEM_EXTENSION` was added for issue #76; its corpus
+occurrence table is filled in by the validation-phase scan (the scanner's
+ninth probe — see [its findings section](#c3_section_item_extension-via-issectionitemname)
+below for what is and is not yet measured). Scanner: `scripts/scan-domain-facts.mjs`.
+Full raw output is not committed (the corpus is machine-local — see
 [Bounds](#bounds-what-this-cannot-prove)); the tables below are its roll-up.
 
 - [Corpus inventory](#corpus-inventory)
@@ -364,6 +368,57 @@ decision (a malformed image node should fail loudly); this table carries no
 such policy and degrades quietly instead. A caller relying on this table for
 anything throw-sensitive should not assume the two tables behave alike.
 
+### `C3_SECTION_ITEM_EXTENSION` (via `isSectionItemName`)
+
+Added issue #76. Evidence comes from `scripts/scan-domain-facts.mjs`'s ninth
+probe, which doubles as the stray-file inventory (`detectStrayFiles`'s exact
+complement — see [ADR 0025](decisions/0025-section-item-hood-and-stray-files.md)).
+**This section is written ahead of the validation-phase run that produces its
+measured numbers** — the corpus subsection below states the partition
+established at the #76 design checkpoint (zero vs. NOT EXERCISED) without
+inventing a precise project count or release list; the full occurrence table
+is added once that run's output is available.
+
+**Corpus evidence (scanner-refreshable).** For each of the seven name
+sections (`layouts`, `eventSheets`, `objectTypes`, `families`, `timelines`,
+`flowcharts`, `models3d`), the ninth probe walks every non-editor-local file
+under the section root and partitions it into a section item
+(`isSectionItemName` true) or a stray (false) — the identical predicate
+`find_all_section_items_path` and `detectStrayFiles` both apply. Across every
+section the corpus can actually measure, the finding is **zero strays**:
+every non-editor-local file under a name-section root is a `.json` section
+item, with no non-`.json` file observed in any measurable section.
+
+`models3d` is a genuine exception to that framing, **not** a passing result:
+no corpus project has a `models3d/` directory at all, so this table's
+item-hood claim for that section is **NOT EXERCISED**, not confirmed — the
+same status this doc gives any table branch the corpus is structurally unable
+to exercise (contrast a `NO GAPS`/`NO CONTRADICTIONS` verdict elsewhere in
+this doc, which requires at least one observation).
+
+*Precise project count, release list, and the full per-section occurrence
+table (mirroring the layout used for [`EDITOR_LOCAL_EXCLUSIONS`](#editor_local_exclusions-via-iseditorlocalpath)
+above) are produced by re-running the scanner — see [How to
+re-run](#how-to-re-run). The probe to run is `scripts/scan-domain-facts.mjs`'s
+ninth probe.*
+
+**Bundle evidence (NOT scanner-refreshable — a re-run cannot reproduce,
+confirm, or refute this and must never overwrite it).** C3's own editor
+bundle (`https://editor.construct.net/r{NNN}/projectResources.js`, the
+release root, **not** `c3runtime/`) saves every name-section item as `folder
++ name + ".json"` and redirects every companion *out* of these folders by
+construction: `.uistate.json` alongside (already excluded by
+`isEditorLocalPath`), images to `images/`. This is a **mechanism** proof — no
+C3 code path writes a non-`.json` file into any of the seven name-section
+folders — not a corpus observation about what 14 (or 20) projects happened to
+contain. See [A better validation channel:
+editor.construct.net](#a-better-validation-channel-editorconstructnet).
+
+**Blast radius:** same shape as `EDITOR_LOCAL_EXCLUSIONS` and
+`SCRIPT_SOURCE_EXTENSIONS` — a wrong predicate silently mis-partitions a file
+between "section item" and "stray" during discovery/drift, never a throw —
+contrast `IMAGE_FILE_TYPE_EXTENSIONS`'s unmapped-MIME throw.
+
 ## Bounds: what this cannot prove
 
 This corpus is Genvid-authored and skews heavily toward
@@ -516,17 +571,22 @@ never the JSDoc labels (see the top of this doc).
 
 **Two provenances, one doc — do not conflate them.** Several sections above
 mix corpus-derived numbers with bundle-derived facts, most visibly
-`SCRIPT_SOURCE_EXTENSIONS` and `SCRIPT_FILE_TYPE_EXTENSIONS`. Only the
-corpus numbers — occurrence counts, release lists, the on-disk file
-breakdown — are scanner-refreshable; re-running the scanner and updating
-those numbers is correct and expected. The `.ts`→r433 exact pin, the
-one-ternary fact, and the `.tsx`-is-a-Tiled-tileset false-positive trap are
-**bundle-derived**: a corpus scan cannot reproduce, confirm, or refute them,
-and a future re-run must never overwrite them with anything the scanner
-prints. Re-verify those against `https://editor.construct.net/r{NNN}/`
+`SCRIPT_SOURCE_EXTENSIONS`, `SCRIPT_FILE_TYPE_EXTENSIONS`, and
+`C3_SECTION_ITEM_EXTENSION`. Only the corpus numbers — occurrence counts,
+release lists, the on-disk file breakdown — are scanner-refreshable;
+re-running the scanner and updating those numbers is correct and expected.
+The `.ts`→r433 exact pin, the one-ternary fact, and the
+`.tsx`-is-a-Tiled-tileset false-positive trap (both script tables) and the
+"every name-section item is saved as `folder + name + ".json"`, companions
+redirected out" mechanism proof (`C3_SECTION_ITEM_EXTENSION`) are all
+**bundle-derived**: a corpus scan cannot reproduce, confirm, or refute any of
+them, and a future re-run must never overwrite them with anything the
+scanner prints. Re-verify those against `https://editor.construct.net/r{NNN}/`
 instead (see [A better validation
 channel](#a-better-validation-channel-editorconstructnet)). As of #77 the
-scanner covers all eight tables — a run no longer silently skips the two
-script tables the way the earlier, hand-rolled probe did.
+scanner covers all eight tables that existed at that time; #76 adds a ninth —
+a run no longer silently skips any table the way the earlier, hand-rolled
+probes once did.
 
-See issue #68 for the audit that produced this document.
+See issue #68 for the audit that produced this document, and issue #76 for
+the `C3_SECTION_ITEM_EXTENSION` addition.
