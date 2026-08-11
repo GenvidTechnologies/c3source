@@ -1,4 +1,4 @@
-import { find_all_files_path, isEditorLocalPath, normalizeLineEndings } from "./layouts.js";
+import { find_all_section_items_path, normalizeLineEndings } from "./layouts.js";
 
 // --- EventSheet Types ---
 
@@ -143,7 +143,7 @@ export interface ExtractedScript {
  * Find all eventSheet JSON files (excluding .uistate.json) in a directory tree.
  */
 export function find_all_eventsheets_path(eventSheetsDir: string): string[] {
-  return find_all_files_path(eventSheetsDir, (file) => file.endsWith(".json") && !isEditorLocalPath(file));
+  return find_all_section_items_path(eventSheetsDir);
 }
 
 export function isScriptAction(action: ScriptAction | Record<string, unknown>): action is ScriptAction {

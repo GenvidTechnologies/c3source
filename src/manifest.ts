@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { find_all_files_path, isEditorLocalPath } from "./layouts.js";
+import { find_all_section_items_path, isEditorLocalPath, isSectionItemName } from "./layouts.js";
 import { serializeC3Json, writeC3JsonFile } from "./serialize.js";
 
 // ─── Piece C: project.c3proj manifest model ──────────────────────────────────
@@ -677,7 +677,7 @@ export function walkDiskNameTree(
     const full = path.join(diskFolder, entry);
     if (statSync(full).isDirectory()) {
       out.push(...walkDiskNameTree(full, [...basePath, entry]));
-    } else if (entry.endsWith(".json")) {
+    } else if (isSectionItemName(entry)) {
       out.push({ name: path.basename(entry, ".json"), path: basePath });
     }
   }
@@ -1163,7 +1163,7 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
   const expectedImages: ExpectedImage[] = [];
   const objectTypesDir = path.join(projectDir, "objectTypes");
   if (existsSync(objectTypesDir)) {
-    const jsonPaths = find_all_files_path(objectTypesDir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));
+    const jsonPaths = find_all_section_items_path(objectTypesDir);
     for (const jsonPath of jsonPaths) {
       const parsed = JSON.parse(readFileSync(jsonPath, "utf-8")) as Record<string, unknown>;
       expectedImages.push(...deriveExpectedImages(parsed));

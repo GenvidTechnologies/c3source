@@ -7,6 +7,7 @@ import {
   find_all_files_path,
   find_all_layouts_path,
   find_all_objectTypes_path,
+  find_all_section_items_path,
   isEditorLocalPath,
   isScriptSourceName,
 } from "./layouts.js";
@@ -203,7 +204,7 @@ export interface C3Project {
   /**
    * Return all family paths under `familiesDir` (or its `sub` subdirectory).
    * Families are pure `<Name>.json` name-section files (no sub-assets).
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `familiesDir` (default `""`).
@@ -234,7 +235,7 @@ export interface C3Project {
    * Return all timeline paths under `timelinesDir` (or its `sub` subdirectory).
    * Timelines are `.json` name-section files; the walk is recursive so it also includes
    * files under the unnamed transitions/ "Eases" subfolder. Callers can scope with `sub`.
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `timelinesDir` (default `""`).
@@ -243,7 +244,7 @@ export interface C3Project {
 
   /**
    * Return all flowchart paths under `flowchartsDir` (or its `sub` subdirectory).
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `flowchartsDir` (default `""`).
@@ -252,7 +253,7 @@ export interface C3Project {
 
   /**
    * Return all 3D model paths under `models3dDir` (or its `sub` subdirectory).
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `models3dDir` (default `""`).
@@ -424,10 +425,8 @@ export function openProject(root: string): C3Project {
     },
 
     findAllFamilies(sub?: string): string[] {
-      // Families are pure <Name>.json files — same predicate shape as find_all_eventsheets_path.
-      return findInSection(familiesDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      // Families are pure <Name>.json files — same policy as find_all_eventsheets_path.
+      return findInSection(familiesDir, sub, find_all_section_items_path);
     },
 
     findAllScripts(sub?: string): string[] {
@@ -448,21 +447,15 @@ export function openProject(root: string): C3Project {
 
     findAllTimelines(sub?: string): string[] {
       // The walk is recursive so it includes files under the unnamed transitions/ "Eases" subfolder.
-      return findInSection(timelinesDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      return findInSection(timelinesDir, sub, find_all_section_items_path);
     },
 
     findAllFlowcharts(sub?: string): string[] {
-      return findInSection(flowchartsDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      return findInSection(flowchartsDir, sub, find_all_section_items_path);
     },
 
     findAllModels3d(sub?: string): string[] {
-      return findInSection(models3dDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      return findInSection(models3dDir, sub, find_all_section_items_path);
     },
 
     detectManifestDrift(): ManifestDrift {
