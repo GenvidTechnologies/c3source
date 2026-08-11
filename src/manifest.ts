@@ -1,6 +1,11 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { find_all_section_items_path, isEditorLocalPath, isSectionItemName } from "./layouts.js";
+import {
+  find_all_files_path,
+  find_all_section_items_path,
+  isEditorLocalPath,
+  isSectionItemName,
+} from "./layouts.js";
 import { serializeC3Json, writeC3JsonFile } from "./serialize.js";
 
 // ─── Piece C: project.c3proj manifest model ──────────────────────────────────
@@ -1188,5 +1193,78 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
   );
 
   return { section: "images", folder: IMAGES_FOLDER, entries };
+}
+
+// ─── Stray files ───────────────────────────────────────────────────────────
+
+/**
+ * A file found under a name-section root that is neither a section item
+ * ({@link isSectionItemName}) nor editor-local ({@link isEditorLocalPath}) —
+ * e.g. `layouts/Level1.dsl.txt`, `objectTypes/tiles/notes.md`. See ADR 0025.
+ *
+ * This is deliberately NOT drift: a name section keys its items on `<name>`
+ * derived from `<name>.json` (see {@link C3_SECTION_ITEM_EXTENSION}), so a
+ * stray file has no manifest position and can never acquire one — it can be
+ * neither `missing` nor `untracked`, and there is nothing a caller could map
+ * it to. That is why, unlike {@link DriftEntry}, `StrayFile` carries no
+ * `manifestPath` — the absence is load-bearing, not an oversight. It is
+ * surfaced so a misfiled file is visible at all, never as a worklist item.
+ *
+ * Under a name-section root, every non-editor-local file is exactly one of an
+ * item or a stray: {@link find_all_section_items_path} and
+ * {@link detectStrayFiles} partition the same walk disjointly and
+ * exhaustively.
+ */
+export interface StrayFile {
+  /** The name-section key, e.g. `"layouts"` — a {@link C3_SECTION_FOLDERS} key. */
+  section: string;
+  /** The resolved on-disk folder name, e.g. `"layouts"`. */
+  folder: string;
+  /** The bare basename, e.g. `"Level1.dsl.txt"`. */
+  name: string;
+  /** Section-root-relative subfolder segments; `[]` at the section root. */
+  diskPath: ManifestPathSegment[];
+}
+
+/**
+ * Find every stray file (see {@link StrayFile}) under each of the seven
+ * name-section roots ({@link C3_SECTION_FOLDERS}).
+ *
+ * **Manifest-independent**: reads no `project.c3proj` and takes none — it
+ * works even when the manifest is absent or malformed, because item-hood is
+ * decided purely from a basename (`isSectionItemName`) and provenance purely
+ * from a basename (`isEditorLocalPath`), never from declared membership. A
+ * section directory that does not exist on disk is skipped, not reported.
+ *
+ * **Deliberately not wrapped in a degradation guard** (contrast
+ * {@link detectImageDrift}'s try/catch): there is no domain-level throw here
+ * to catch — this only classifies basenames the walk already read — so any
+ * failure would be a filesystem failure ({@link find_all_files_path} itself
+ * throwing) that the surrounding drift run could not have survived either.
+ * Do not add a try/catch around this call; it would silently hide a real
+ * failure rather than degrade a best-effort sub-detector.
+ *
+ * The exact complement of {@link find_all_section_items_path} over the same
+ * walk: for a given section directory, the two functions' results are
+ * disjoint and their union is every non-editor-local file in that directory.
+ *
+ * Scoped to the seven name sections only. `rootFileFolders` categories
+ * (`scripts/`, `sounds/`, …) are out of scope because file-folder membership
+ * is extension-agnostic by design — there is no item-hood rule for a stray to
+ * violate there (`scripts/` has its own, separate rule, ADR 0024). `images/`
+ * is out of scope because it is a flat asset folder, not a name section, at
+ * all.
+ */
+export function detectStrayFiles(projectDir: string): StrayFile[] {
+  const out: StrayFile[] = [];
+  for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
+    const dir = path.join(projectDir, folderName);
+    if (!existsSync(dir)) continue;
+    for (const abs of find_all_files_path(dir, (f) => !isSectionItemName(f) && !isEditorLocalPath(f))) {
+      const rel = path.relative(dir, abs).split(path.sep);
+      out.push({ section, folder: folderName, name: rel[rel.length - 1], diskPath: rel.slice(0, -1) });
+    }
+  }
+  return out;
 }
 
