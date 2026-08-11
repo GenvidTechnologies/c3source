@@ -174,6 +174,42 @@ export function isScriptSourceName(name: string): boolean {
 }
 
 /**
+ * The on-disk extension of every item of a C3 **name section** — the
+ * sections named by {@link C3_SECTION_FOLDERS} (layouts, objectTypes,
+ * eventSheets, families, timelines, flowcharts, models3d).
+ *
+ * **AUDITED** — C3's own editor bundle saves every name-section item as
+ * `folder + name + ".json"` (`https://editor.construct.net/r{NNN}/projectResources.js`
+ * — the release root, not `c3runtime/`); companion artifacts are redirected
+ * *out* of these folders by construction (`.uistate.json` alongside, images to
+ * `images/`). Corroborated by the project corpus. See `docs/domain-fact-audit.md`
+ * for the evidence volume.
+ *
+ * **Blast radius:** a real item silently missing from every name-section
+ * finder — a false negative in discovery, never a throw (contrast
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS}, which throws).
+ */
+export const C3_SECTION_ITEM_EXTENSION = ".json";
+
+/**
+ * True if a bare basename is a C3 name-section item by extension alone.
+ * Tests item-hood only — provenance (is this file project source, or an
+ * editor-local artifact like `.uistate.json`?) is {@link isEditorLocalPath}'s
+ * job, and reachability (should the walk descend into this directory at all?)
+ * is {@link find_all_files_path}'s `descend` parameter's job. These are three
+ * separate axes with three separate predicates; see ADR 0025.
+ *
+ * **Unlike {@link isScriptSourceName}, this match is case-sensitive, and that
+ * is deliberate.** C3's lowercasing-before-testing rule is audited for script
+ * extensions but unverified for `.json`; matching case-insensitively here
+ * would silently *widen* every existing name-section finder, each of which
+ * today applies an exact `.endsWith(".json")`.
+ */
+export function isSectionItemName(name: string): boolean {
+  return name.endsWith(C3_SECTION_ITEM_EXTENSION);
+}
+
+/**
  * True if `name` is a `.js` file that C3 would treat as a generated build
  * output rather than authored source, because a same-basename `.ts` exists
  * among `siblings` (bare basenames from the same directory).
@@ -273,6 +309,18 @@ export function find_all_files_path(
       }
     });
   return result;
+}
+
+/**
+ * The single owner of the name-section item policy: collects every project-
+ * source item under `dir` — {@link isSectionItemName}'s extension axis
+ * combined with {@link isEditorLocalPath}'s provenance axis, applied via
+ * {@link find_all_files_path}. The named collectors (`find_all_layouts_path`,
+ * `find_all_objectTypes_path`, `find_all_eventsheets_path`, …) are thin
+ * consumers of this one policy so it cannot drift between sections (ADR 0005).
+ */
+export function find_all_section_items_path(dir: string): string[] {
+  return find_all_files_path(dir, (file) => isSectionItemName(file) && !isEditorLocalPath(file));
 }
 
 export function find_all_layouts_path(layout_dir: string): string[] {
