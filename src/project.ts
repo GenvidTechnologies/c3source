@@ -184,18 +184,22 @@ export interface C3Project {
   findAllEventSheets(sub?: string): string[];
 
   /**
-   * Return all layout paths under `layoutsDir` (or its `sub` subdirectory).
-   * Delegates to {@link find_all_layouts_path} — all non-editor-local files.
-   * Returns `[]` if the target directory does not exist.
+   * Return all layout `.json` section-item paths under `layoutsDir` (or its `sub`
+   * subdirectory). Delegates to {@link find_all_layouts_path}, itself a thin consumer of
+   * {@link find_all_section_items_path} — the `.json`-only policy every other name-section
+   * finder already applied. **Narrowed in 2.0.0**; see ADR 0025. Returns `[]` if the target
+   * directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `layoutsDir` (default `""`).
    */
   findAllLayouts(sub?: string): string[];
 
   /**
-   * Return all object-type paths under `objectTypesDir` (or its `sub` subdirectory).
-   * Delegates to {@link find_all_objectTypes_path} — all non-editor-local files.
-   * Returns `[]` if the target directory does not exist.
+   * Return all object-type `.json` section-item paths under `objectTypesDir` (or its `sub`
+   * subdirectory). Delegates to {@link find_all_objectTypes_path}, itself a thin consumer of
+   * {@link find_all_section_items_path} — the `.json`-only policy every other name-section
+   * finder already applied. **Narrowed in 2.0.0**; see ADR 0025. Returns `[]` if the target
+   * directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `objectTypesDir` (default `""`).
    */
@@ -475,13 +479,12 @@ export function openProject(root: string): C3Project {
     },
 
     collectAddonAttribution(): AddonAttribution[] {
-      // find_all_objectTypes_path filters only on !isEditorLocalPath (no .json predicate —
-      // that is intentional, see its JSDoc), so a stray non-JSON file under objectTypes/
-      // would otherwise reach JSON.parse below and crash. Filter to .json here, at the
-      // parse boundary, rather than narrowing the finder's documented contract.
-      const objectTypes = this.findAllObjectTypes()
-        .filter((p) => p.endsWith(".json"))
-        .map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
+      // No re-filter needed here: findAllObjectTypes (find_all_objectTypes_path) now owns
+      // the .json section-item policy itself, so every path it returns is already safe to
+      // hand to JSON.parse below. This is a policy RELOCATION, not a dead-code deletion —
+      // the decision moved from being restated at this parse boundary to living once in the
+      // finder. See ADR 0025.
+      const objectTypes = this.findAllObjectTypes().map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
       const families = this.findAllFamilies().map((p) => JSON.parse(readFileSync(p, "utf-8")) as Family);
       return freeCollectAddonAttribution(objectTypes, families);
     },

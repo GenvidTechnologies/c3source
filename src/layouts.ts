@@ -202,8 +202,8 @@ export const C3_SECTION_ITEM_EXTENSION = ".json";
  * **Unlike {@link isScriptSourceName}, this match is case-sensitive, and that
  * is deliberate.** C3's lowercasing-before-testing rule is audited for script
  * extensions but unverified for `.json`; matching case-insensitively here
- * would silently *widen* every existing name-section finder, each of which
- * today applies an exact `.endsWith(".json")`.
+ * would silently *widen* every name-section finder built on this predicate,
+ * each of which relies on an exact match against {@link C3_SECTION_ITEM_EXTENSION}.
  */
 export function isSectionItemName(name: string): boolean {
   return name.endsWith(C3_SECTION_ITEM_EXTENSION);
@@ -323,12 +323,32 @@ export function find_all_section_items_path(dir: string): string[] {
   return find_all_files_path(dir, (file) => isSectionItemName(file) && !isEditorLocalPath(file));
 }
 
+/**
+ * Return every layout `.json` section item under `layout_dir` (recursive,
+ * `uistate/`/`ts-defs/` skipped via {@link isEditorLocalPath}). Thin consumer of
+ * {@link find_all_section_items_path}, the single owner of the name-section item
+ * policy.
+ *
+ * **Narrowed in 2.0.0** — before that release this collector returned every
+ * non-editor-local file regardless of extension; it now applies the same
+ * `.json`-only policy every other name-section finder already applied. See ADR 0025.
+ */
 export function find_all_layouts_path(layout_dir: string): string[] {
-  return find_all_files_path(layout_dir, (file) => !isEditorLocalPath(file));
+  return find_all_section_items_path(layout_dir);
 }
 
+/**
+ * Return every object-type `.json` section item under `objectTypesDir` (recursive,
+ * `uistate/`/`ts-defs/` skipped via {@link isEditorLocalPath}). Thin consumer of
+ * {@link find_all_section_items_path}, the single owner of the name-section item
+ * policy.
+ *
+ * **Narrowed in 2.0.0** — before that release this collector returned every
+ * non-editor-local file regardless of extension; it now applies the same
+ * `.json`-only policy every other name-section finder already applied. See ADR 0025.
+ */
 export function find_all_objectTypes_path(objectTypesDir: string): string[] {
-  return find_all_files_path(objectTypesDir, (file) => !isEditorLocalPath(file));
+  return find_all_section_items_path(objectTypesDir);
 }
 
 // Return true if layout must be saved.
@@ -389,11 +409,12 @@ function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): num
 }
 
 export function visit_layers_in_layouts(layouts_path: string, visitor: LayerVisitor): number {
-  // find_all_layouts_path filters only on !isEditorLocalPath (no .json predicate — that is
-  // intentional, see its JSDoc), so a stray non-JSON file under layouts/ would otherwise
-  // reach visit_layers_in_layout's JSON.parse and crash. Filter to .json here, at the parse
-  // boundary, rather than narrowing the finder's documented contract.
-  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
+  // No re-filter needed here: find_all_layouts_path now owns the .json section-item
+  // policy itself (it delegates to find_all_section_items_path), so every path it
+  // returns is already safe to hand to visit_layers_in_layout's JSON.parse. This is a
+  // policy RELOCATION, not a dead-code deletion — the decision moved from being
+  // restated at every consumer's parse boundary to living once in the finder. See ADR 0025.
+  const layouts = find_all_layouts_path(layouts_path);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, visitor) + changed,
     0,
@@ -412,10 +433,11 @@ function makeLayerVisitorFromInstanceVisitor(visitor: InstanceVisitor): LayerVis
 }
 
 export function visit_instances_in_layouts(layouts_path: string, visitor: InstanceVisitor): number {
-  // Same non-JSON-file hazard as visit_layers_in_layouts above (this ultimately calls the
-  // same visit_layers_in_layout, whose JSON.parse would crash on a stray non-JSON file) —
-  // filter to .json here, at the parse boundary, rather than narrowing find_all_layouts_path.
-  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
+  // No re-filter needed here either — same policy-relocation rationale as
+  // visit_layers_in_layouts above (this ultimately calls the same visit_layers_in_layout):
+  // find_all_layouts_path now owns the .json section-item policy itself, so nothing
+  // downstream needs to restate it. See ADR 0025.
+  const layouts = find_all_layouts_path(layouts_path);
   const layerVisitor = makeLayerVisitorFromInstanceVisitor(visitor);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, layerVisitor) + changed,
