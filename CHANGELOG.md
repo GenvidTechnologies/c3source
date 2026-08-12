@@ -26,8 +26,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 >   token).
 >
 >   **`@genvid/c3source` is frozen at 1.5.0 and is not the package you want.**
->   It is still installable and still resolves `latest` to 1.5.0, so a consumer
->   on the old name silently misses every release from 1.6.0 on — including two
+>   All twelve of its versions were deprecated on 2026-08-12 (`moved to
+>   @genvidtech/c3source`), so a fresh install now warns. But a deprecation only
+>   warns — the old name still installs, still resolves `latest` to 1.5.0, and an
+>   existing lockfile pin keeps resolving with no warning at all. If you are on
+>   the old name you are missing every release from 1.6.0 on, including two
 >   majors' worth of breaking changes. Depend on `@genvidtech/c3source`.
 >
 > Ranges below are per git tag. Detailed rationale for architectural decisions

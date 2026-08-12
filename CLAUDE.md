@@ -756,11 +756,15 @@ excludes first-publish), which was revoked once the trusted publisher was
 configured.
 
 **The package changed scope at 1.6.0** — `0.0.1`–`1.5.0` were published as
-`@genvid/c3source`, `1.6.0` onward as `@genvidtech/c3source` (#41). The old name
-is still on npm, frozen at 1.5.0 and **not deprecated**, so `npm install
-@genvid/c3source` silently resolves to a version two majors behind. Treat any
-consumer reporting behaviour that predates 1.6.0 as possibly still on the old
-name before debugging the code.
+`@genvid/c3source`, `1.6.0` onward as `@genvidtech/c3source` (#41). All twelve
+versions of the old name were **deprecated on 2026-08-12** with the message
+`moved to @genvidtech/c3source`, so a fresh `npm install @genvid/c3source` now
+warns and points at the right package. **A deprecation warns; it does not
+block or unpublish** — the old name still installs, still resolves `latest` to
+1.5.0, and an existing lockfile pin keeps resolving silently without ever
+re-printing the warning. So still treat a consumer reporting behaviour that
+predates 1.6.0 as possibly on the old name before debugging the code; the
+deprecation improves the signal for *new* installs only.
 
 **`CHANGELOG.md` exists as of 2.0.0** and is the per-version release record
 (Keep a Changelog); entries before 2.0.0 were backfilled from git history. Every
