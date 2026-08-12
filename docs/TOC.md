@@ -8,6 +8,7 @@ Each entry should be a one-line description. Only list docs that exist.
 ## Project context
 
 - `../CLAUDE.md` — overview, commands, architecture, formatting & CI conventions
+- `../CHANGELOG.md` — per-version release notes (Keep a Changelog); introduced at 2.0.0, earlier entries backfilled from git history, and records the `@genvid` → `@genvidtech` scope rename at 1.6.0
 - `design-patterns.md` — reusable patterns (single-source event counter, thin file-walker wrappers, real-export-vs-inline test strategy, collect-then-throw-first validation)
 - `api-guide.md` — usage reference for SID traversal and editor-local classification; links to manifest/drift doc
 - `api-guide-manifest.md` — project manifest model, strict vs tolerant parsing, shape validation, canonical serialization/writing, drift detection types, walk primitives, and 0.x migration (#19 #21 #57 #58)

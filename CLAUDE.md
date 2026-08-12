@@ -754,3 +754,21 @@ package's trusted publisher is registered against this repo
 of the name was bootstrapped with a one-time token (since npm's OIDC flow
 excludes first-publish), which was revoked once the trusted publisher was
 configured.
+
+**The package changed scope at 1.6.0** — `0.0.1`–`1.5.0` were published as
+`@genvid/c3source`, `1.6.0` onward as `@genvidtech/c3source` (#41). The old name
+is still on npm, frozen at 1.5.0 and **not deprecated**, so `npm install
+@genvid/c3source` silently resolves to a version two majors behind. Treat any
+consumer reporting behaviour that predates 1.6.0 as possibly still on the old
+name before debugging the code.
+
+**`CHANGELOG.md` exists as of 2.0.0** and is the per-version release record
+(Keep a Changelog); entries before 2.0.0 were backfilled from git history. Every
+release must move `## [Unreleased]` into a dated `## [X.Y.Z]` section **before**
+the tag is pushed — `/gvt-dev:release-npm-package` does this automatically, but
+it is easy to miss on a hand-cut release. Note the file is deliberately **not**
+in `package.json`'s `files` allowlist (`dist`, `LICENSE`, `README.md`), so it
+ships on GitHub but not in the npm tarball. Two older records predate it and are
+left unedited, since an accepted ADR states the situation at its date: [ADR
+0024](docs/decisions/0024-script-source-fact-and-dotted-extensions.md) reasons
+explicitly from "with no CHANGELOG.md in this repo".
