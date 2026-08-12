@@ -2,15 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { attributeFamily, attributeObjectType } from "./addons.js";
 import { EventSheet, ScriptAction, hasActions, hasConditions, visitEvents } from "./eventSheets.js";
-import {
-  Family,
-  Layer,
-  Layout,
-  ObjectType,
-  find_all_files_path,
-  isEditorLocalPath,
-  walkLayerEntries,
-} from "./layouts.js";
+import { Family, Layer, Layout, ObjectType, find_all_section_items_path, walkLayerEntries } from "./layouts.js";
 import {
   C3ProjectManifest,
   C3_SECTION_FOLDERS,
@@ -586,11 +578,10 @@ export function detectEventClassIssues(
  * (`families/TextFamily.json`, `objectTypes/tiles/Tilemap.json`) on Windows, where
  * `path.relative` otherwise yields backslashes.
  *
- * Mirrors `detectImageDrift`'s walk (`src/manifest.ts`): `find_all_files_path(dir, (f) =>
- * f.endsWith(".json") && !isEditorLocalPath(f))`, NOT `find_all_layouts_path` /
- * `find_all_objectTypes_path` — those filter on `!isEditorLocalPath(file)` alone with no
- * `.json` check, so a stray non-JSON file under a section directory would reach
- * `JSON.parse` and crash.
+ * Built on {@link find_all_section_items_path} — the same shared policy `detectImageDrift`'s
+ * walk (`src/manifest.ts`) now uses — NOT `find_all_layouts_path` / `find_all_objectTypes_path`:
+ * those filter on `!isEditorLocalPath(file)` alone with no `.json` check, so a stray non-JSON
+ * file under a section directory would reach `JSON.parse` and crash.
  *
  * Graceful-empty: returns `[]` without touching the filesystem further when `dir` does not
  * exist (mirrors `findInSection` in `src/project.ts` and `detectImageDrift`'s own
@@ -606,7 +597,7 @@ export function detectEventClassIssues(
 export function readSourceDocs<T>(projectDir: string, folderName: string): SourceDoc<T>[] {
   const dir = path.join(projectDir, folderName);
   if (!existsSync(dir)) return [];
-  const jsonPaths = find_all_files_path(dir, (f) => f.endsWith(".json") && !isEditorLocalPath(f));
+  const jsonPaths = find_all_section_items_path(dir);
   return jsonPaths.map((absPath) => ({
     file: path.relative(projectDir, absPath).replace(/\\/g, "/"),
     value: JSON.parse(readFileSync(absPath, "utf-8")) as T,

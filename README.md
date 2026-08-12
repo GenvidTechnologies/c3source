@@ -55,6 +55,15 @@ find_all_objectTypes_path(objectTypesDir: string): string[]
 
 Recursively collect `.json` files (excluding `.uistate.json`) from a directory tree.
 
+> [!NOTE]
+> **Behavior change in 2.0.0.** Before 2.0.0, `find_all_layouts_path` and
+> `find_all_objectTypes_path` returned every non-editor-local file regardless
+> of extension — the sentence above was already true only of
+> `find_all_eventsheets_path`. Both now narrow to `.json` section items like
+> their sibling always did, so all three functions match what this section has
+> always documented. See [ADR
+> 0025](docs/decisions/0025-section-item-hood-and-stray-files.md).
+
 ### Layout traversal
 
 ```ts

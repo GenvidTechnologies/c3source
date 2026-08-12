@@ -208,6 +208,82 @@ classification](#minified-source-classification) below.
 
 ---
 
+## Section item-hood
+
+A directory walk over a C3 name section (`layouts/`, `objectTypes/`, …) must
+answer three orthogonal questions, each with its own predicate, each
+declining to answer the other two (ADR 0025):
+
+| Axis | Question | Predicate |
+|---|---|---|
+| Provenance | Is this file C3 source, or an editor-local artifact? | `isEditorLocalPath` (above) |
+| Reachability | May the walk enter this directory at all? | `find_all_files_path`'s `descend` parameter (above) |
+| Item-hood | Is this file an *item* of the section it sits in? | `isSectionItemName` (this section) |
+
+### Exports
+
+```ts
+const C3_SECTION_ITEM_EXTENSION = ".json"
+
+function isSectionItemName(name: string): boolean
+function find_all_section_items_path(dir: string): string[]
+```
+
+`isSectionItemName` accepts a **bare basename**, matching
+`isEditorLocalPath`'s and `isScriptSourceName`'s argument contract, and
+returns `true` for a `C3_SECTION_ITEM_EXTENSION` extension. Unlike
+`isScriptSourceName`, the match is **case-sensitive**: C3's
+lowercasing-before-testing rule is audited for script extensions but
+unverified for `.json`, and matching case-insensitively here would silently
+*widen* every name-section finder built on this predicate with no evidence
+backing the widening.
+
+`find_all_section_items_path(dir)` is the single owner of the combined
+item-hood + provenance policy — `isSectionItemName(file) &&
+!isEditorLocalPath(file)`, built on `find_all_files_path`. All seven
+name-section finders (`find_all_layouts_path`, `find_all_objectTypes_path`,
+`find_all_eventsheets_path`, and the four `C3Project` finders for families,
+timelines, flowcharts, and 3D models) are thin consumers of this one
+collector; see [design-patterns.md — One file-walker, one item-hood
+collector, seven finders](design-patterns.md#one-file-walker-one-item-hood-collector-seven-finders).
+
+**Explicitly excluded from this axis:** `findAllScripts` ([Script source
+classification](#script-source-classification) below, ADR 0024) and
+`findAllAddons` (`.c3addon`). Both already had a correct, section-specific
+item-hood rule of their own before ADR 0025; `isSectionItemName` /
+`C3_SECTION_ITEM_EXTENSION` apply only to the seven `C3_SECTION_FOLDERS` name
+sections.
+
+### Behavior change in 2.0.0
+
+Before 2.0.0, `find_all_layouts_path` and `find_all_objectTypes_path`
+returned every non-editor-local file regardless of extension — the other five
+name-section finders already filtered to `.json`. This was drift inherited
+from how the original three collectors were separately hand-written, not a
+design decision (README.md documented `.json` for all three the whole time).
+2.0.0 narrows the two permissive finders to match their five siblings.
+
+**Nothing is lost by narrowing — the escape hatch recovers the pre-2.0.0
+result verbatim:**
+
+```ts
+import { find_all_files_path, isEditorLocalPath } from "@genvidtech/c3source";
+
+// Everything under dir, no filtering at all:
+find_all_files_path(dir, () => true);
+
+// The exact pre-2.0.0 find_all_layouts_path / find_all_objectTypes_path
+// behavior — every non-editor-local file, regardless of extension:
+find_all_files_path(dir, (f) => !isEditorLocalPath(f));
+```
+
+See [ADR 0025](decisions/0025-section-item-hood-and-stray-files.md) for the
+full rationale, including why a non-`.json` file under a name section is
+reported as a diagnostic (`detectStrayFiles`) rather than silently dropped —
+[api-guide-manifest.md — Stray files](api-guide-manifest.md#stray-files).
+
+---
+
 ## Minified-source classification
 
 C3 writes almost all project source tab-indented (see [ADR

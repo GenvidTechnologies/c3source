@@ -79,7 +79,7 @@ describe("uistate subfolders (C3 r487)", () => {
     ]);
   });
 
-  it("find_all_eventsheets_path only collects .json files, unlike the layout/objectType collectors", () => {
+  it("find_all_eventsheets_path only collects .json files", () => {
     root = mkdtempSync(path.join(tmpdir(), "c3source-ext-"));
     const dir = path.join(root, "eventSheets");
     mkdirSync(dir, { recursive: true });

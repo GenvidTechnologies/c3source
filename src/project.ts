@@ -7,6 +7,7 @@ import {
   find_all_files_path,
   find_all_layouts_path,
   find_all_objectTypes_path,
+  find_all_section_items_path,
   isEditorLocalPath,
   isScriptSourceName,
 } from "./layouts.js";
@@ -22,8 +23,10 @@ import {
   ManifestReadResult,
   PROJECT_MANIFEST_FILE,
   SectionDrift,
+  StrayFile,
   detectImageDrift,
   detectManifestDrift,
+  detectStrayFiles,
   readProjectManifest,
   readProjectManifestTolerant,
   writeProjectManifest,
@@ -183,18 +186,22 @@ export interface C3Project {
   findAllEventSheets(sub?: string): string[];
 
   /**
-   * Return all layout paths under `layoutsDir` (or its `sub` subdirectory).
-   * Delegates to {@link find_all_layouts_path} — all non-editor-local files.
-   * Returns `[]` if the target directory does not exist.
+   * Return all layout `.json` section-item paths under `layoutsDir` (or its `sub`
+   * subdirectory). Delegates to {@link find_all_layouts_path}, itself a thin consumer of
+   * {@link find_all_section_items_path} — the `.json`-only policy every other name-section
+   * finder already applied. **Narrowed in 2.0.0**; see ADR 0025. Returns `[]` if the target
+   * directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `layoutsDir` (default `""`).
    */
   findAllLayouts(sub?: string): string[];
 
   /**
-   * Return all object-type paths under `objectTypesDir` (or its `sub` subdirectory).
-   * Delegates to {@link find_all_objectTypes_path} — all non-editor-local files.
-   * Returns `[]` if the target directory does not exist.
+   * Return all object-type `.json` section-item paths under `objectTypesDir` (or its `sub`
+   * subdirectory). Delegates to {@link find_all_objectTypes_path}, itself a thin consumer of
+   * {@link find_all_section_items_path} — the `.json`-only policy every other name-section
+   * finder already applied. **Narrowed in 2.0.0**; see ADR 0025. Returns `[]` if the target
+   * directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `objectTypesDir` (default `""`).
    */
@@ -203,7 +210,7 @@ export interface C3Project {
   /**
    * Return all family paths under `familiesDir` (or its `sub` subdirectory).
    * Families are pure `<Name>.json` name-section files (no sub-assets).
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `familiesDir` (default `""`).
@@ -234,7 +241,7 @@ export interface C3Project {
    * Return all timeline paths under `timelinesDir` (or its `sub` subdirectory).
    * Timelines are `.json` name-section files; the walk is recursive so it also includes
    * files under the unnamed transitions/ "Eases" subfolder. Callers can scope with `sub`.
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `timelinesDir` (default `""`).
@@ -243,7 +250,7 @@ export interface C3Project {
 
   /**
    * Return all flowchart paths under `flowchartsDir` (or its `sub` subdirectory).
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `flowchartsDir` (default `""`).
@@ -252,7 +259,7 @@ export interface C3Project {
 
   /**
    * Return all 3D model paths under `models3dDir` (or its `sub` subdirectory).
-   * Built on {@link find_all_files_path} — only `.json` non-editor-local files.
+   * Delegates to {@link find_all_section_items_path}.
    * Returns `[]` if the target directory does not exist.
    *
    * @param sub - Optional subdirectory relative to `models3dDir` (default `""`).
@@ -272,6 +279,16 @@ export interface C3Project {
    * Returns `null` if the `images/` directory does not exist.
    */
   detectImageDrift(): SectionDrift | null;
+
+  /**
+   * Detect stray files for this project (see {@link StrayFile}).
+   * Delegates to {@link detectStrayFiles} with the project root — and, unlike its
+   * manifest-dependent siblings above, passes no manifest: stray detection is
+   * manifest-independent by design (item-hood and provenance are decided purely from
+   * a basename), so this method works even on a project whose `project.c3proj` is
+   * missing or malformed.
+   */
+  detectStrayFiles(): StrayFile[];
 
   /**
    * Detect reference-integrity issues for this project.
@@ -331,6 +348,7 @@ export function openProject(root: string): C3Project {
   // infinite recursion when the method tries to call `detectManifestDrift(...)`.
   const freeDetectManifestDrift = detectManifestDrift;
   const freeDetectImageDrift = detectImageDrift;
+  const freeDetectStrayFiles = detectStrayFiles;
   const freeDetectReferenceIntegrity = detectReferenceIntegrity;
   const freeCollectAddonAttribution = collectAddonAttribution;
   const freeFindAllAddons = findAllAddons;
@@ -424,10 +442,8 @@ export function openProject(root: string): C3Project {
     },
 
     findAllFamilies(sub?: string): string[] {
-      // Families are pure <Name>.json files — same predicate shape as find_all_eventsheets_path.
-      return findInSection(familiesDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      // Families are pure <Name>.json files — same policy as find_all_eventsheets_path.
+      return findInSection(familiesDir, sub, find_all_section_items_path);
     },
 
     findAllScripts(sub?: string): string[] {
@@ -448,21 +464,15 @@ export function openProject(root: string): C3Project {
 
     findAllTimelines(sub?: string): string[] {
       // The walk is recursive so it includes files under the unnamed transitions/ "Eases" subfolder.
-      return findInSection(timelinesDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      return findInSection(timelinesDir, sub, find_all_section_items_path);
     },
 
     findAllFlowcharts(sub?: string): string[] {
-      return findInSection(flowchartsDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      return findInSection(flowchartsDir, sub, find_all_section_items_path);
     },
 
     findAllModels3d(sub?: string): string[] {
-      return findInSection(models3dDir, sub, (dir) =>
-        find_all_files_path(dir, (file) => file.endsWith(".json") && !isEditorLocalPath(file)),
-      );
+      return findInSection(models3dDir, sub, find_all_section_items_path);
     },
 
     detectManifestDrift(): ManifestDrift {
@@ -475,6 +485,13 @@ export function openProject(root: string): C3Project {
       return freeDetectImageDrift(root);
     },
 
+    detectStrayFiles(): StrayFile[] {
+      // Manifest-independent by design — passes no manifest, unlike detectManifestDrift/
+      // detectReferenceIntegrity above, so this works even when project.c3proj is missing
+      // or malformed.
+      return freeDetectStrayFiles(root);
+    },
+
     detectReferenceIntegrity(options?: ReferenceIntegrityOptions): ReferenceIntegrityResult {
       // Pass the handle's cached manifest as the second arg so the free function reuses
       // the already-parsed manifest instead of re-reading project.c3proj from disk.
@@ -482,13 +499,12 @@ export function openProject(root: string): C3Project {
     },
 
     collectAddonAttribution(): AddonAttribution[] {
-      // find_all_objectTypes_path filters only on !isEditorLocalPath (no .json predicate —
-      // that is intentional, see its JSDoc), so a stray non-JSON file under objectTypes/
-      // would otherwise reach JSON.parse below and crash. Filter to .json here, at the
-      // parse boundary, rather than narrowing the finder's documented contract.
-      const objectTypes = this.findAllObjectTypes()
-        .filter((p) => p.endsWith(".json"))
-        .map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
+      // No re-filter needed here: findAllObjectTypes (find_all_objectTypes_path) now owns
+      // the .json section-item policy itself, so every path it returns is already safe to
+      // hand to JSON.parse below. This is a policy RELOCATION, not a dead-code deletion —
+      // the decision moved from being restated at this parse boundary to living once in the
+      // finder. See ADR 0025.
+      const objectTypes = this.findAllObjectTypes().map((p) => JSON.parse(readFileSync(p, "utf-8")) as ObjectType);
       const families = this.findAllFamilies().map((p) => JSON.parse(readFileSync(p, "utf-8")) as Family);
       return freeCollectAddonAttribution(objectTypes, families);
     },

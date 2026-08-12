@@ -665,14 +665,20 @@ describe("openProject — crash fix: non-.json files under objectTypes/ and layo
       mkdirSync(objectTypesDir, { recursive: true });
       mkdirSync(layoutsDir, { recursive: true });
 
-      // find_all_objectTypes_path / find_all_layouts_path filter only on !isEditorLocalPath
-      // (no .json predicate — see their JSDoc), so both of these stray files are returned by
-      // the finders and previously reached JSON.parse unfiltered.
+      // As of 2.0.0, find_all_objectTypes_path / find_all_layouts_path delegate to
+      // find_all_section_items_path and so already exclude a stray non-.json file like
+      // README.md at the source — neither finder ever hands it to JSON.parse in the first
+      // place. See ADR 0025. R9 below asserts that directly; the rest of this test keeps
+      // its original "does not throw" shape as a behavioural regression guard.
       writeFileSync(path.join(objectTypesDir, "README.md"), "not json");
       writeFileSync(path.join(objectTypesDir, "Foo.json"), JSON.stringify({ name: "Foo" }));
 
       writeFileSync(path.join(layoutsDir, "README.md"), "not json");
       writeC3JsonFile(path.join(layoutsDir, "Main Layout.json"), { name: "Main Layout", layers: [] });
+
+      // R9: the finders themselves never return the stray README.md.
+      expect(find_all_objectTypes_path(objectTypesDir)).to.not.include(path.join(objectTypesDir, "README.md"));
+      expect(find_all_layouts_path(layoutsDir)).to.not.include(path.join(layoutsDir, "README.md"));
 
       const proj = openProject(tmpDir);
 

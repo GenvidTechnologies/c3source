@@ -158,6 +158,10 @@ describe("detectAddonReferenceIssues — against the canonical fixture", () => {
     if (!fixtureProjectExists("project.c3proj")) return this.skip();
     const project = openProject(FIXTURE_DIR);
     manifest = project.manifest();
+    // No `.json` guard before JSON.parse, deliberately: as of 2.0.0 every name-section
+    // finder returns only `.json` section items (ADR 0025), so a stray file can no longer
+    // reach a parse here. Before that these three calls were unguarded by luck — the
+    // fixture happens to hold no stray — which is exactly the hazard the finders now own.
     objectTypeDocs = project
       .findAllObjectTypes()
       .map((p) => ({ file: rel(p), value: JSON.parse(readFileSync(p, "utf-8")) as ObjectType }));

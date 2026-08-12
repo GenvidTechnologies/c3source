@@ -377,6 +377,7 @@ interface ManifestDrift {
   sections: SectionDrift[];       // empty when inSync
   inSync: boolean;                // sections.length === 0 — unaffected by degradation
   degraded?: DriftDegradation[];  // present only when a best-effort sub-detector threw
+  strays?: StrayFile[];           // present only when non-empty — never drift, see below
 }
 ```
 
@@ -650,6 +651,66 @@ to propagate instead of degrading.
 Detection is structural (field presence), not a plugin-id allowlist — robust to
 third-party single-image plugins but may over-derive for unusual plugin shapes.
 
+### Stray files
+
+A **stray** is a non-editor-local file under a name-section root
+(`layouts/`, `eventSheets/`, `objectTypes/`, `families/`, `timelines/`,
+`flowcharts/`, `models3d/`) that is not a section item — it fails
+`isSectionItemName` (see [api-guide.md — Section item-hood](api-guide.md#section-item-hood)).
+A stray is **never drift**: it never flips `ManifestDrift.inSync`, and it
+carries **no `manifestPath`**, because there is nothing to map it to — a
+stray file's whole defining property is that it is not declared, so a field
+that always reads `undefined` would only invite treating it like a
+`DriftEntry`.
+
+```ts
+interface StrayFile {
+  section: string;              // the C3_SECTION_FOLDERS key, e.g. "layouts"
+  folder: string;                // the resolved on-disk folder name
+  name: string;                  // bare basename, e.g. "Level1.dsl.txt"
+  diskPath: ManifestPathSegment[]; // section-root-relative subfolder segments
+}
+
+detectStrayFiles(projectDir: string): StrayFile[]
+```
+
+`detectStrayFiles` is **manifest-independent** — it reads no `project.c3proj`
+and takes none, because item-hood and provenance are both decided purely from
+a basename. It is the exact complement of `find_all_section_items_path` over
+the same walk: for a given section directory, the two functions' results are
+disjoint, and their union is every non-editor-local file in that directory.
+It is scoped to the seven name sections only; `scripts/`, `sounds/`, and the
+other root file folders are out of scope because file-folder membership is
+extension-agnostic by design (`scripts/` has its own separate rule, ADR
+0024), and `images/` is a flat asset folder, not a name section, at all.
+
+`detectManifestDrift` appends the result as the optional `ManifestDrift.strays?`
+field, populated only when non-empty — the same convention as `degraded`, so
+a clean project's result object stays byte-identical to a pre-2.0.0 one.
+`C3Project.detectStrayFiles()` wraps the free function, passing no manifest;
+see [api-guide-project.md — Drift detection](api-guide-project.md#drift-detection).
+
+```ts
+import { detectStrayFiles } from "@genvidtech/c3source";
+
+const strays = detectStrayFiles("./my-game");
+for (const s of strays) {
+  console.warn(`[${s.section}] stray: ${s.name}`);
+}
+```
+
+**Filtering is the caller's policy.** c3source reports every non-item file
+under a name section and filters nothing — a downstream tool's own generated
+sidecars (e.g. `.dsl.txt` files) surface here too. A caller that wants to
+ignore a known convention does it with one line:
+
+```ts
+const unexpected = detectStrayFiles(root).filter((s) => !s.name.endsWith(".dsl.txt"));
+```
+
+See [ADR 0025](decisions/0025-section-item-hood-and-stray-files.md) for the
+full rationale, including the four rejected mechanism alternatives.
+
 ### Walk depth
 
 **Name-folder sections** (`layouts`, `eventSheets`, `objectTypes`, `families`,
@@ -759,3 +820,38 @@ See ADR 0024 (`docs/decisions/`) for the rationale — consistency with
 `path.extname`, and the new `SCRIPT_FILE_TYPE_EXTENSIONS` table adopting the
 dotted form from the start rather than shipping inconsistent with the tables
 that came before it.
+
+### Section item-hood narrowing — breaking (issue #76)
+
+`find_all_layouts_path` and `find_all_objectTypes_path` previously returned
+every non-editor-local file under their directory regardless of extension.
+2.0.0 narrows both to `.json` section items only, matching their five
+name-section siblings (`find_all_eventsheets_path` and friends), which
+already filtered this way. Names, arities, and types are unchanged — only the
+**result set** narrows.
+
+**Migration:** if your code relied on the permissive result (e.g. to pick up
+a non-`.json` file under `layouts/`/`objectTypes/`), recover the pre-2.0.0
+behavior explicitly:
+
+```ts
+import { find_all_files_path, isEditorLocalPath } from "@genvidtech/c3source";
+
+const everything = find_all_files_path(layoutDir, (f) => !isEditorLocalPath(f));
+```
+
+No other consumer needs to change: piping either finder's output into
+`JSON.parse` — the common case — was already only safe for `.json` files, so
+this narrowing removes a latent crash rather than a working code path. See
+[api-guide.md — Section item-hood](api-guide.md#section-item-hood) and [ADR
+0025](decisions/0025-section-item-hood-and-stray-files.md).
+
+### Stray-file diagnostic — additive (issue #76)
+
+`ManifestDrift` gains an optional `strays?: StrayFile[]` field (see [Stray
+files](#stray-files) above) and `C3Project` gains `detectStrayFiles()`. This
+half of the release needs **no consumer migration**: `strays` is omitted when
+empty, so a clean project's `ManifestDrift` is byte-identical to a pre-2.0.0
+one, `inSync` and `DriftKind` are both unaffected, and no existing type or
+function signature changed. It rides the same 2.0.0 release as the breaking
+change above only because that change already forces a major version bump.

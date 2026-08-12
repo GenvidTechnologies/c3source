@@ -174,6 +174,42 @@ export function isScriptSourceName(name: string): boolean {
 }
 
 /**
+ * The on-disk extension of every item of a C3 **name section** — the
+ * sections named by {@link C3_SECTION_FOLDERS} (layouts, objectTypes,
+ * eventSheets, families, timelines, flowcharts, models3d).
+ *
+ * **AUDITED** — C3's own editor bundle saves every name-section item as
+ * `folder + name + ".json"` (`https://editor.construct.net/r{NNN}/projectResources.js`
+ * — the release root, not `c3runtime/`); companion artifacts are redirected
+ * *out* of these folders by construction (`.uistate.json` alongside, images to
+ * `images/`). Corroborated by the project corpus. See `docs/domain-fact-audit.md`
+ * for the evidence volume.
+ *
+ * **Blast radius:** a real item silently missing from every name-section
+ * finder — a false negative in discovery, never a throw (contrast
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS}, which throws).
+ */
+export const C3_SECTION_ITEM_EXTENSION = ".json";
+
+/**
+ * True if a bare basename is a C3 name-section item by extension alone.
+ * Tests item-hood only — provenance (is this file project source, or an
+ * editor-local artifact like `.uistate.json`?) is {@link isEditorLocalPath}'s
+ * job, and reachability (should the walk descend into this directory at all?)
+ * is {@link find_all_files_path}'s `descend` parameter's job. These are three
+ * separate axes with three separate predicates; see ADR 0025.
+ *
+ * **Unlike {@link isScriptSourceName}, this match is case-sensitive, and that
+ * is deliberate.** C3's lowercasing-before-testing rule is audited for script
+ * extensions but unverified for `.json`; matching case-insensitively here
+ * would silently *widen* every name-section finder built on this predicate,
+ * each of which relies on an exact match against {@link C3_SECTION_ITEM_EXTENSION}.
+ */
+export function isSectionItemName(name: string): boolean {
+  return name.endsWith(C3_SECTION_ITEM_EXTENSION);
+}
+
+/**
  * True if `name` is a `.js` file that C3 would treat as a generated build
  * output rather than authored source, because a same-basename `.ts` exists
  * among `siblings` (bare basenames from the same directory).
@@ -275,12 +311,44 @@ export function find_all_files_path(
   return result;
 }
 
-export function find_all_layouts_path(layout_dir: string): string[] {
-  return find_all_files_path(layout_dir, (file) => !isEditorLocalPath(file));
+/**
+ * The single owner of the name-section item policy: collects every project-
+ * source item under `dir` — {@link isSectionItemName}'s extension axis
+ * combined with {@link isEditorLocalPath}'s provenance axis, applied via
+ * {@link find_all_files_path}. The named collectors (`find_all_layouts_path`,
+ * `find_all_objectTypes_path`, `find_all_eventsheets_path`, …) are thin
+ * consumers of this one policy so it cannot drift between sections (ADR 0005).
+ */
+export function find_all_section_items_path(dir: string): string[] {
+  return find_all_files_path(dir, (file) => isSectionItemName(file) && !isEditorLocalPath(file));
 }
 
+/**
+ * Return every layout `.json` section item under `layout_dir` (recursive,
+ * `uistate/`/`ts-defs/` skipped via {@link isEditorLocalPath}). Thin consumer of
+ * {@link find_all_section_items_path}, the single owner of the name-section item
+ * policy.
+ *
+ * **Narrowed in 2.0.0** — before that release this collector returned every
+ * non-editor-local file regardless of extension; it now applies the same
+ * `.json`-only policy every other name-section finder already applied. See ADR 0025.
+ */
+export function find_all_layouts_path(layout_dir: string): string[] {
+  return find_all_section_items_path(layout_dir);
+}
+
+/**
+ * Return every object-type `.json` section item under `objectTypesDir` (recursive,
+ * `uistate/`/`ts-defs/` skipped via {@link isEditorLocalPath}). Thin consumer of
+ * {@link find_all_section_items_path}, the single owner of the name-section item
+ * policy.
+ *
+ * **Narrowed in 2.0.0** — before that release this collector returned every
+ * non-editor-local file regardless of extension; it now applies the same
+ * `.json`-only policy every other name-section finder already applied. See ADR 0025.
+ */
 export function find_all_objectTypes_path(objectTypesDir: string): string[] {
-  return find_all_files_path(objectTypesDir, (file) => !isEditorLocalPath(file));
+  return find_all_section_items_path(objectTypesDir);
 }
 
 // Return true if layout must be saved.
@@ -341,11 +409,12 @@ function visit_layers_in_layout(layout_path: string, visitor: LayerVisitor): num
 }
 
 export function visit_layers_in_layouts(layouts_path: string, visitor: LayerVisitor): number {
-  // find_all_layouts_path filters only on !isEditorLocalPath (no .json predicate — that is
-  // intentional, see its JSDoc), so a stray non-JSON file under layouts/ would otherwise
-  // reach visit_layers_in_layout's JSON.parse and crash. Filter to .json here, at the parse
-  // boundary, rather than narrowing the finder's documented contract.
-  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
+  // No re-filter needed here: find_all_layouts_path now owns the .json section-item
+  // policy itself (it delegates to find_all_section_items_path), so every path it
+  // returns is already safe to hand to visit_layers_in_layout's JSON.parse. This is a
+  // policy RELOCATION, not a dead-code deletion — the decision moved from being
+  // restated at every consumer's parse boundary to living once in the finder. See ADR 0025.
+  const layouts = find_all_layouts_path(layouts_path);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, visitor) + changed,
     0,
@@ -364,10 +433,11 @@ function makeLayerVisitorFromInstanceVisitor(visitor: InstanceVisitor): LayerVis
 }
 
 export function visit_instances_in_layouts(layouts_path: string, visitor: InstanceVisitor): number {
-  // Same non-JSON-file hazard as visit_layers_in_layouts above (this ultimately calls the
-  // same visit_layers_in_layout, whose JSON.parse would crash on a stray non-JSON file) —
-  // filter to .json here, at the parse boundary, rather than narrowing find_all_layouts_path.
-  const layouts = find_all_layouts_path(layouts_path).filter((p) => p.endsWith(".json"));
+  // No re-filter needed here either — same policy-relocation rationale as
+  // visit_layers_in_layouts above (this ultimately calls the same visit_layers_in_layout):
+  // find_all_layouts_path now owns the .json section-item policy itself, so nothing
+  // downstream needs to restate it. See ADR 0025.
+  const layouts = find_all_layouts_path(layouts_path);
   const layerVisitor = makeLayerVisitorFromInstanceVisitor(visitor);
   return layouts.reduce(
     (changed: number, layoutPath: string) => visit_layers_in_layout(layoutPath, layerVisitor) + changed,
