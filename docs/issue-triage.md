@@ -50,6 +50,19 @@ Missing the essentials → add the **`question`** label and comment exactly what
 needed. (This repo has no dedicated `needs-info` label; `question` serves that
 role — match the `needsInfoLabel` in the `bugTracker` block to it.)
 
+**Because `question` carries both meanings, say which one you mean.** When it is
+applied as a *category* — the issue is itself a question, and is complete as
+filed — the triage comment must state **explicitly that nothing is blocked on the
+reporter**. The label alone cannot distinguish "we are waiting on the reporter"
+from "we are waiting on a maintainer decision", and downstream tooling reads it as
+the former: `plan-next-issue` de-prioritizes any candidate carrying
+`needsInfoLabel`, so a category-`question` that says nothing sinks in the ranking
+and a decision nobody is blocked on goes unplanned. One sentence in the comment
+prevents it — #76 is the worked example ("nothing is blocked on the reporter here…
+what it's waiting on is a maintainer decision"). The converse needs no special
+handling: a needs-info `question` is already accompanied by a comment saying what
+is missing, which is itself the disambiguator.
+
 ## Splitting
 
 Split when one issue bundles unrelated concerns, or when a single piece of work

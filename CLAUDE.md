@@ -10,6 +10,24 @@ layers, instances, object types, and event sheets. It is consumed by build
 tools, code generators, and analyzers that inspect or mutate C3 JSON outside
 the C3 editor. There is no runtime application; it ships as a library.
 
+**Known consumers** (all checked out under `C:\repos` on a dev machine, all
+depending on the published `@genvidtech/c3source`): **`burbank`** (the monorepo
+this library was extracted from — still consumes it via `bin/` scripts),
+**`construct3-chef`** (the heaviest consumer; MCP server + generators), and
+**`c3-domain-manager`** (domain index + `list-uncategorized`). Because the
+package is public, that list is a floor rather than a census — but it is the set
+whose breakage is *observable from this machine*, so **measure the blast radius
+of an API change by grepping all three**, not by reasoning about what a
+hypothetical caller might do. That measurement is what settles a policy
+question: for #76 it turned "would anyone rely on the permissive collectors?"
+into "six call sites across two of them pipe permissive output straight into
+`JSON.parse` with no guard" — which inverted the answer from *a capability
+someone may depend on* to *a latent crash*, and decided the direction. The
+consumers' own decision records are evidence too, and can be blocking: on #76
+`c3-domain-manager`'s ADR 0017 recorded this library's inconsistency as "a
+platform fact this repo does not own and is not free to unify by itself", which
+is what ruled out a documentation-only answer.
+
 ## Design records & branches
 
 Feature branches are squashed on merge, and work documents under
