@@ -646,7 +646,7 @@ its `.tsx`/Tiled trap — the criterion was corrected rather than executed, and
 ## Canonical reference fixture (`construct3-sample`)
 
 A **second** git submodule, `construct3-sample/` (pinned at the commit tagged
-`v0.6.0`, added #51), is the **canonical golden C3 project** — the single,
+`v1.1.0`, added #51), is the **canonical golden C3 project** — the single,
 editor-round-tripped
 source of on-disk shape that c3source and its sibling tools consume instead of
 each hand-maintaining a drifting fixture. c3source is the **validator, not the
@@ -674,16 +674,63 @@ for that migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds them 
 `Event sheet 1`, which `eventVarReference.test.ts` needs — and then to **v0.4.1**,
 which adds a **global layer with override** to both layouts (exercising the
 prefix-resetting `global` path in `walkLayerEntries`) plus upstream-owned addon
-sources. Then **v0.5.0** (#60), adding Functions ACEs to `Event sheet 1`, and
-**v0.6.0** (#68), adding a boolean event variable plus a `compare-boolean-eventvar`
-condition to `Event sheet 2` — the golden had no boolean-event-variable construct at
-all, which is part of how a **fabricated** ACE id survived unnoticed in
-`EVENTVAR_REFERENCE_ACES`. Every bump from v0.4.1 on is corpus-neutral: the
-`.json`/`.c3proj` counts are unchanged (29/3/26, 26 kept round-tripping bar the brush
-file), because each edits existing files rather than adding any, and non-`project/`
-additions are never copied by `prep-fixture`. **When bumping the pin, re-measure
-rather than assume** — a tag that adds or removes a `project/` JSON file moves the
-corpus counts `manifestSerialize.test.ts` asserts.
+sources. Then **v0.5.0** (#60), adding Functions ACEs to `Event sheet 1`; **v0.6.0**
+(#68), adding a boolean event variable plus a
+`compare-boolean-eventvar` condition to `Event sheet 2` — the golden had no
+boolean-event-variable construct at all, which is part of how a **fabricated**
+ACE id survived unnoticed in `EVENTVAR_REFERENCE_ACES`; **v0.7.0** (#70/#72),
+adding a custom ACE on `NavButton` and sampling a function without a
+description — the enrichment behind `custom-ace-name-required` (an
+`EDITOR_FIELD_RULES` entry added from a direct C3-editor import experiment)
+and the disproof that `function-block.functionDescription` is a loader
+requirement; **v1.0.0 — MAJOR** ("Cross-domain coupling coverage", driven
+upstream by `c3-domain-manager`#34, not by any c3source issue),
+folding `eventSheets/` and `layouts/` into `Gameplay/`/`UI/` subfolders and
+adding a cross-domain include event, an object-member expression reference,
+and an event-variable reference — each deliberately crossing a folder
+boundary so consumers can exercise cross-domain dependency analysis, which
+the golden previously could not support. `Templates Layout` deliberately
+stays unfoldered at the `layouts/` root (it has no assigned event sheet),
+preserving coverage of root-level/unclassified paths; sheet `name` fields
+were untouched, since includes and layout `eventSheet` fields resolve sheets
+by name, so no reference moved with the files. Per the sample's own
+versioning convention a MAJOR means a consumer with a generated read-surface
+keyed on those paths must regenerate it before bumping this pin, and a
+consumer's own overlay/strip-list (here,
+`canonical-overlay/`/`canonical.striplist.txt`) must be re-checked against
+the new shape. And **v1.1.0** (#81), sampling a local variable referenced
+before its declaration — an `on-start-of-layout` block in `UI/Event sheet 2`
+whose children straddle a local `variable` declaration (`inner1`), one
+incrementing and displaying above the declaration and one below, both
+rendering `3`: the observable signature of two distinct C3 semantics,
+level-wide visibility (the upper block already sees `inner1` holding its
+`initialValue`) and re-initialization at the declaration point (the upper
+block's increment is discarded, so the lower block reads 2, not 3). Saved
+with r49502, up from r49500.
+
+Every bump through v0.7.0 was corpus-neutral in the strong sense — both
+counts *and* paths held, because each edited existing files rather than
+adding, removing, or moving any (non-`project/` additions are never copied
+by `prep-fixture`). **v1.0.0 breaks that stronger sense while preserving the
+weaker one**: the `.json`/`.c3proj` counts are unchanged (29/3/26, 26 kept
+round-tripping bar the brush file), because the fold renamed every
+event-sheet and layout path rather than adding or removing a file — but the
+*paths* moved, and anything keyed on a hardcoded path (a generated
+read-surface, a fixture-gated test's literal path string) breaks even though
+a count-only check would not have caught it. Measured fallout in this repo:
+the bump broke `R-C1`/`R-C2`/`R-C14` in `test/projectManifest.test.ts`
+outright, and caused `eventVarReference.test.ts`,
+`fixtureFieldFidelity.test.ts`, `layerVisitor.test.ts`, and
+`makeDefaultLayer.test.ts` to silently self-skip on their now-stale
+hardcoded paths — the same hazard this section already flags for a
+missing/non-git submodule below ("would self-skip silently rather than
+fail"), now with a second trigger: watch the **pending** count after any pin
+bump, not just the pass/fail line, since a path-keyed test gone vacuous
+looks identical to green. **When bumping the pin, re-measure paths as well as
+counts** — a tag that adds or removes a `project/` JSON file still moves the
+corpus counts `manifestSerialize.test.ts` asserts, but a bump can be
+count-neutral and still invalidate a third of the fixture-gated suite,
+exactly as v1.0.0 did here.
 **What is actually pinned is a commit, not a tag:** the superproject tree stores a
 `160000 commit <sha>` entry and `.gitmodules` carries no `branch`/tag field, so git
 never consults a tag when updating the submodule — `git describe --tags` merely
