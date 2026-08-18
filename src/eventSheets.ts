@@ -404,6 +404,12 @@ export function extractScriptsFromSheet(sheet: EventSheet): ExtractedScript[] {
   ): void {
     // In C3, all variables declared at a level are in scope for all blocks at that level,
     // regardless of declaration order. Pre-collect them all before traversing.
+    // NOTE: visibility is hoisted this way, but *initialization* is not — C3 re-initializes
+    // a variable to its initialValue when execution reaches the declaration event, discarding
+    // any mutation an earlier-positioned block at this level already made (confirmed by a live
+    // C3-editor experiment; see docs/domain-fact-audit.md, "Variable scope: visibility vs.
+    // re-initialization"). scopeVars below reports visibility only — a consumer must not read
+    // it as a guarantee that a pre-declaration reference sees a mutated value.
     const levelVars = events
       .filter((e): e is EventSheetEvent & { eventType: "variable" } => e.eventType === "variable")
       .map((e) => ({ name: e.name, type: e.type }));

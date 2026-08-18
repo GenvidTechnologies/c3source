@@ -384,7 +384,14 @@ Four functional areas:
    cannot drift. It composes lexical scope as a
    stack of `ScopeSegment`s: all `variable` events at a level are in scope for
    every block at that level regardless of declaration order, so they are
-   pre-collected before traversal. Regular sibling blocks disambiguate their
+   pre-collected before traversal — a live-editor experiment confirmed this
+   is C3's own visibility rule, and also found that *initialization* is not
+   hoisted the same way: C3 re-initializes a variable to its `initialValue`
+   when execution reaches the declaration, discarding any mutation an
+   earlier-positioned block at that level already made, so `scopeVars` signals
+   visibility only, never that reset (see
+   [docs/domain-fact-audit.md](docs/domain-fact-audit.md#variable-scope-visibility-vs-re-initialization-editor-experiment)).
+   Regular sibling blocks disambiguate their
    scope keys with `#<eventIndex>`; functions/ACEs use their unique names.
    `formatAction`/`formatCondition` render events into a single-line DSL (see
    the doc comment on `formatAction` for the full grammar). Sibling extractors

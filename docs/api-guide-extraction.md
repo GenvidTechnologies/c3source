@@ -105,9 +105,24 @@ for (const script of extractScriptsFromSheet(sheet)) {
 **Scope.** `scopeVars` is the flat list of all variables in scope at the point
 of the script action — drawn from the enclosing function's parameters plus every
 `variable` event declared at each ancestor level, collected before traversal so
-declaration order does not matter (C3's own rule). `scopeSegments` breaks the
+declaration order does not matter. Visibility is level-wide by **C3's own
+rule, not a c3source heuristic**: confirmed by a live-editor experiment, not
+merely inferred from this library's own walk order — see the
+[domain-fact-audit.md write-up](domain-fact-audit.md#variable-scope-visibility-vs-re-initialization-editor-experiment)
+(search `scopeVars`) for the case and the trace. `scopeSegments` breaks the
 same information into labeled layers, useful for generating typed `localVars`
 interfaces by scope level.
+
+**Re-initialization caveat.** Visibility is level-wide, but *initialization is
+not*: the same experiment found that C3 re-initializes a local variable to its
+`initialValue` the moment execution reaches the declaration event, discarding
+any mutation an earlier-positioned event at the same level already made.
+`scopeVars`/`scopeSegments` correctly report that a variable is in scope for a
+block positioned before its declaration — but neither carries any signal that
+a reference in that block reads a value about to be clobbered when the
+declaration executes. A code generator that trusts `scopeVars` alone, with no
+positional check against the declaration, can silently emit exactly that bug.
+Declare a variable before using it.
 
 **Action formatting.** `extractScriptsFromSheet` does not render conditions or
 other actions as text. For that use `formatAction` and `formatCondition`. See the
