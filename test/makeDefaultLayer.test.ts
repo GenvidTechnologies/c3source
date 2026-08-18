@@ -28,7 +28,7 @@ const REQUIRED_KEYS = [
   "global",
 ];
 
-const FIXTURE_LAYOUT = `${PROJECT_FIXTURE}/layouts/Main Layout.json`;
+const FIXTURE_LAYOUT = `${PROJECT_FIXTURE}/layouts/Gameplay/Main Layout.json`;
 
 describe("makeDefaultLayer", () => {
   it("sets the given name and empty instances/subLayers", () => {

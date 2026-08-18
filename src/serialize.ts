@@ -81,7 +81,7 @@ export function writeC3JsonFile(filePath: string, value: unknown): void {
  * `COMPARISON_OPERATORS`), so downstream need not re-hardcode which files are
  * minified.
  *
- * **Version pin.** Observed C3 r495 (`savedWithRelease: 49500`); r487 unverified
+ * **Version pin.** Observed C3 r495 (`savedWithRelease: 49502`); r487 unverified
  * for this form.
  *
  * **Detection only.** c3source deliberately ships no minified writer — nothing

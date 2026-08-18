@@ -140,7 +140,7 @@ describe("getEventVarReferenceName", () => {
 // ---------------------------------------------------------------------------
 
 describe("getEventVarReferenceName (fixture integration)", () => {
-  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Event sheet 1.json`;
+  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Gameplay/Event sheet 1.json`;
 
   before(function () {
     if (!fixtureExists(fixturePath)) {
@@ -148,7 +148,7 @@ describe("getEventVarReferenceName (fixture integration)", () => {
     }
   });
 
-  it("resolves exactly 2 event-var references across conditions and actions", () => {
+  it("resolves exactly 3 event-var references across conditions and actions", () => {
     const sheet = JSON.parse(loadFixture(fixturePath)) as EventSheet;
 
     const names: string[] = [];
@@ -167,14 +167,17 @@ describe("getEventVarReferenceName (fixture integration)", () => {
       }
     });
 
-    expect(names).to.have.length(2);
+    // construct3-sample "Add a cross-domain event-variable reference" (v1.0.0+) added a
+    // set-eventvar-value action on the root-level "score" variable, alongside the
+    // pre-existing compare-eventvar/add-to-eventvar pair on "temp".
+    expect(names).to.have.length(3);
     // Assert as a sorted array to stay robust against ordering changes
-    expect([...names].sort()).to.deep.equal(["temp", "temp"]);
+    expect([...names].sort()).to.deep.equal(["score", "temp", "temp"]);
   });
 });
 
 describe("getEventVarReferenceName (boolean event variable, fixture integration)", () => {
-  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Event sheet 2.json`;
+  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/UI/Event sheet 2.json`;
 
   before(function () {
     if (!fixtureExists(fixturePath)) {
@@ -195,6 +198,11 @@ describe("getEventVarReferenceName (boolean event variable, fixture integration)
       if (event.eventType === "variable") declared.push(event.name);
       if (hasConditions(event)) {
         for (const cond of event.conditions) {
+          // Scoped to compare-boolean-eventvar specifically: construct3-sample v1.0.0+ added a
+          // sibling compare-eventvar (on "score", a cross-domain reference into Event sheet 1)
+          // to this same sheet, which getEventVarReferenceName resolves too but which is out of
+          // scope for a test named after the boolean-eventvar id.
+          if (cond.id !== "compare-boolean-eventvar") continue;
           const name = getEventVarReferenceName(cond);
           if (name !== null) refs.push(name);
         }
