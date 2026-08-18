@@ -691,6 +691,18 @@ describe("formatAction comparison annotation", () => {
   });
 });
 
+describe("formatAction unknown-action fallback", () => {
+  it("falls through to the unknown-action fallback for a script action with no language key", () => {
+    const result = formatAction({ type: "script", script: ["a", "b"] }, "Sheet1", 1, 1);
+    assert.equal(result, "[unknown action: type, script]");
+  });
+
+  it("includes language in the enumerated key list when present but not 'typescript'", () => {
+    const result = formatAction({ type: "script", language: "javascript", script: ["a", "b"] }, "Sheet1", 1, 1);
+    assert.equal(result, "[unknown action: type, language, script]");
+  });
+});
+
 describe("comparisonSymbol", () => {
   it("maps 0 to '='", () => {
     assert.equal(comparisonSymbol(0), "=");

@@ -55,6 +55,11 @@ describe("§4a predicates", () => {
     expect(isScriptAction({ type: "comment", text: "hi" })).to.equal(false);
   });
 
+  it("isScriptAction is false for a script action whose language is not 'typescript', with or without the key", () => {
+    expect(isScriptAction({ type: "script", language: "javascript", script: ["a()"] })).to.equal(false);
+    expect(isScriptAction({ type: "script", script: ["a()"] })).to.equal(false);
+  });
+
   it("hasChildren is true only when a children array is present", () => {
     expect(hasChildren(block)).to.equal(true);
     expect(hasChildren(comment)).to.equal(false);
