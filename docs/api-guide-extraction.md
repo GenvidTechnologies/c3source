@@ -124,11 +124,16 @@ declaration executes. A code generator that trusts `scopeVars` alone, with no
 positional check against the declaration, can silently emit exactly that bug.
 Declare a variable before using it.
 
-**Action formatting.** `extractScriptsFromSheet` does not render conditions or
-other actions as text. For that use `formatAction` and `formatCondition`. See the
-doc-comment on `formatAction` in `src/c3source.ts` for the full single-line DSL
-grammar (standard, behavior, script, function-call, custom-ACE, comment, disabled
-variants).
+**Action formatting.** `extractScriptsFromSheet` carries a block's conditions
+on `ExtractedScript.conditions`, but not as rendered text, and does not carry
+the other four action shapes (function call, custom action, comment,
+standard) at all. Use `formatAction`/`formatCondition` to render any of
+these — see the doc-comment on `formatAction` in `src/eventSheets.ts` for the
+full single-line DSL grammar (standard, behavior, script, function-call,
+custom-ACE, comment, disabled variants, and the unknown fallback). Non-script
+actions carry most of a real sheet's logic, invisible to a consumer reading
+only extracted script text; see [domain-fact-audit.md](domain-fact-audit.md)
+for the corpus measurement.
 
 ---
 
