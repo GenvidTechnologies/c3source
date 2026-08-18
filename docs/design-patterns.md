@@ -170,6 +170,36 @@ strings, with no leading dot on the first string segment (so the root object's
 keys render as `key`, not `.key`). The empty-segments case (`segments.length ===
 0`) returns `""`, which callers can intercept to substitute a semantic label.
 
+## Extractor-vs-renderer split for event sheets
+
+This is the second instance of the [traversal-vs-rendering
+split](#traversal-vs-rendering-split-for-sids): in `src/eventSheets.ts`, the
+walk that produces structured records is a separate concern from the code that
+turns one node into text. `visitEvents` is the canonical walk (it owns the
+C3 event-numbering counter); `extractScriptsFromSheet`, `walkScriptActions`,
+`extractFunctions`, and `extractIncludes` are thin consumers of it, returning
+structured records (`ExtractedScript`, `ScriptAction[]`, `ExtractedFunction[]`,
+`IncludeReference[]`) rather than text. `formatAction`/`formatCondition` are
+the paired renderers: each turns one action or condition the caller already
+holds into a single line of DSL text — they do not walk anything.
+
+The split is what makes the extractors reusable across differently-shaped
+consumers: a consumer that needs a different rendering — extracted TypeScript,
+a generated `.dsl.txt`, an analyzer's index — drives the traversal itself and
+formats to its own target, instead of every consumer being forced through one
+baked-in text format. construct3-chef is the live example: it calls
+`extractScriptsFromSheet` for extracted TypeScript and separately calls this
+library's `formatAction`/`formatCondition` to write its own `.dsl.txt` output;
+c3source itself writes no `.dsl.txt` (its file writes are JSON only, via
+`src/serialize.ts`).
+
+The boundary is also where a filtering predicate's two sides can diverge: the
+extractors narrow to `ScriptAction` via `isScriptAction`, so a node that predicate
+rejects is silently **dropped** from extraction, while `formatAction` still
+**renders** every shape it's given, falling back to `[unknown action: …]` for one
+it doesn't recognize. Same predicate, opposite consequence on each side — worth
+checking both whenever `isScriptAction` (or a similar dual-use predicate) changes.
+
 ## Path-bearing drift via name→path map diffing
 
 Manifest drift detection for name-folder sections (layouts, objectTypes,
