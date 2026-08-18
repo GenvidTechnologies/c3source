@@ -7,6 +7,7 @@ For SID traversal and editor-local classification see [api-guide.md](api-guide.m
 - [Core walk: `visitEvents`](#core-walk-visitevents)
 - [Script extraction: `extractScriptsFromSheet`](#script-extraction-extractscriptsfromsheet)
 - [Actions-only walk: `walkScriptActions`](#actions-only-walk-walkscriptactions)
+- [Action formatting: `formatAction` / `formatCondition`](#action-formatting-formataction--formatcondition)
 - [Function discovery: `extractFunctions`](#function-discovery-extractfunctions)
 - [Type guard: `isFunctionDefinition`](#type-guard-isfunctiondefinition)
 - [Event-variable references: `isEventVarReference` / `getEventVarReferenceName`](#event-variable-references-iseventvarreference--geteventvarreferencename)
@@ -132,8 +133,11 @@ these — see the doc-comment on `formatAction` in `src/eventSheets.ts` for the
 full single-line DSL grammar (standard, behavior, script, function-call,
 custom-ACE, comment, disabled variants, and the unknown fallback). Non-script
 actions carry most of a real sheet's logic, invisible to a consumer reading
-only extracted script text; see [domain-fact-audit.md](domain-fact-audit.md)
-for the corpus measurement.
+only extracted script text; see [domain-fact-audit.md — `SCRIPT_SOURCE_EXTENSIONS`](domain-fact-audit.md#script_source_extensions-via-isscriptsourcename)
+for the corpus measurement, and [Action formatting: `formatAction` /
+`formatCondition`](#action-formatting-formataction--formatcondition) below
+for the rendering/extraction grammar and its `language`-field reachability
+gap.
 
 ---
 
@@ -158,6 +162,98 @@ import { walkScriptActions } from "@genvidtech/c3source";
 
 const actions = walkScriptActions(sheet);
 console.log(`${actions.length} script action(s) in ${sheet.name}`);
+```
+
+---
+
+## Action formatting: `formatAction` / `formatCondition`
+
+```ts
+formatAction(
+  action: ScriptAction | Record<string, unknown>,
+  sheetName: string,
+  eventIndex: number,
+  actionIndex: number,
+): string
+
+formatCondition(cond: Condition): string
+```
+
+Renders a single action or condition into the single-line DSL described in
+`formatAction`'s doc comment (`src/eventSheets.ts`) — this section covers
+reachability and failure behavior, not the grammar itself.
+
+**Signature.** All four `formatAction` parameters are required, with no
+defaults: `sheetName`/`eventIndex`/`actionIndex` feed `generateFunctionName`
+when the action is a multi-line script, so they must be supplied even for
+shapes that never need a generated name. `formatCondition` takes only the
+condition — conditions never need a generated function name.
+
+**Disabled wrapper.** Both functions prefix `[DISABLED] ` when `disabled ===
+true` on the action/condition. `formatAction` applies this in the outer
+function, wrapped around whichever of the five recognized shapes (or the
+fallback below) the inner formatter produced — so a disabled unknown action
+still renders as `[DISABLED] [unknown action: ...]` rather than losing the
+marker.
+
+**The five recognized shapes**, checked in this order — comment, script,
+function call, custom action, standard (with an optional `[BehaviorType]`
+suffix) — plus a fallback for anything matching none of them:
+
+- comment, script, function-call, and custom-action are each identified by a
+  distinctive key: `type === "comment"`, `isScriptAction(action)`,
+  `"callFunction" in action`, `"customAction" in action`.
+- standard is identified by the *pair* `"id" in action && "objectClass" in
+  action`.
+- anything matching none of the above falls through to
+  **`[unknown action: <keys>]`**, where `<keys>` is `Object.keys(action).join(", ")`
+  — the action's own JSON key set, not a fixed string. The rendered text
+  therefore varies with input shape; two differently-malformed actions
+  produce two different fallback strings.
+
+**Reachability: a `type: "script"` action without `language: "typescript"`
+never reaches the script branch.** The exported guard `isScriptAction`
+(`src/eventSheets.ts:149-151`) requires both keys literally —
+`type === "script" && language === "typescript"` — with no fallback for a
+missing or non-`"typescript"` `language`. Such an action fails every one of
+the five shape checks above (it is not a comment, does not pass
+`isScriptAction`, and carries none of `callFunction`/`customAction`/`id`+`objectClass`),
+so it falls through to the unknown-action branch. This has two distinct
+consequences, owned by two different functions:
+
+- **`formatActionInner`** (private, `src/eventSheets.ts:260-262`, reached via
+  the exported `formatAction`) renders it as `[unknown action: type, script]`
+  (or `[unknown action: type, language, script]` when `language` is present
+  but not `"typescript"`) instead of the `script { ... }` form — a
+  **rendering** failure.
+- **`extractScriptsFromSheet`** and **`walkScriptActions`** both gate their
+  collection on the same `isScriptAction` guard, so the identical action is
+  **silently dropped** from both extractors' results — an **extraction**
+  failure, not merely a display one. A consumer piping either extractor's
+  output into a code generator sees no evidence the action ever existed.
+
+**Why a script action can lack `language`.** C3 began writing `language` on
+script actions starting at **r433** — the same release this library already
+pins for `.ts` script support (see
+[domain-fact-audit.md — `SCRIPT_SOURCE_EXTENSIONS`](domain-fact-audit.md#script_source_extensions-via-isscriptsourcename)
+for the bundle bisection and the corpus's action-shape/`language`-field
+breakdown). C3's own loader treats a missing `language` as `"javascript"`, so
+a pre-r433 script action with no `language` key is a legacy JavaScript action
+the editor loads and runs normally — `isScriptAction`'s literal `"typescript"`
+check was simply never written to recognize that legacy form. This is
+structurally the same shape as the pre-r402 `fileType`-less image case behind
+ADR 0023's `C3_LEGACY_IMAGE_EXTENSION` fallback, but c3source has **not**
+applied an equivalent fallback here — `isScriptAction` still requires the
+literal value, and a legacy action is dropped rather than recovered.
+
+```ts
+import { formatAction } from "@genvidtech/c3source";
+
+formatAction({ type: "script", language: "typescript", script: ["a = 1;"] }, "GamePlay", 3, 1);
+// 'script { a = 1; }'
+
+formatAction({ type: "script", script: ["a = 1;"] }, "GamePlay", 3, 1);
+// '[unknown action: type, script]'   — pre-r433 legacy form, not malformed data
 ```
 
 ---

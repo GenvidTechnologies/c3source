@@ -324,6 +324,49 @@ the bundle bisection pins; it does not by itself establish r433 — the corpus
 alone still cannot resolve which release, only that a `.ts`-declaring
 capability arrived somewhere inside the bracket.
 
+**A further manifestation of the same r433 boundary — event-sheet script
+actions, not the manifest.** `isScriptAction` (`src/eventSheets.ts:149-151`,
+consumed by `formatAction`/`extractScriptsFromSheet`/`walkScriptActions` —
+see [api-guide-extraction.md — Action
+formatting](api-guide-extraction.md#action-formatting-formataction--formatcondition))
+gates a `type: "script"` action on the literal `language === "typescript"`,
+with no fallback for a missing `language` key. This is not a new pin — it is
+the r433 boundary established above, now visible from action data instead of
+`rootFileFolders.script`.
+
+Corpus evidence, all actions across the same 14-project / 207-sheet corpus,
+broken out by shape:
+
+| action shape | count | share |
+|---|---|---|
+| standard | 12,287 | 72.3% |
+| function call | 2,589 | 15.2% |
+| custom action | 846 | 5.0% |
+| comment | 593 | 3.5% |
+| script | 677 | 4.0% |
+| **total** | **16,992** | 100.0% |
+
+16,992 actions total — the standing Bounds caveat applies here as everywhere
+else in this corpus: burbank dominates this count exactly as it dominates
+every other volume metric (see [Bounds](#bounds-what-this-cannot-prove)).
+
+Of the 677 script-shaped actions, **672 carry `language: "typescript"`; 5
+carry no `language` key at all; zero carry `language: "javascript"`.** The 5
+language-less actions span 3 projects. This is consistent with the r433 pin
+above: a `language`-less script action is C3's pre-r433 legacy serialization
+of a JavaScript script action — tolerated on load (C3's own loader defaults a
+missing `language` to `"javascript"`) but not recognized by `isScriptAction`,
+which requires the literal `"typescript"` value, so the same action C3 loads
+and runs falls through to `formatAction`'s `[unknown action: ...]` fallback
+and is silently dropped by `extractScriptsFromSheet`/`walkScriptActions`.
+
+**Hedge.** 2 of the 5 language-less actions live in a project reporting
+`savedWithRelease: 44902` (r449) — *after* the r433 pin, where an editor save
+would be expected to write `language`. Hand-authoring or tool generation
+outside the editor's own save path is the likely explanation but is
+**unverified**; do not read "absent `language` implies pre-r433 legacy form"
+as an exception-free rule.
+
 **Blast radius:** same shape as its sibling table below — a wrong extension
 set silently over- or under-collects during a script-discovery walk (a false
 negative, or a false positive), **never a throw** — contrast
