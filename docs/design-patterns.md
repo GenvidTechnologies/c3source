@@ -372,10 +372,26 @@ golden excludes `*.uistate.json` and `uistate/` (it carries an explicit note tha
 `ts-defs` must **not** be added there — those files are tracked, not gitignored).
 Tests reach the fixture through
 the single `PROJECT_FIXTURE` constant in `test/fixtureHelpers.ts` (with
-`fixtureProjectPath`/`fixtureProjectExists`), and self-skip via
-`fixtureProjectExists(...)`/`this.skip()` so the suite stays green when the
-submodule is absent (a non-recursive checkout: `prep-fixture` no-ops) and so
-capabilities not yet present in the golden activate automatically once added.
+`fixtureProjectPath`/`fixtureProjectExists`), calling `this.skip()` when the
+fixture is absent so the suite stays green during a non-recursive checkout
+(`prep-fixture` no-ops in that case) and so capabilities not yet present in
+the golden activate automatically once added.
+
+**Gating splits skip from throw, because a bare `existsSync` cannot tell them
+apart.** A site whose path inside the fixture cannot move — the fixture root,
+or `project.c3proj` itself — gates directly on `fixtureProjectExists(...)`,
+where `false` really does mean "not materialized," so `this.skip()` is
+correct. A site whose path *can* move as the golden evolves gates on
+`fixtureProjectAvailable(rel)` instead: it returns `false` only when the
+fixture root itself is absent (self-skip, unchanged), but **throws**, naming
+`rel`, when the fixture is materialized and that specific path is missing —
+the golden restructured and the test's assumption about its shape is stale,
+which is a real failure, not a degradation. `sdkFixtureAvailable(rel)` is the
+same split for the `SDK/` submodule. A computed `.mocharc.cjs` backstops both:
+it arms mocha's `--forbid-pending` only when every gated fixture is present,
+so any *unexpected* skip at a site nobody converted also fails the run rather
+than passing silently. See [ADR
+0026](decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md).
 
 **Enrich the golden upstream, not the overlay.** Coverage the golden genuinely
 *should* carry — a real C3 construct a downstream test needs (e.g. event-var

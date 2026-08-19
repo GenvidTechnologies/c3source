@@ -75,6 +75,14 @@ npx mocha --timeout 5000 --import=tsx --require ./test/setup.ts test/extractEven
 npx mocha --timeout 5000 --import=tsx --require ./test/setup.ts 'test/**/*.test.ts' --grep "scope" --exit
 ```
 
+A computed `.mocharc.cjs` at the repo root applies to **every** mocha
+invocation above, including a single-file/`--grep` recipe: it arms
+`--forbid-pending` whenever both gated fixtures (the canonical project
+fixture and the SDK sample) are materialized, so a run that hits an
+unexpected `this.skip()` fails outright rather than reporting a quiet
+"0 failing." See [ADR
+0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md).
+
 Tests use **mocha + chai** with `tsx` for on-the-fly TS execution (no build
 step needed). `test/setup.ts` is a mocha root hook that silences `console.log`
 and `console.debug` during runs (warn/error pass through), so library code may
@@ -758,7 +766,15 @@ looks identical to green. **When bumping the pin, re-measure paths as well as
 counts** — a tag that adds or removes a `project/` JSON file still moves the
 corpus counts `manifestSerialize.test.ts` asserts, but a bump can be
 count-neutral and still invalidate a third of the fixture-gated suite,
-exactly as v1.0.0 did here.
+exactly as v1.0.0 did here. **As of #82 ([ADR
+0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md)),
+a moved path like this is caught automatically** at every gate converted to
+`fixtureProjectAvailable`/`sdkFixtureAvailable` (throws naming the path) and,
+as a backstop, by the computed `.mocharc.cjs` arming `--forbid-pending`
+whenever both gated fixtures are present (fails the run on any remaining
+unexpected skip). Both require the fixtures to be materialized in the first
+place, though, so a pin bump run against a partial or absent checkout still
+needs the manual check above.
 **Fetch the submodule's own remote before doing anything in it.** A `git fetch`
 in this repo says nothing about `construct3-sample` — `origin/main` here can be
 current while the pinned commit is several releases behind. Run `git -C
@@ -796,7 +812,13 @@ the "HTTPS, no prompt" exception this section once described. The SCP-style
 to token-authenticated HTTPS for submodule clones, whereas a `git+ssh://` URL is
 not covered by that rewrite and would break CI's recursive checkout — and with it
 every fixture-backed test, which would **self-skip silently** rather than fail
-(watch the `pending` count, not just the green check).
+(watch the `pending` count, not just the green check). This is the one case
+[ADR 0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md)'s
+`--forbid-pending` backstop does **not** cover, and cannot by design: a broken
+recursive checkout leaves the gated fixtures absent, which is exactly the
+degradation state ([ADR 0019](docs/decisions/0019-hermetic-fixture-materialization.md))
+that keeps `.mocharc.cjs` from arming strictness — the manual check above is
+still the only defense here.
 
 ## Formatting
 

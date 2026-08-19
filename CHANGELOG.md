@@ -39,6 +39,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed (internal — test/tooling only)
+
+- Fixture-gated tests now distinguish "the golden was never materialized"
+  (self-skip, unchanged) from "the golden is materialized but this test's path
+  moved" (now a failure naming the path), via `fixtureProjectAvailable`/
+  `sdkFixtureAvailable` in `test/fixtureHelpers.ts`. A computed `.mocharc.cjs`
+  backstops every remaining gate by arming mocha's `--forbid-pending` whenever
+  both gated fixtures are present, so an unexpected skip fails the run instead
+  of passing silently. No `src/` or `dist/` change; no version bump implied
+  ([#82](https://github.com/GenvidTechnologies/c3source/issues/82)) — see
+  [ADR 0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md).
+
 ## [2.0.0] - 2026-08-12
 
 Two breaking changes ship together. The second rode this major at no extra cost
