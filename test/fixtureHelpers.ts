@@ -15,12 +15,12 @@ export function fixturePath(relPath: string): string {
 }
 
 /** Read a fixture file as UTF-8 text (relative to test/fixtures/). */
-export function loadFixture(relPath: string): string {
+function loadFixture(relPath: string): string {
   return readFileSync(fixturePath(relPath), "utf-8");
 }
 
 /** Whether a fixture file/dir exists — used to self-skip fixture-dependent tests. */
-export function fixtureExists(relPath: string): boolean {
+function fixtureExists(relPath: string): boolean {
   return existsSync(fixturePath(relPath));
 }
 

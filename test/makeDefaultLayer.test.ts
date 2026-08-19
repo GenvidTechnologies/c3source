@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { makeDefaultLayer, type Layer } from "../src/c3source.js";
-import { fixtureExists, loadFixture, PROJECT_FIXTURE } from "./fixtureHelpers.js";
+import { fixtureProjectAvailable, loadFixtureProject } from "./fixtureHelpers.js";
 
 const REQUIRED_KEYS = [
   "name",
@@ -28,7 +28,7 @@ const REQUIRED_KEYS = [
   "global",
 ];
 
-const FIXTURE_LAYOUT = `${PROJECT_FIXTURE}/layouts/Gameplay/Main Layout.json`;
+const FIXTURE_LAYOUT = "layouts/Gameplay/Main Layout.json";
 
 describe("makeDefaultLayer", () => {
   it("sets the given name and empty instances/subLayers", () => {
@@ -46,8 +46,8 @@ describe("makeDefaultLayer", () => {
   });
 
   it("matches the key set of a real C3 layer (schema-drift guard)", function () {
-    if (!fixtureExists(FIXTURE_LAYOUT)) return this.skip();
-    const layout = JSON.parse(loadFixture(FIXTURE_LAYOUT)) as { layers: Layer[] };
+    if (!fixtureProjectAvailable(FIXTURE_LAYOUT)) return this.skip();
+    const layout = JSON.parse(loadFixtureProject(FIXTURE_LAYOUT)) as { layers: Layer[] };
     const real = layout.layers[0];
     expect(real, "fixture has a layer").to.exist;
     expect(Object.keys(makeDefaultLayer("L")).sort()).to.deep.equal(Object.keys(real).sort());
