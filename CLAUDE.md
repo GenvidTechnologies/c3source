@@ -159,15 +159,25 @@ alone.
 
 **Citation style differs between this file and `docs/`.** `CLAUDE.md` cites
 `file:line` freely — it is maintained every session and a stale offset is
-noticed and fixed quickly. **`docs/` carries none**: as of #81 there were zero
-`file:line` citations in *any* file under `docs/`, and those ship to three downstream
-repos where a stale `:149-151` misleads longer than it helps. Name the symbol
-instead — it is stable, and `grep` finds it. The rot is not hypothetical: within
-#81's own branch a dispatch brief cited `extractFunctions` at `:1014` and the
-agent found it at `:1020`, because an earlier commit in the same branch had
-added six lines above it. (Stated as an observed convention plus its rationale,
-not a rule derived from the absence — the absence alone would be exactly the
-kind of unevidenced inference #81 exists to correct.)
+noticed and fixed quickly. **`docs/` should not**: those files ship to three
+downstream repos where a stale `:149-151` misleads longer than it helps. Name
+the symbol instead — it is stable, and `grep` finds it. The rot is not
+hypothetical: within #81's own branch a dispatch brief cited `extractFunctions`
+at `:1014` and the agent found it at `:1020`, because an earlier commit in the
+same branch had added six lines above it.
+
+**This is a forward-looking rule, not a description of the current tree** — a
+correction made in #82, where the earlier wording ("as of #81 there were zero
+`file:line` citations in *any* file under `docs/`") was measured and found
+false. `docs/` carried **20** such citations at that point, all in decision
+records predating #81: **12** in ADR 0018, **6** in ADR 0023, **2** in ADR 0020
+(e.g. ADR 0018's "`src/layouts.ts:101` declares `EDITOR_LOCAL_EXCLUSIONS`…").
+They are left in place — an accepted ADR states the situation at its date, the
+same reason ADR 0024 is left reasoning from "with no CHANGELOG.md in this repo"
+— but they are not the convention, and nothing new should join them. Worth
+recording rather than quietly fixing the number: the paragraph argued *from*
+that absence while the absence did not exist, which is precisely the
+unevidenced-inference failure #81 was written to correct.
 
 Four functional areas:
 
