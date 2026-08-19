@@ -39,6 +39,48 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-08-19
+
+A **documentation-only release.** No behaviour changed, no signature moved, and
+no export was added or removed. The sole delta reaching the published tarball is
+a corrected JSDoc release pin in `dist/serialize.d.ts`; everything else below
+ships on GitHub only. It is tagged so the corrections are installable rather
+than reachable only by reading the repo.
+
+### Fixed
+
+- `C3_MINIFIED_SOURCE_SUFFIXES`' JSDoc version pin records the observed
+  `savedWithRelease` as `49502`, not `49500`
+  ([#81](https://github.com/GenvidTechnologies/c3source/issues/81)).
+
+### Added (documentation)
+
+- **C3's local-variable scoping rule is now evidenced rather than asserted.** A
+  live C3-editor experiment established that *visibility* is hoisted level-wide
+  while *initialization* is not: C3 re-initializes a variable to its
+  `initialValue` when execution reaches the declaration event, discarding any
+  mutation an earlier-positioned block at that level already made. Recorded in
+  `docs/domain-fact-audit.md` ("Variable scope: visibility vs. re-initialization")
+  and sampled by the canonical fixture at `v1.1.0`; `extractScriptsFromSheet`
+  now carries an in-source note that `scopeVars` reports visibility only, never
+  that reset ([#81](https://github.com/GenvidTechnologies/c3source/issues/81)).
+- The DSL renderer's behaviours — `formatAction`/`formatCondition`'s required
+  parameters, the `[DISABLED] ` prefix, the five recognized action shapes and
+  the order they are checked in, and why a `type: "script"` action can lack
+  `language` — are documented in `docs/api-guide-extraction.md`, with the
+  extractor-vs-renderer split recorded in `docs/design-patterns.md`. These were
+  relocated from `gvt-construct3`, where they had no owner in this repo's docs
+  ([#81](https://github.com/GenvidTechnologies/c3source/issues/81)).
+- [ADR 0022](docs/decisions/0022-domain-fact-audit-convention.md) is amended: an
+  assertion about **C3 platform behaviour** needs evidence named at the point of
+  claim, a rule the convention had established for tables but never carried into
+  prose ([#81](https://github.com/GenvidTechnologies/c3source/issues/81)).
+- The `@genvid/c3source` scope deprecation (all twelve versions, 2026-08-12) is
+  recorded along with what a deprecation does *not* do — it warns on a fresh
+  install, but does not block or unpublish, and an existing lockfile pin keeps
+  resolving with no warning re-printed. So a consumer reporting pre-1.6.0
+  behaviour may still be on the old name.
+
 ### Changed (internal — test/tooling only)
 
 - Fixture-gated tests now distinguish "the golden was never materialized"
@@ -47,7 +89,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `sdkFixtureAvailable` in `test/fixtureHelpers.ts`. A computed `.mocharc.cjs`
   backstops every remaining gate by arming mocha's `--forbid-pending` whenever
   both gated fixtures are present, so an unexpected skip fails the run instead
-  of passing silently. No `src/` or `dist/` change; no version bump implied
+  of passing silently. No `src/` or `dist/` change
   ([#82](https://github.com/GenvidTechnologies/c3source/issues/82)) — see
   [ADR 0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md).
 
@@ -284,7 +326,8 @@ meaningful library content. There are two of these — one under `@genvid` at th
 project's start, and one under `@genvidtech` when the scope rename at 1.6.0
 needed the new name claimed the same way.
 
-[Unreleased]: https://github.com/GenvidTechnologies/c3source/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/GenvidTechnologies/c3source/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/GenvidTechnologies/c3source/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/GenvidTechnologies/c3source/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/GenvidTechnologies/c3source/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/GenvidTechnologies/c3source/compare/v1.7.0...v1.8.0
