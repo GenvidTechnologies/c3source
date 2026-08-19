@@ -325,7 +325,7 @@ alone still cannot resolve which release, only that a `.ts`-declaring
 capability arrived somewhere inside the bracket.
 
 **A further manifestation of the same r433 boundary — event-sheet script
-actions, not the manifest.** `isScriptAction` (`src/eventSheets.ts:149-151`,
+actions, not the manifest.** `isScriptAction` (`src/eventSheets.ts`,
 consumed by `formatAction`/`extractScriptsFromSheet`/`walkScriptActions` —
 see [api-guide-extraction.md — Action
 formatting](api-guide-extraction.md#action-formatting-formataction--formatcondition))
@@ -643,7 +643,7 @@ otherwise hide:
    being positioned before its declaration. This is exactly what c3source's
    `scopeVars` reports — `extractScriptsFromSheet` pre-collects every
    `variable` event at a level and puts it in scope for every block at that
-   level regardless of declaration order (`src/eventSheets.ts:405-411`) — so
+   level regardless of declaration order — so
    the "(C3's own rule)" claim `docs/api-guide-extraction.md` has carried
    unevidenced is now confirmed **correct**, not merely a c3source walk-order
    artifact.
@@ -678,7 +678,7 @@ Synthetic script actions injected in-memory into both Block A and Block B
 containing `inner1` for the block positioned above the declaration as well as
 the one below — confirming `extractScriptsFromSheet`'s pre-collection walk
 agrees with the editor's visibility behaviour for this case. This is already
-locked by `test/extractEventSheetScripts.test.ts:385-437`.
+locked by `test/extractEventSheetScripts.test.ts`.
 
 **Blast radius:** unlike the corpus/bundle-derived tables above, this is not
 scanner-refreshable at all — it depends on a hand-run editor session, not a

@@ -213,7 +213,7 @@ suffix) — plus a fallback for anything matching none of them:
 
 **Reachability: a `type: "script"` action without `language: "typescript"`
 never reaches the script branch.** The exported guard `isScriptAction`
-(`src/eventSheets.ts:149-151`) requires both keys literally —
+(`src/eventSheets.ts`) requires both keys literally —
 `type === "script" && language === "typescript"` — with no fallback for a
 missing or non-`"typescript"` `language`. Such an action fails every one of
 the five shape checks above (it is not a comment, does not pass
@@ -221,7 +221,7 @@ the five shape checks above (it is not a comment, does not pass
 so it falls through to the unknown-action branch. This has two distinct
 consequences, owned by two different functions:
 
-- **`formatActionInner`** (private, `src/eventSheets.ts:260-262`, reached via
+- **`formatActionInner`** (private to `src/eventSheets.ts`, reached via
   the exported `formatAction`) renders it as `[unknown action: type, script]`
   (or `[unknown action: type, language, script]` when `language` is present
   but not `"typescript"`) instead of the `script { ... }` form — a
