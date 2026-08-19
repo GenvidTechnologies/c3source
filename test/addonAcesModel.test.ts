@@ -9,7 +9,7 @@ import {
   stripBom,
   type AcesModel,
 } from "../src/c3source.js";
-import { fixtureExists, fixturePath, sdkFixtureExists, sdkPath } from "./fixtureHelpers.js";
+import { fixturePath, sdkFixtureAvailable, sdkPath, SDK_SAMPLE_ACES } from "./fixtureHelpers.js";
 
 function readJsonFixture(absPath: string): unknown {
   return JSON.parse(stripBom(readFileSync(absPath, "utf-8")));
@@ -19,7 +19,6 @@ const ADDON_SAMPLE_DIR = fixturePath("addon-sample");
 
 describe("parseAcesModel / parseAddonMetadata (test/fixtures/addon-sample)", () => {
   it("parseAcesModel flattens the single 'custom' category into action/condition/expression", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const model = parseAcesModel(readJsonFixture(`${ADDON_SAMPLE_DIR}/aces.json`));
 
     expect(model.actions).to.have.lengthOf(1);
@@ -47,21 +46,18 @@ describe("parseAcesModel / parseAddonMetadata (test/fixtures/addon-sample)", () 
   });
 
   it("findAce resolves by (kind, id); kind is part of identity", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const model = parseAcesModel(readJsonFixture(`${ADDON_SAMPLE_DIR}/aces.json`));
     expect(findAce(model, "action", "do-thing")).to.not.equal(undefined);
     expect(findAce(model, "condition", "do-thing")).to.equal(undefined);
   });
 
   it("findExpression resolves by expressionName, not by id", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const model = parseAcesModel(readJsonFixture(`${ADDON_SAMPLE_DIR}/aces.json`));
     expect(findExpression(model, "CurrentValue")).to.not.equal(undefined);
     expect(findExpression(model, "current-value")).to.equal(undefined);
   });
 
   it("parseAddonMetadata parses addon.json's id/type/version", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const metadata = parseAddonMetadata(readJsonFixture(`${ADDON_SAMPLE_DIR}/addon.json`));
     expect(metadata.id).to.equal("TestCompany_SamplePlugin");
     expect(metadata.type).to.equal("plugin");
@@ -100,16 +96,15 @@ describe("parseAcesModel / parseAddonMetadata (test/fixtures/addon-sample)", () 
 });
 
 describe("parseAcesModel (SDK-gated, plugin-sdk/customImporterPlugin/aces.json)", () => {
-  const SDK_ACES = "plugin-sdk/customImporterPlugin/aces.json";
   let model: AcesModel;
 
   before(function () {
-    if (!sdkFixtureExists(SDK_ACES)) return this.skip();
-    model = parseAcesModel(readJsonFixture(sdkPath(SDK_ACES)));
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
+    model = parseAcesModel(readJsonFixture(sdkPath(SDK_SAMPLE_ACES)));
   });
 
   it("parses the 'custom' category's action 'do-alert' with no params -> []", function () {
-    if (!sdkFixtureExists(SDK_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const doAlert = findAce(model, "action", "do-alert");
     expect(doAlert).to.not.equal(undefined);
     expect(doAlert).to.include({ scriptName: "Alert", category: "custom" });
@@ -117,14 +112,14 @@ describe("parseAcesModel (SDK-gated, plugin-sdk/customImporterPlugin/aces.json)"
   });
 
   it("parses the condition 'is-large-number'", function () {
-    if (!sdkFixtureExists(SDK_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const isLargeNumber = findAce(model, "condition", "is-large-number");
     expect(isLargeNumber).to.not.equal(undefined);
     expect(isLargeNumber).to.include({ scriptName: "IsLargeNumber", category: "custom" });
   });
 
   it("parses the expression 'double'/'Double'; findExpression resolves by expressionName", function () {
-    if (!sdkFixtureExists(SDK_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const double = findAce(model, "expression", "double");
     expect(double).to.not.equal(undefined);
     expect(findExpression(model, "Double")).to.deep.equal(double);

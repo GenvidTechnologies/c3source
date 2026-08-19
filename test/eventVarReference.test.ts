@@ -8,7 +8,7 @@ import {
   hasConditions,
   type EventSheet,
 } from "../src/c3source.js";
-import { loadFixture, fixtureExists, PROJECT_FIXTURE } from "./fixtureHelpers.js";
+import { loadFixtureProject, fixtureProjectAvailable } from "./fixtureHelpers.js";
 
 // ---------------------------------------------------------------------------
 // Unit tests
@@ -140,16 +140,16 @@ describe("getEventVarReferenceName", () => {
 // ---------------------------------------------------------------------------
 
 describe("getEventVarReferenceName (fixture integration)", () => {
-  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/Gameplay/Event sheet 1.json`;
+  const SHEET_1 = "eventSheets/Gameplay/Event sheet 1.json";
 
   before(function () {
-    if (!fixtureExists(fixturePath)) {
+    if (!fixtureProjectAvailable(SHEET_1)) {
       this.skip();
     }
   });
 
   it("resolves exactly 3 event-var references across conditions and actions", () => {
-    const sheet = JSON.parse(loadFixture(fixturePath)) as EventSheet;
+    const sheet = JSON.parse(loadFixtureProject(SHEET_1)) as EventSheet;
 
     const names: string[] = [];
     visitEvents(sheet.events, (event) => {
@@ -177,10 +177,10 @@ describe("getEventVarReferenceName (fixture integration)", () => {
 });
 
 describe("getEventVarReferenceName (boolean event variable, fixture integration)", () => {
-  const fixturePath = `${PROJECT_FIXTURE}/eventSheets/UI/Event sheet 2.json`;
+  const SHEET_2 = "eventSheets/UI/Event sheet 2.json";
 
   before(function () {
-    if (!fixtureExists(fixturePath)) {
+    if (!fixtureProjectAvailable(SHEET_2)) {
       this.skip();
     }
   });
@@ -190,7 +190,7 @@ describe("getEventVarReferenceName (boolean event variable, fixture integration)
   // The golden gained this construct in construct3-sample v0.6.0 so the real id is
   // exercised against editor-written bytes, not only against hand-built objects.
   it("resolves the compare-boolean-eventvar reference to its declared variable", () => {
-    const sheet = JSON.parse(loadFixture(fixturePath)) as EventSheet;
+    const sheet = JSON.parse(loadFixtureProject(SHEET_2)) as EventSheet;
 
     const declared: string[] = [];
     const refs: string[] = [];

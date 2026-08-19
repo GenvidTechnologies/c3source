@@ -10,7 +10,7 @@ import {
   type Instance,
   type Layout,
 } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectAvailable, fixtureProjectPath } from "./fixtureHelpers.js";
 
 function layout(): Layout {
   return {
@@ -120,7 +120,7 @@ describe("visit_layers_in_layouts (file walker)", () => {
 
   it("discovers the real fixture layout and qualifies its layer name", function () {
     const layoutsDir = fixtureProjectPath("layouts");
-    if (!fixtureProjectExists("layouts/Gameplay/Main Layout.json")) return this.skip();
+    if (!fixtureProjectAvailable("layouts/Gameplay/Main Layout.json")) return this.skip();
     const found: string[] = [];
     visit_layers_in_layouts(layoutsDir, (layer, fullLayerName) => {
       if (layer.name) found.push(fullLayerName);

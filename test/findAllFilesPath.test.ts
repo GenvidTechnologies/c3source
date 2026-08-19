@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { find_all_files_path, isEditorLocalPath, C3_TS_DEFS_FOLDER } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectAvailable, fixtureProjectPath } from "./fixtureHelpers.js";
 
 describe("find_all_files_path (generic predicate-driven walker)", () => {
   let root: string;
@@ -161,7 +161,7 @@ describe("find_all_files_path / isEditorLocalPath: ts-defs classification vs. re
 
 describe("find_all_files_path: canonical fixture scripts/ts-defs corpus (R-D5)", () => {
   it("R-D5: every file reachable under scripts/ts-defs with an opt-in descend is a .d.ts", function () {
-    if (!fixtureProjectExists("scripts/ts-defs")) return this.skip();
+    if (!fixtureProjectAvailable("scripts/ts-defs")) return this.skip();
 
     const tsDefsDir = fixtureProjectPath("scripts/ts-defs");
     const found = find_all_files_path(

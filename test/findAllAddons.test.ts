@@ -1,21 +1,21 @@
 import { describe, it, before } from "mocha";
 import { expect } from "chai";
 import { findAllAddons, openProject, type C3Project } from "../src/c3source.js";
-import { fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
+import { fixtureProjectAvailable, fixtureProjectExists, fixtureProjectPath } from "./fixtureHelpers.js";
 
 const FIXTURE_DIR = fixtureProjectPath();
 const ADDONS_DIR = fixtureProjectPath("addons");
 
 describe("findAllAddons (free function)", () => {
   it("finds .c3addon files nested under two different subdirectories, proving recursion", function () {
-    if (!fixtureProjectExists("addons")) return this.skip();
+    if (!fixtureProjectAvailable("addons")) return this.skip();
     const found = findAllAddons(ADDONS_DIR).map((p) => p.replace(/\\/g, "/"));
     expect(found.some((p) => p.endsWith("addons/behavior/MyCompany_MyBehavior.c3addon"))).to.equal(true);
     expect(found.some((p) => p.endsWith("addons/effect/MyCompany_MyEffect.c3addon"))).to.equal(true);
   });
 
   it("excludes non-.c3addon files", function () {
-    if (!fixtureProjectExists("addons")) return this.skip();
+    if (!fixtureProjectAvailable("addons")) return this.skip();
     const found = findAllAddons(ADDONS_DIR);
     expect(found.every((p) => p.endsWith(".c3addon"))).to.equal(true);
   });
@@ -30,7 +30,7 @@ describe("C3Project#findAllAddons", () => {
   });
 
   it("finds .c3addon files nested under both the behavior/ and effect/ subdirectories", function () {
-    if (!fixtureProjectExists("addons")) return this.skip();
+    if (!fixtureProjectAvailable("addons")) return this.skip();
     const found = proj.findAllAddons("addons").map((p) => p.replace(/\\/g, "/"));
     expect(found.some((p) => p.endsWith("addons/behavior/MyCompany_MyBehavior.c3addon"))).to.equal(true);
     expect(found.some((p) => p.endsWith("addons/effect/MyCompany_MyEffect.c3addon"))).to.equal(true);
