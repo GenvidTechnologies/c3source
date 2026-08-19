@@ -47,6 +47,51 @@ export function fixtureProjectExists(rel = ""): boolean {
   return fixtureExists(rel ? `${PROJECT_FIXTURE}/${rel}` : PROJECT_FIXTURE);
 }
 
+/**
+ * The gate for a test depending on a specific path inside the canonical project
+ * fixture — a three-way split that a bare `existsSync` cannot make. `existsSync`
+ * answers two different questions with the same `false`: "the fixture was never
+ * materialized" (self-skip — no test has regressed) and "the fixture is present
+ * but this path is gone from it" (the golden moved or renamed something a test
+ * still expects — a real break). Collapsing those into one boolean is exactly how
+ * construct3-sample's v1.0.0 fold of `eventSheets/`/`layouts/` into
+ * `Gameplay/`/`UI/` subfolders silently disarmed six tests instead of failing any
+ * of them (#82) — they self-skipped as if the fixture were simply absent.
+ *
+ * So: if the fixture itself was never materialized (`fixtureProjectExists(PROJECT_MANIFEST)`
+ * is false), return `false` so the caller self-skips as before. If the fixture is
+ * materialized but `rel` is missing, throw — that is no longer an absent-fixture
+ * self-skip, it is a stale path. Otherwise return `true`.
+ *
+ * See ADR 0026 for the full rationale.
+ *
+ * @throws if the fixture is materialized but `rel` does not exist within it.
+ */
+export function fixtureProjectAvailable(rel: string): boolean {
+  if (!fixtureProjectExists(PROJECT_MANIFEST)) return false;
+  if (!fixtureProjectExists(rel)) {
+    throw new Error(
+      `Canonical fixture is materialized, but "${rel}" does not exist within it. ` +
+        `This is a FIXTURE problem, not a library defect: the construct3-sample golden ` +
+        `likely moved or renamed this path — its v1.0.0 fold of eventSheets/ and layouts/ ` +
+        `into Gameplay/ and UI/ subfolders did exactly this. Update the path in this test, ` +
+        `or re-check the submodule pin — see CLAUDE.md's "Canonical reference fixture" section.`,
+    );
+  }
+  return true;
+}
+
+/**
+ * Read a file inside the canonical project fixture as UTF-8 text, given a path
+ * relative to the fixture's project root. Thin wrapper over `loadFixture` that
+ * prefixes `PROJECT_FIXTURE`, so a converted call site can pass one bare
+ * project-relative string to both this and `fixtureProjectAvailable`, instead of
+ * today's mix of `test/fixtures/`-root-relative and project-relative strings.
+ */
+export function loadFixtureProject(rel: string): string {
+  return loadFixture(`${PROJECT_FIXTURE}/${rel}`);
+}
+
 /** Absolute path to a file/dir under the SDK/ git submodule. */
 export function sdkPath(relPath: string): string {
   return path.join(sdkRoot, relPath);
