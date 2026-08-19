@@ -4,14 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readAddonPackage, stripBom } from "../src/c3source.js";
-import {
-  fixtureExists,
-  fixturePath,
-  sdkFixtureExists,
-  sdkPath,
-  zipDirToC3addon,
-  SDK_SAMPLE_ACES,
-} from "./fixtureHelpers.js";
+import { fixturePath, sdkFixtureExists, sdkPath, zipDirToC3addon, SDK_SAMPLE_ACES } from "./fixtureHelpers.js";
 
 const ADDON_SAMPLE_DIR = fixturePath("addon-sample");
 
@@ -27,20 +20,17 @@ describe("stripBom", () => {
 
 describe("readAddonPackage (directory mode, test/fixtures/addon-sample)", () => {
   it("detects kind:'directory'", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const pkg = readAddonPackage(ADDON_SAMPLE_DIR);
     expect(pkg.kind).to.equal("directory");
   });
 
   it("readJson('addon.json') parses the manifest with the expected id", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const pkg = readAddonPackage(ADDON_SAMPLE_DIR);
     const manifest = pkg.readJson("addon.json") as { id: string };
     expect(manifest.id).to.equal("TestCompany_SamplePlugin");
   });
 
   it("hasEntry/entryNames see both addon.json and aces.json", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const pkg = readAddonPackage(ADDON_SAMPLE_DIR);
     expect(pkg.hasEntry("aces.json")).to.equal(true);
     const names = pkg.entryNames();
@@ -49,14 +39,12 @@ describe("readAddonPackage (directory mode, test/fixtures/addon-sample)", () => 
   });
 
   it("readText strips the BOM known to be present on aces.json", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const pkg = readAddonPackage(ADDON_SAMPLE_DIR);
     const text = pkg.readText("aces.json");
     expect(text.charAt(0)).to.not.equal("﻿");
   });
 
   it("readJson('aces.json') parses without throwing despite the BOM", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const pkg = readAddonPackage(ADDON_SAMPLE_DIR);
     expect(() => pkg.readJson("aces.json")).to.not.throw();
   });
@@ -67,7 +55,6 @@ describe("readAddonPackage (zip mode, synthesized from addon-sample)", () => {
   let zipPath: string;
 
   before(function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-addon-reader-"));
     zipPath = path.join(tmpDir, "sample.c3addon");
     zipDirToC3addon(ADDON_SAMPLE_DIR, zipPath);
@@ -78,13 +65,11 @@ describe("readAddonPackage (zip mode, synthesized from addon-sample)", () => {
   });
 
   it("detects kind:'zip'", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const pkg = readAddonPackage(zipPath);
     expect(pkg.kind).to.equal("zip");
   });
 
   it("matches directory-mode readJson/entryNames/hasEntry", function () {
-    if (!fixtureExists("addon-sample")) return this.skip();
     const dirPkg = readAddonPackage(ADDON_SAMPLE_DIR);
     const zipPkg = readAddonPackage(zipPath);
     expect(zipPkg.readJson("addon.json")).to.deep.equal(dirPkg.readJson("addon.json"));
