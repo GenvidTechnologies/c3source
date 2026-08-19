@@ -149,6 +149,18 @@ e.g. `sed -E 's#/\*\*[^*]*\*+([^/*][^*]*\*+)*/##g'` over each dump before
 `diff`. Reserve the empty-diff standard for refactors that leave comments
 alone.
 
+**Citation style differs between this file and `docs/`.** `CLAUDE.md` cites
+`file:line` freely — it is maintained every session and a stale offset is
+noticed and fixed quickly. **`docs/` carries none**: as of #81 there were zero
+`file:line` citations in *any* file under `docs/`, and those ship to three downstream
+repos where a stale `:149-151` misleads longer than it helps. Name the symbol
+instead — it is stable, and `grep` finds it. The rot is not hypothetical: within
+#81's own branch a dispatch brief cited `extractFunctions` at `:1014` and the
+agent found it at `:1020`, because an earlier commit in the same branch had
+added six lines above it. (Stated as an observed convention plus its rationale,
+not a rule derived from the absence — the absence alone would be exactly the
+kind of unevidenced inference #81 exists to correct.)
+
 Four functional areas:
 
 1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip
@@ -747,6 +759,16 @@ counts** — a tag that adds or removes a `project/` JSON file still moves the
 corpus counts `manifestSerialize.test.ts` asserts, but a bump can be
 count-neutral and still invalidate a third of the fixture-gated suite,
 exactly as v1.0.0 did here.
+**Fetch the submodule's own remote before doing anything in it.** A `git fetch`
+in this repo says nothing about `construct3-sample` — `origin/main` here can be
+current while the pinned commit is several releases behind. Run `git -C
+construct3-sample fetch` and check `git log HEAD..origin/main` there *before*
+committing an enrichment, not after: on #81 the pin was four commits and one
+**major** (`v1.0.0`, the `Gameplay/`/`UI/` fold) behind, which was invisible from
+this repo and invalidated a plan written against `v0.7.0`. Push the branch and
+its tag as one chained command (`git push origin main && git push origin vX.Y.Z`)
+— unchained, the tag push still succeeds after a rejected branch push and strands
+the tag on a commit unreachable from `main`, in a repo three projects pin.
 **What is actually pinned is a commit, not a tag:** the superproject tree stores a
 `160000 commit <sha>` entry and `.gitmodules` carries no `branch`/tag field, so git
 never consults a tag when updating the submodule — `git describe --tags` merely
