@@ -37,6 +37,7 @@ Full raw output is not committed (the corpus is machine-local — see
 - [Bounds: what this cannot prove](#bounds-what-this-cannot-prove)
 - [What a corpus cannot audit at all](#what-a-corpus-cannot-audit-at-all)
 - [A better validation channel: editor.construct.net](#a-better-validation-channel-editorconstructnet)
+- [Variable scope: visibility vs. re-initialization (editor experiment)](#variable-scope-visibility-vs-re-initialization-editor-experiment)
 - [How to re-run](#how-to-re-run)
 
 ---
@@ -323,6 +324,49 @@ the bundle bisection pins; it does not by itself establish r433 — the corpus
 alone still cannot resolve which release, only that a `.ts`-declaring
 capability arrived somewhere inside the bracket.
 
+**A further manifestation of the same r433 boundary — event-sheet script
+actions, not the manifest.** `isScriptAction` (`src/eventSheets.ts`,
+consumed by `formatAction`/`extractScriptsFromSheet`/`walkScriptActions` —
+see [api-guide-extraction.md — Action
+formatting](api-guide-extraction.md#action-formatting-formataction--formatcondition))
+gates a `type: "script"` action on the literal `language === "typescript"`,
+with no fallback for a missing `language` key. This is not a new pin — it is
+the r433 boundary established above, now visible from action data instead of
+`rootFileFolders.script`.
+
+Corpus evidence, all actions across the same 14-project / 207-sheet corpus,
+broken out by shape:
+
+| action shape | count | share |
+|---|---|---|
+| standard | 12,287 | 72.3% |
+| function call | 2,589 | 15.2% |
+| custom action | 846 | 5.0% |
+| comment | 593 | 3.5% |
+| script | 677 | 4.0% |
+| **total** | **16,992** | 100.0% |
+
+16,992 actions total — the standing Bounds caveat applies here as everywhere
+else in this corpus: burbank dominates this count exactly as it dominates
+every other volume metric (see [Bounds](#bounds-what-this-cannot-prove)).
+
+Of the 677 script-shaped actions, **672 carry `language: "typescript"`; 5
+carry no `language` key at all; zero carry `language: "javascript"`.** The 5
+language-less actions span 3 projects. This is consistent with the r433 pin
+above: a `language`-less script action is C3's pre-r433 legacy serialization
+of a JavaScript script action — tolerated on load (C3's own loader defaults a
+missing `language` to `"javascript"`) but not recognized by `isScriptAction`,
+which requires the literal `"typescript"` value, so the same action C3 loads
+and runs falls through to `formatAction`'s `[unknown action: ...]` fallback
+and is silently dropped by `extractScriptsFromSheet`/`walkScriptActions`.
+
+**Hedge.** 2 of the 5 language-less actions live in a project reporting
+`savedWithRelease: 44902` (r449) — *after* the r433 pin, where an editor save
+would be expected to write `language`. Hand-authoring or tool generation
+outside the editor's own save path is the likely explanation but is
+**unverified**; do not read "absent `language` implies pre-r433 legacy form"
+as an exception-free rule.
+
 **Blast radius:** same shape as its sibling table below — a wrong extension
 set silently over- or under-collects during a script-discovery walk (a false
 negative, or a false positive), **never a throw** — contrast
@@ -563,6 +607,83 @@ The `allAces.json` paths above were always correct and remain so — only the
 automated fetch; `editor.construct.net` is not. For any future domain-fact
 audit, check this source **before** reaching for a corpus scan — it proves
 completeness where the corpus can only find gaps.
+
+## Variable scope: visibility vs. re-initialization (editor experiment)
+
+Not a domain-fact table entry (no exported constant backs it, unlike every
+section above) and not a corpus scan — this needed a **third** evidence
+channel this doc had not used before: a live C3-editor execution. A corpus
+scan shows what values occur in saved projects; bisecting C3's own bundle
+(above) shows what the serializer/loader mechanism is; **neither can show
+what happens when a project actually runs.** Local-variable scope is an
+execution semantic, and c3source's `scopeVars` (`extractScriptsFromSheet`,
+`src/eventSheets.ts`) makes a claim about it — `docs/api-guide-extraction.md`
+has carried "(C3's own rule)" with no evidence anywhere in this repo since it
+was written (issue #81). Only running the case in the real editor could
+settle whether that was C3's own behaviour or an artifact of this library's
+walk order.
+
+**Method.** A case built directly in `construct3-sample` (tag `v1.1.0`,
+commit `c6884ff`, `project/eventSheets/UI/Event sheet 2.json`) and run in the
+live C3 editor by the maintainer — not scanned, not inferred from source. At
+one level, as children of an `on-start-of-layout` block:
+
+- Block A: `add-to-eventvar inner1 += 1`, then `TextInput.set-text = str(inner1)`
+- the declaration: `variable inner1`, type number, `initialValue "2"`, non-static, non-constant
+- Block B: `add-to-eventvar inner1 += 1`, then `Text.set-text = str(inner1)`
+
+Block A sits *above* the declaration in event order; Block B sits below it.
+
+**Result: both `TextInput` and `Text` display `"3"`.**
+
+That single trace separates two semantics that a same-value result could
+otherwise hide:
+
+1. **Visibility is level-wide.** Block A can read and mutate `inner1` despite
+   being positioned before its declaration. This is exactly what c3source's
+   `scopeVars` reports — `extractScriptsFromSheet` pre-collects every
+   `variable` event at a level and puts it in scope for every block at that
+   level regardless of declaration order — so
+   the "(C3's own rule)" claim `docs/api-guide-extraction.md` has carried
+   unevidenced is now confirmed **correct**, not merely a c3source walk-order
+   artifact.
+2. **Initialization is not hoisted.** Block A reads `inner1` as `2` (its
+   `initialValue`) and increments to `3`. Execution then reaches the
+   declaration event and **re-initializes `inner1` back to `2`**, discarding
+   Block A's mutation; Block B increments 2 -> 3. Without that
+   re-initialization, Block B would instead read Block A's `3` and display
+   `4` — that difference is the entire evidential weight of the trace, and it
+   is exactly the outcome `scopeVars` gives a consumer no signal about.
+
+`scopeVars`/`scopeSegments` correctly report that a variable is in scope for a
+block positioned before its declaration (per (1)) — but neither carries any
+signal that a reference in that block reads a value about to be discarded
+when the declaration executes (per (2)). A code generator that trusts
+`scopeVars` alone, with no positional check against the declaration event,
+can silently emit exactly the bug this trace demonstrates.
+
+**Scope of the claim.** Both semantics are confirmed only for the one case
+exercised: a **non-static, non-constant `number`** local variable. The
+maintainer additionally stated that the visibility rule (1) holds for static
+variables too; that is recorded here as an attributed claim, not
+independently re-verified by this experiment. Re-initialization (2) was not
+tested at all for static or constant variables — a static variable's entire
+purpose is surviving re-entry, so whether it re-initializes on first
+declaration-reach only, on every reach, or never, is an open question this
+experiment does not answer.
+
+**Independent corroboration against c3source's own code (same session).**
+Synthetic script actions injected in-memory into both Block A and Block B
+(bypassing the fixture and the C3 editor entirely) show `scopeVars`
+containing `inner1` for the block positioned above the declaration as well as
+the one below — confirming `extractScriptsFromSheet`'s pre-collection walk
+agrees with the editor's visibility behaviour for this case. This is already
+locked by `test/extractEventSheetScripts.test.ts`.
+
+**Blast radius:** unlike the corpus/bundle-derived tables above, this is not
+scanner-refreshable at all — it depends on a hand-run editor session, not a
+committed script. Re-verifying it means repeating the manual experiment, not
+re-running `scripts/scan-domain-facts.mjs`.
 
 ## Honesty note: a discrepancy in the image-node count
 

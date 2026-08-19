@@ -47,12 +47,29 @@ describe("parseProjectManifest / readProjectManifest", () => {
 
   it("R-C1: reads name and savedWithRelease from the fixture", () => {
     expect(m.name).to.equal("construct3-sample");
-    expect(m.savedWithRelease).to.equal(49500);
+    expect(m.savedWithRelease).to.equal(49502);
   });
 
-  it("R-C2: name-folder typing — layouts.items and eventSheets.items", () => {
-    expect(m.layouts.items).to.deep.equal(["Main Layout", "Second Layout", "Templates Layout"]);
-    expect(m.eventSheets.items).to.deep.equal(["Event sheet 1", "Event sheet 2"]);
+  it("R-C2: name-folder typing — layouts and eventSheets are nested under domain subfolders (v1.0.0 fold)", () => {
+    // Templates Layout has no assigned event sheet, so it stays unfoldered at the section root.
+    expect(m.layouts.items).to.deep.equal(["Templates Layout"]);
+    expect(m.layouts.subfolders.map((sf) => sf.name)).to.deep.equal(["Gameplay", "UI"]);
+    expect(m.layouts.subfolders.find((sf) => sf.name === "Gameplay")!.items).to.deep.equal(["Main Layout"]);
+    expect(m.layouts.subfolders.find((sf) => sf.name === "UI")!.items).to.deep.equal(["Second Layout"]);
+
+    // Every event sheet is foldered by domain — no root items at all.
+    expect(m.eventSheets.items).to.deep.equal([]);
+    expect(m.eventSheets.subfolders.map((sf) => sf.name)).to.deep.equal(["Gameplay", "UI"]);
+    expect(m.eventSheets.subfolders.find((sf) => sf.name === "Gameplay")!.items).to.deep.equal(["Event sheet 1"]);
+    expect(m.eventSheets.subfolders.find((sf) => sf.name === "UI")!.items).to.deep.equal(["Event sheet 2"]);
+
+    // collectManifestItemNames must still recover every item across the flat and nested entries.
+    expect(collectManifestItemNames(m.layouts).sort()).to.deep.equal([
+      "Main Layout",
+      "Second Layout",
+      "Templates Layout",
+    ]);
+    expect(collectManifestItemNames(m.eventSheets).sort()).to.deep.equal(["Event sheet 1", "Event sheet 2"]);
   });
 
   it("R-C3: file-folder typing — script items and icon count", () => {
@@ -191,10 +208,14 @@ describe("detectManifestDrift", () => {
     expect(missing[0].manifestPath).to.deep.equal([]);
   });
 
-  it("R-C14: clearing layouts.items surfaces real files as untracked DriftEntries; no editor-local entries", () => {
+  it("R-C14: clearing the whole layouts section surfaces all real files (incl. foldered ones) as untracked DriftEntries; no editor-local entries", () => {
     const base = readProjectManifest(MANIFEST_PATH);
     const clone: C3ProjectManifest = JSON.parse(JSON.stringify(base));
+    // Clear both the root items AND the domain subfolders, so nothing is tracked for the
+    // section at all — the nested-shape equivalent of the pre-fold "clear items" case, since
+    // two of the three on-disk layouts now live under Gameplay/UI subfolders, not the root.
     clone.layouts.items = [];
+    clone.layouts.subfolders = [];
     const drift = detectManifestDrift(FIXTURE_DIR, clone);
     expect(drift.inSync).to.equal(false);
     const layoutsDrift = drift.sections.find((s: SectionDrift) => s.section === "layouts");
@@ -204,6 +225,12 @@ describe("detectManifestDrift", () => {
     const names = untracked.map((e) => e.name).sort();
     expect(names).to.deep.equal(["Main Layout", "Second Layout", "Templates Layout"]);
     expect(untracked.every((e) => Array.isArray(e.diskPath))).to.equal(true);
+    // each entry's diskPath reflects the domain subfolder it was actually found under —
+    // this is what would fail if the fold were undone (all diskPaths would collapse to [])
+    // or misparsed (a foldered layout landing under the wrong/no subfolder).
+    expect(untracked.find((e) => e.name === "Main Layout")!.diskPath).to.deep.equal(["Gameplay"]);
+    expect(untracked.find((e) => e.name === "Second Layout")!.diskPath).to.deep.equal(["UI"]);
+    expect(untracked.find((e) => e.name === "Templates Layout")!.diskPath).to.deep.equal([]);
     // editor-local artifacts must not appear in any section's entries
     const allEntryNames = drift.sections.flatMap((s: SectionDrift) => s.entries.map((e) => e.name));
     expect(allEntryNames.some((n: string) => n.includes("instancesBar") || n === "uistate")).to.equal(false);

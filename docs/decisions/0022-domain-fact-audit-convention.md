@@ -97,3 +97,54 @@ section for the full detail.
   [ADR 0023](0023-pre-r402-image-serialization-drift-degradation.md) for the
   first table this audit found genuinely wrong, and the [ADR 0008
   amendment](0008-c3-domain-fact-tables.md) for the full defect list.
+
+**The convention did not reach prose (added 2026-08-18, #81).** All three
+parts of the decision above govern a domain-fact *table* — a claim gets a
+confidence label and a named evidence source only once it is an exported
+constant. `docs/api-guide-extraction.md` asserted "(C3's own rule)" about
+C3's variable-scope semantics for roughly two years with no ADR, no fixture
+reference, and no audit entry behind it, because it was never a table — it
+was a parenthetical in a reference guide, outside this convention's reach
+entirely. Nothing here would have caught it. An upstream repo
+(`claude-code-plugin-gvt-construct3`) deleted the same claim from its own C3
+platform reference because a reader could not tell whether it was C3's rule
+or an artifact of this library's walk order, and filed #81 to relay the gap.
+
+The claim turned out to be **true** — settled this run by a live C3-editor
+experiment, recorded in `docs/domain-fact-audit.md`'s ["Variable scope:
+visibility vs. re-initialization (editor
+experiment)"](../domain-fact-audit.md#variable-scope-visibility-vs-re-initialization-editor-experiment)
+section. Being right is not the same as being evidenced, and nothing in this
+convention distinguished the two for prose.
+
+**Amended rule:** an assertion about **C3 platform behaviour** — as opposed
+to what c3source itself does — must name its evidence channel wherever it is
+written, not only when it lives in a domain-fact table. This repo now
+recognizes three evidence channels for such a claim:
+
+- **Corpus scan** (currently 14 real projects) — shows *what values occur*.
+  Cannot show what the mechanism is, and inherits the bounds caveat that the
+  sample skews toward `burbank`.
+- **Editor bundle** (`editor.construct.net/r{NNN}/`) — shows *what the
+  mechanism is* and pins exactly when a field appeared; per the decision
+  above, this is the channel ADR 0008's addendum says a corpus structurally
+  cannot substitute for.
+- **Editor experiment** — running a constructed case in the real C3 editor.
+  A third channel, first exercised for `custom-ace-name-required` (#70, see
+  the `functionDescription` finding above) and exercised again, more
+  explicitly, by #81's variable-scope trace. For *execution semantics* it is
+  the only channel that works: a corpus shows recorded values, a bundle shows
+  serialization/loader code, and neither shows what happens when a project
+  actually runs.
+
+The house standard for what this looks like in practice already exists:
+`src/layouts.ts`'s `isGeneratedScriptOutput` JSDoc states "This is C3's own
+rule, not a heuristic" and then names the actual C3 reconcile behaviour,
+backed by [ADR 0024](0024-script-source-fact-and-dotted-extensions.md) and
+issue #73 — including a correction of a prior mischaracterization. A prose
+platform claim should be evidenced to that standard; a bare parenthetical is
+not enough.
+
+This amendment extends parts 1–3 of the decision above to prose, reusing the
+same evidence-channel vocabulary this file already established for tables. It
+does not add a new confidence label and does not reserve a new ADR number.

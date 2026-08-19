@@ -126,9 +126,18 @@ Crucially it captures the type-only exports (interfaces/type aliases) that a
 runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
 value-vs-type pair.
 
-**The declaration text includes JSDoc**, so "byte-identical dump" is a
-stronger claim than "identical API": a **comment-only** edit to a member of an
-exported interface moves the dump even though no signature changed. ADR 0012
+**The declaration text includes JSDoc — but not uniformly**, so
+"byte-identical dump" is a stronger claim than "identical API": a
+**comment-only** edit to a member of an exported interface moves the dump even
+though no signature changed. The asymmetry is worth knowing before you predict
+a delta: an **interface or type member** carries its JSDoc into the dump, while
+a **top-level `const`** does not — its entry is the bare type signature
+(`C3_MINIFIED_SOURCE_SUFFIXES  2  C3_MINIFIED_SOURCE_SUFFIXES: readonly
+string[]`), so editing that const's doc comment moves nothing. Measured on #81,
+which changed `C3_MINIFIED_SOURCE_SUFFIXES`'s JSDoc version pin (`savedWithRelease`
+49500 → 49502), reached `dist/serialize.d.ts`, and still produced a **byte-identical**
+dump — a delta had been predicted from this paragraph's earlier, flatter wording.
+ADR 0012
 and ADR 0017 both cite an *exactly-empty* diff as their purity proof, which
 held only because those refactors happened not to touch JSDoc — a
 doc-carrying PR has no such luxury and will show entries that look like scope
@@ -139,6 +148,18 @@ JSDoc blocks from both dumps and re-diff to isolate real signature changes —
 e.g. `sed -E 's#/\*\*[^*]*\*+([^/*][^*]*\*+)*/##g'` over each dump before
 `diff`. Reserve the empty-diff standard for refactors that leave comments
 alone.
+
+**Citation style differs between this file and `docs/`.** `CLAUDE.md` cites
+`file:line` freely — it is maintained every session and a stale offset is
+noticed and fixed quickly. **`docs/` carries none**: as of #81 there were zero
+`file:line` citations in *any* file under `docs/`, and those ship to three downstream
+repos where a stale `:149-151` misleads longer than it helps. Name the symbol
+instead — it is stable, and `grep` finds it. The rot is not hypothetical: within
+#81's own branch a dispatch brief cited `extractFunctions` at `:1014` and the
+agent found it at `:1020`, because an earlier commit in the same branch had
+added six lines above it. (Stated as an observed convention plus its rationale,
+not a rule derived from the absence — the absence alone would be exactly the
+kind of unevidenced inference #81 exists to correct.)
 
 Four functional areas:
 
@@ -384,7 +405,14 @@ Four functional areas:
    cannot drift. It composes lexical scope as a
    stack of `ScopeSegment`s: all `variable` events at a level are in scope for
    every block at that level regardless of declaration order, so they are
-   pre-collected before traversal. Regular sibling blocks disambiguate their
+   pre-collected before traversal — a live-editor experiment confirmed this
+   is C3's own visibility rule, and also found that *initialization* is not
+   hoisted the same way: C3 re-initializes a variable to its `initialValue`
+   when execution reaches the declaration, discarding any mutation an
+   earlier-positioned block at that level already made, so `scopeVars` signals
+   visibility only, never that reset (see
+   [docs/domain-fact-audit.md](docs/domain-fact-audit.md#variable-scope-visibility-vs-re-initialization-editor-experiment)).
+   Regular sibling blocks disambiguate their
    scope keys with `#<eventIndex>`; functions/ACEs use their unique names.
    `formatAction`/`formatCondition` render events into a single-line DSL (see
    the doc comment on `formatAction` for the full grammar). Sibling extractors
@@ -646,7 +674,7 @@ its `.tsx`/Tiled trap — the criterion was corrected rather than executed, and
 ## Canonical reference fixture (`construct3-sample`)
 
 A **second** git submodule, `construct3-sample/` (pinned at the commit tagged
-`v0.6.0`, added #51), is the **canonical golden C3 project** — the single,
+`v1.1.0`, added #51), is the **canonical golden C3 project** — the single,
 editor-round-tripped
 source of on-disk shape that c3source and its sibling tools consume instead of
 each hand-maintaining a drifting fixture. c3source is the **validator, not the
@@ -674,16 +702,73 @@ for that migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds them 
 `Event sheet 1`, which `eventVarReference.test.ts` needs — and then to **v0.4.1**,
 which adds a **global layer with override** to both layouts (exercising the
 prefix-resetting `global` path in `walkLayerEntries`) plus upstream-owned addon
-sources. Then **v0.5.0** (#60), adding Functions ACEs to `Event sheet 1`, and
-**v0.6.0** (#68), adding a boolean event variable plus a `compare-boolean-eventvar`
-condition to `Event sheet 2` — the golden had no boolean-event-variable construct at
-all, which is part of how a **fabricated** ACE id survived unnoticed in
-`EVENTVAR_REFERENCE_ACES`. Every bump from v0.4.1 on is corpus-neutral: the
-`.json`/`.c3proj` counts are unchanged (29/3/26, 26 kept round-tripping bar the brush
-file), because each edits existing files rather than adding any, and non-`project/`
-additions are never copied by `prep-fixture`. **When bumping the pin, re-measure
-rather than assume** — a tag that adds or removes a `project/` JSON file moves the
-corpus counts `manifestSerialize.test.ts` asserts.
+sources. Then **v0.5.0** (#60), adding Functions ACEs to `Event sheet 1`; **v0.6.0**
+(#68), adding a boolean event variable plus a
+`compare-boolean-eventvar` condition to `Event sheet 2` — the golden had no
+boolean-event-variable construct at all, which is part of how a **fabricated**
+ACE id survived unnoticed in `EVENTVAR_REFERENCE_ACES`; **v0.7.0** (#70/#72),
+adding a custom ACE on `NavButton` and sampling a function without a
+description — the enrichment behind `custom-ace-name-required` (an
+`EDITOR_FIELD_RULES` entry added from a direct C3-editor import experiment)
+and the disproof that `function-block.functionDescription` is a loader
+requirement; **v1.0.0 — MAJOR** ("Cross-domain coupling coverage", driven
+upstream by `c3-domain-manager`#34, not by any c3source issue),
+folding `eventSheets/` and `layouts/` into `Gameplay/`/`UI/` subfolders and
+adding a cross-domain include event, an object-member expression reference,
+and an event-variable reference — each deliberately crossing a folder
+boundary so consumers can exercise cross-domain dependency analysis, which
+the golden previously could not support. `Templates Layout` deliberately
+stays unfoldered at the `layouts/` root (it has no assigned event sheet),
+preserving coverage of root-level/unclassified paths; sheet `name` fields
+were untouched, since includes and layout `eventSheet` fields resolve sheets
+by name, so no reference moved with the files. Per the sample's own
+versioning convention a MAJOR means a consumer with a generated read-surface
+keyed on those paths must regenerate it before bumping this pin, and a
+consumer's own overlay/strip-list (here,
+`canonical-overlay/`/`canonical.striplist.txt`) must be re-checked against
+the new shape. And **v1.1.0** (#81), sampling a local variable referenced
+before its declaration — an `on-start-of-layout` block in `UI/Event sheet 2`
+whose children straddle a local `variable` declaration (`inner1`), one
+incrementing and displaying above the declaration and one below, both
+rendering `3`: the observable signature of two distinct C3 semantics,
+level-wide visibility (the upper block already sees `inner1` holding its
+`initialValue`) and re-initialization at the declaration point (the upper
+block's increment is discarded, so the lower block reads 2, not 3). Saved
+with r49502, up from r49500.
+
+Every bump through v0.7.0 was corpus-neutral in the strong sense — both
+counts *and* paths held, because each edited existing files rather than
+adding, removing, or moving any (non-`project/` additions are never copied
+by `prep-fixture`). **v1.0.0 breaks that stronger sense while preserving the
+weaker one**: the `.json`/`.c3proj` counts are unchanged (29/3/26, 26 kept
+round-tripping bar the brush file), because the fold renamed every
+event-sheet and layout path rather than adding or removing a file — but the
+*paths* moved, and anything keyed on a hardcoded path (a generated
+read-surface, a fixture-gated test's literal path string) breaks even though
+a count-only check would not have caught it. Measured fallout in this repo:
+the bump broke `R-C1`/`R-C2`/`R-C14` in `test/projectManifest.test.ts`
+outright, and caused `eventVarReference.test.ts`,
+`fixtureFieldFidelity.test.ts`, `layerVisitor.test.ts`, and
+`makeDefaultLayer.test.ts` to silently self-skip on their now-stale
+hardcoded paths — the same hazard this section already flags for a
+missing/non-git submodule below ("would self-skip silently rather than
+fail"), now with a second trigger: watch the **pending** count after any pin
+bump, not just the pass/fail line, since a path-keyed test gone vacuous
+looks identical to green. **When bumping the pin, re-measure paths as well as
+counts** — a tag that adds or removes a `project/` JSON file still moves the
+corpus counts `manifestSerialize.test.ts` asserts, but a bump can be
+count-neutral and still invalidate a third of the fixture-gated suite,
+exactly as v1.0.0 did here.
+**Fetch the submodule's own remote before doing anything in it.** A `git fetch`
+in this repo says nothing about `construct3-sample` — `origin/main` here can be
+current while the pinned commit is several releases behind. Run `git -C
+construct3-sample fetch` and check `git log HEAD..origin/main` there *before*
+committing an enrichment, not after: on #81 the pin was four commits and one
+**major** (`v1.0.0`, the `Gameplay/`/`UI/` fold) behind, which was invisible from
+this repo and invalidated a plan written against `v0.7.0`. Push the branch and
+its tag as one chained command (`git push origin main && git push origin vX.Y.Z`)
+— unchained, the tag push still succeeds after a rejected branch push and strands
+the tag on a commit unreachable from `main`, in a repo three projects pin.
 **What is actually pinned is a commit, not a tag:** the superproject tree stores a
 `160000 commit <sha>` entry and `.gitmodules` carries no `branch`/tag field, so git
 never consults a tag when updating the submodule — `git describe --tags` merely
