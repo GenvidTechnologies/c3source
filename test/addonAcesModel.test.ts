@@ -9,7 +9,7 @@ import {
   stripBom,
   type AcesModel,
 } from "../src/c3source.js";
-import { fixturePath, sdkFixtureExists, sdkPath, SDK_SAMPLE_ACES } from "./fixtureHelpers.js";
+import { fixturePath, sdkFixtureAvailable, sdkPath, SDK_SAMPLE_ACES } from "./fixtureHelpers.js";
 
 function readJsonFixture(absPath: string): unknown {
   return JSON.parse(stripBom(readFileSync(absPath, "utf-8")));
@@ -99,12 +99,12 @@ describe("parseAcesModel (SDK-gated, plugin-sdk/customImporterPlugin/aces.json)"
   let model: AcesModel;
 
   before(function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     model = parseAcesModel(readJsonFixture(sdkPath(SDK_SAMPLE_ACES)));
   });
 
   it("parses the 'custom' category's action 'do-alert' with no params -> []", function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const doAlert = findAce(model, "action", "do-alert");
     expect(doAlert).to.not.equal(undefined);
     expect(doAlert).to.include({ scriptName: "Alert", category: "custom" });
@@ -112,14 +112,14 @@ describe("parseAcesModel (SDK-gated, plugin-sdk/customImporterPlugin/aces.json)"
   });
 
   it("parses the condition 'is-large-number'", function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const isLargeNumber = findAce(model, "condition", "is-large-number");
     expect(isLargeNumber).to.not.equal(undefined);
     expect(isLargeNumber).to.include({ scriptName: "IsLargeNumber", category: "custom" });
   });
 
   it("parses the expression 'double'/'Double'; findExpression resolves by expressionName", function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const double = findAce(model, "expression", "double");
     expect(double).to.not.equal(undefined);
     expect(findExpression(model, "Double")).to.deep.equal(double);

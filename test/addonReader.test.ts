@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readAddonPackage, stripBom } from "../src/c3source.js";
-import { fixturePath, sdkFixtureExists, sdkPath, zipDirToC3addon, SDK_SAMPLE_ACES } from "./fixtureHelpers.js";
+import { fixturePath, sdkFixtureAvailable, sdkPath, zipDirToC3addon, SDK_SAMPLE_ACES } from "./fixtureHelpers.js";
 
 const ADDON_SAMPLE_DIR = fixturePath("addon-sample");
 
@@ -107,7 +107,7 @@ describe("readAddonPackage (SDK-gated, plugin-sdk/customImporterPlugin)", () => 
   let zipPath: string;
 
   before(function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     tmpDir = mkdtempSync(path.join(tmpdir(), "c3source-addon-reader-sdk-"));
     zipPath = path.join(tmpDir, "customImporterPlugin.c3addon");
     zipDirToC3addon(sdkPath(SDK_SAMPLE), zipPath);
@@ -118,20 +118,20 @@ describe("readAddonPackage (SDK-gated, plugin-sdk/customImporterPlugin)", () => 
   });
 
   it("readJson('addon.json') parses the manifest with the expected id (directory mode)", function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const pkg = readAddonPackage(sdkPath(SDK_SAMPLE));
     const manifest = pkg.readJson("addon.json") as { id: string };
     expect(manifest.id).to.equal("MyCompany_CustomImporter");
   });
 
   it("readText('aces.json') is BOM-stripped", function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const pkg = readAddonPackage(sdkPath(SDK_SAMPLE));
     expect(pkg.readText("aces.json").charAt(0)).to.not.equal("﻿");
   });
 
   it("zip mode matches directory mode (parity)", function () {
-    if (!sdkFixtureExists(SDK_SAMPLE_ACES)) return this.skip();
+    if (!sdkFixtureAvailable(SDK_SAMPLE_ACES)) return this.skip();
     const dirPkg = readAddonPackage(sdkPath(SDK_SAMPLE));
     const zipPkg = readAddonPackage(zipPath);
     expect(zipPkg.kind).to.equal("zip");

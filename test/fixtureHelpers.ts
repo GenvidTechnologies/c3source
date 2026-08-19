@@ -98,13 +98,51 @@ export function sdkPath(relPath: string): string {
 }
 
 /**
- * Whether an SDK-scoped file/dir exists — used to self-skip SDK-dependent tests.
- * MUST check the specific file/dir itself (not just that SDK/ is present): a
+ * Whether an SDK-scoped file/dir exists — a non-throwing presence probe. MUST
+ * check the specific file/dir itself (not just that SDK/ is present): a
  * non-recursive submodule checkout leaves SDK/ present-but-empty, which a bare
- * directory check would false-positive.
+ * directory check would false-positive. That same root-marker check is what
+ * `sdkFixtureAvailable` below builds on.
+ *
+ * Kept alongside `sdkFixtureAvailable` rather than being replaced by it:
+ * `test/mochaStrictness.test.ts` calls this one inside a biconditional
+ * assertion, where a throw would crash the comparison instead of evaluating
+ * it. Tests gating on SDK-scoped fixtures should use `sdkFixtureAvailable`;
+ * this one stays exported and non-throwing for that one caller.
  */
 export function sdkFixtureExists(relPath: string): boolean {
   return existsSync(sdkPath(relPath));
+}
+
+/** The SDK submodule's own root marker — tracked at its HEAD in every recursive checkout. */
+const SDK_ROOT_MARKER = "README.md";
+
+/**
+ * The gate for a test depending on a specific path inside the SDK/ git
+ * submodule — the same three-way split as `fixtureProjectAvailable`, for the
+ * same reason: a bare `existsSync` cannot distinguish "the submodule was
+ * never checked out recursively" (self-skip — no test has regressed) from
+ * "the submodule is present but this path is gone from it" (a real break).
+ *
+ * So: if `SDK/README.md` itself is absent, the submodule was never checked
+ * out recursively — return `false` so the caller self-skips as before. If
+ * `SDK/README.md` is present but `rel` is missing, throw — that is no longer
+ * an absent-submodule self-skip, it is a stale path within a present
+ * checkout. Otherwise return `true`.
+ *
+ * @throws if the submodule is checked out but `rel` does not exist within it.
+ */
+export function sdkFixtureAvailable(rel: string): boolean {
+  if (!sdkFixtureExists(SDK_ROOT_MARKER)) return false;
+  if (!sdkFixtureExists(rel)) {
+    throw new Error(
+      `SDK/ submodule is checked out, but "${rel}" does not exist within it. ` +
+        `This is a SUBMODULE-PIN problem, not a library defect: the SDK/ pin may have ` +
+        `moved or renamed this path. Update the path in this test, or re-check the SDK/ ` +
+        `submodule pin — see CLAUDE.md's mention of the Scirra Construct-Addon-SDK submodule.`,
+    );
+  }
+  return true;
 }
 
 /**
