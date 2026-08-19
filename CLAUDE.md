@@ -126,9 +126,18 @@ Crucially it captures the type-only exports (interfaces/type aliases) that a
 runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
 value-vs-type pair.
 
-**The declaration text includes JSDoc**, so "byte-identical dump" is a
-stronger claim than "identical API": a **comment-only** edit to a member of an
-exported interface moves the dump even though no signature changed. ADR 0012
+**The declaration text includes JSDoc — but not uniformly**, so
+"byte-identical dump" is a stronger claim than "identical API": a
+**comment-only** edit to a member of an exported interface moves the dump even
+though no signature changed. The asymmetry is worth knowing before you predict
+a delta: an **interface or type member** carries its JSDoc into the dump, while
+a **top-level `const`** does not — its entry is the bare type signature
+(`C3_MINIFIED_SOURCE_SUFFIXES  2  C3_MINIFIED_SOURCE_SUFFIXES: readonly
+string[]`), so editing that const's doc comment moves nothing. Measured on #81,
+which changed `C3_MINIFIED_SOURCE_SUFFIXES`'s JSDoc version pin (`savedWithRelease`
+49500 → 49502), reached `dist/serialize.d.ts`, and still produced a **byte-identical**
+dump — a delta had been predicted from this paragraph's earlier, flatter wording.
+ADR 0012
 and ADR 0017 both cite an *exactly-empty* diff as their purity proof, which
 held only because those refactors happened not to touch JSDoc — a
 doc-carrying PR has no such luxury and will show entries that look like scope
