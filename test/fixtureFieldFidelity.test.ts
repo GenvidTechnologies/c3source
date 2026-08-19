@@ -1,5 +1,12 @@
 import { expect } from "chai";
-import type { EventSheet, Layout, ObjectType } from "../src/c3source.js";
+import {
+  hasActions,
+  hasConditions,
+  visitEvents,
+  type EventSheet,
+  type Layout,
+  type ObjectType,
+} from "../src/c3source.js";
 import { fixtureProjectAvailable, loadFixtureProject } from "./fixtureHelpers.js";
 
 const LAYOUT = "layouts/Gameplay/Main Layout.json";
@@ -31,20 +38,54 @@ describe("§1 field fidelity (real C3 export)", () => {
     }
   });
 
-  it("Condition.disabled, when present, is boolean (v2 capability)", function () {
+  it("visitEvents reaches every condition (incl. group.children) and every observed .disabled is boolean", function () {
     if (!fixtureProjectAvailable(SHEET)) return this.skip();
     const sheet = JSON.parse(loadFixtureProject(SHEET)) as EventSheet;
-    const conditions: Array<{ disabled?: unknown }> = [];
-    for (const event of sheet.events) {
-      if ("conditions" in event && Array.isArray(event.conditions)) {
-        conditions.push(...event.conditions);
+
+    let conditionsSeen = 0;
+    const disabledObservations: Array<{ path: string; value: unknown }> = [];
+
+    visitEvents(sheet.events, (event, ctx) => {
+      if ("disabled" in event && event.disabled !== undefined) {
+        disabledObservations.push({ path: ctx.jsonPath, value: event.disabled });
       }
-    }
-    if (conditions.length === 0) return this.skip();
-    for (const cond of conditions) {
-      if (cond.disabled !== undefined) {
-        expect(cond.disabled).to.be.a("boolean");
+      if (hasConditions(event)) {
+        event.conditions.forEach((cond, i) => {
+          conditionsSeen++;
+          if (cond.disabled !== undefined) {
+            disabledObservations.push({ path: `${ctx.jsonPath}.conditions[${i}]`, value: cond.disabled });
+          }
+        });
       }
+      if (hasActions(event)) {
+        event.actions.forEach((action, i) => {
+          const disabled = (action as { disabled?: unknown }).disabled;
+          if (disabled !== undefined) {
+            disabledObservations.push({ path: `${ctx.jsonPath}.actions[${i}]`, value: disabled });
+          }
+        });
+      }
+    });
+
+    // Floor 1: proves the walk actually reaches ACE level via the canonical
+    // visitEvents traversal (which recurses into group.children) rather than
+    // silently seeing zero conditions -- the old hand-rolled top-level-only
+    // walk is exactly how this test came to miss the group nesting and skip
+    // permanently.
+    expect(conditionsSeen, "conditions observed during the walk").to.be.greaterThan(0);
+
+    // Floor 2: `disabled` is C3's enable/disable flag. It appears on events
+    // (groups always carry it, blocks/function-blocks carry it optionally)
+    // and on individual conditions/actions when an author disables just one
+    // ACE. The golden fixture currently only disables at the group level
+    // (one disabled group per sheet, no disabled condition/action anywhere)
+    // -- so without this floor, the boolean assertion below would silently
+    // check nothing and this test would revert to the same green-but-vacuous
+    // state issue #82 exists to fix.
+    expect(disabledObservations.length, "observed .disabled fields").to.be.greaterThan(0);
+
+    for (const { path, value } of disabledObservations) {
+      expect(value, `${path}.disabled`).to.be.a("boolean");
     }
   });
 
