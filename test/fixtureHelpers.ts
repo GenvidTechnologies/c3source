@@ -31,6 +31,12 @@ export function fixtureExists(relPath: string): boolean {
  */
 export const PROJECT_FIXTURE = "canonical";
 
+/** The canonical fixture's manifest filename — the "is the fixture materialized at all" probe. */
+export const PROJECT_MANIFEST = "project.c3proj";
+
+/** The SDK sample's aces file, SDK-root-relative. */
+export const SDK_SAMPLE_ACES = "plugin-sdk/customImporterPlugin/aces.json";
+
 /** Absolute path to a file/dir inside the project fixture (relative to its root). */
 export function fixtureProjectPath(rel = ""): string {
   return fixturePath(rel ? `${PROJECT_FIXTURE}/${rel}` : PROJECT_FIXTURE);
