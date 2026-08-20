@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-08-20
 
+* **Update**: module-architecture.md — strengthened the JSDoc-dump asymmetry evidence with a controlled both-halves experiment, driven by `raw/2026-08-20-jsdoc-dump-asymmetry-experiment.md`.
 * **Creation**: decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md, driven by `raw/adr-0026-fixture-gate-skip-vs-throw-and-forbid-pending-2026-08-20.md`.
 * **Creation**: decisions/0025-section-item-hood-and-stray-files.md, driven by `raw/adr-0025-section-item-hood-and-stray-files-2026-08-20.md`.
 * **Creation**: decisions/0024-script-source-fact-and-dotted-extensions.md, driven by `raw/adr-0024-script-source-fact-and-dotted-extensions-2026-08-20.md`.

@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+@CONVENTIONS.md
+
 ## Overview
 
 `c3source` is a TypeScript library of typed interfaces and traversal/formatting
@@ -124,6 +126,77 @@ otherwise lose, complementing — not replacing — the issue/PR record.
 Never cite an unpushed local branch or commit hash in external communication
 (issue/PR comments) — link to something the reader can actually open, or push
 first.
+
+## Commit Format
+
+**Conventional Commits**, lowercase subject, no trailing period:
+
+```
+<type>: <subject> (#<issue>) (#<pr>)
+```
+
+- **Types in use:** `feat`, `fix`, `docs`, `test`, `chore`. A breaking change
+  is `feat!` (e.g. `feat!: uniform .json item policy for the seven
+  name-section finders, plus stray reporting (#76) (#79)`).
+- **The trailing `(#issue) (#pr)` pair** is the issue number(s) first, then
+  the PR — multiple issues comma-separate inside one group (`(#73, #74)
+  (#75)`). **Omit the pair entirely when there is no issue or PR**: release
+  and housekeeping commits like `chore: release 2.0.1` carry neither. Do not
+  invent a number to fill the shape.
+- Branches are squashed on merge, so the subject is usually the whole message.
+  Write a body only when the *why* would otherwise be lost — and remember the
+  durable record is the issue or PR, not the commit (see **Design records &
+  branches** above).
+- End the message with:
+  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
+
+For a multi-line body, write the message to a temp file and pass it with `git
+commit -F <file>` — building it inline is what the shell mangles.
+
+## Pull Request Format
+
+- **Title:** the same Conventional Commits shape as the squash subject, since
+  the PR title becomes the commit subject on merge.
+- **Body:** a concise summary that **links to real docs rather than pasting a
+  design spec** — the durable record is the issue/PR plus, for architecture
+  and trade-off decisions, an ADR under `wiki/decisions/`. Close with the
+  issue reference (`Closes #NN`).
+- Host is **GitHub** (`GenvidTechnologies/c3source`); use `gh pr create
+  --body-file` so the body survives shell quoting.
+- Never cite an unpushed branch or commit hash in the body — push first.
+
+## Branching
+
+- `main` is the default branch. **Never commit directly to `main`** — branch
+  first, even for a docs-only change.
+- Branch names are `<type>/<kebab-slug>`, reusing the commit types
+  (`docs/migrate-to-llm-wiki`, `chore/genvid-conventions-setup`).
+- Rebase onto `main` rather than merging; branches are squash-merged, so
+  intermediate commits are working state, not history.
+- Publishing is tag-triggered on `v*.*.*` — see **CI & Publishing** below, and
+  move `## [Unreleased]` in `CHANGELOG.md` into a dated section *before*
+  pushing the tag.
+
+## Agent Dispatch Guide
+
+**This repo is a TypeScript library *about* Construct 3 files — not a C3 game
+project.** That distinction decides the dispatch:
+
+- **Implementation → `gvt-dev:ts-implementer`.** All work here is TypeScript,
+  ESM `.mjs` tooling, or mocha tests.
+- **Planning recon → `gvt-dev:analyst`** (the generic default). There is no
+  project-specific explorer to name.
+- **`gvt-construct3:c3-explorer` / `c3-implementer` are usually the *wrong*
+  dispatch here.** They target a real C3 game project — DSL, layouts, domain
+  index, event-sheet mutation recipes. This repo's only C3 project is the
+  materialized fixture under `test/fixtures/canonical/`, which is *test data*.
+  Reach for `c3-explorer` only when the question is genuinely about that
+  fixture's C3 content (e.g. verifying what a pin bump changed); never to
+  understand c3source itself, which means reading TypeScript.
+- **Documentation → `gvt-dev:tech-writer`**, which also owns wiki `ingest`
+  writes. Tell it explicitly whether it is dispatched (stage, don't commit) or
+  standalone (commit) — its protocol defaults to standalone when the brief is
+  silent.
 
 ## Formatting
 

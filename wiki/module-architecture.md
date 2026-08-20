@@ -11,6 +11,10 @@ sources:
     resource: ../raw/claude-md-2026-08-20.md
     title: "CLAUDE.md (c3source project instructions, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: jsdoc-asymmetry-experiment
+    resource: ../raw/2026-08-20-jsdoc-dump-asymmetry-experiment.md
+    title: "Controlled api-surface JSDoc-asymmetry experiment (2026-08-20 capture)"
+    last_modified: 2026-08-20
 ---
 
 # Module Architecture
@@ -105,6 +109,24 @@ directly on issue #81, which changed a `const`'s JSDoc version pin and still
 produced a **byte-identical** dump, contradicting an earlier, flatter
 prediction that any JSDoc edit would move the dump[^claude-md].
 
+Issue #81 established only the const half of the table — a single run cannot
+also prove the interface-member half. A controlled experiment on 2026-08-20
+exercised both halves in one dump comparison: a single change edited JSDoc on
+three top-level `const`s (in `serialize.ts`, `layouts.ts`, and
+`references.ts`) and on the interface member `C3ProjectManifest.functionsName`
+in `manifest.ts`. The raw dump moved **exactly one line** — `C3ProjectManifest`
+— while the JSDoc-stripped diff was **empty**; had the `const` edits also
+moved the dump, the raw delta would have been four or more
+lines[^jsdoc-asymmetry-experiment]. The baseline for that comparison came from
+`git stash push -- src/`, rebuild, dump, `git stash pop`, rebuild — isolating
+the `src/` change from everything else in the working tree so the two dumps
+differ by nothing else[^jsdoc-asymmetry-experiment]. The practical rule this
+yields: to predict a dump delta, count only the comments attached to
+interface/type members — const comments are free[^jsdoc-asymmetry-experiment].
+And the empty JSDoc-stripped diff, not the raw one, is the real "no signature
+changed" proof — a non-empty raw diff on a doc-carrying change is expected,
+not a failure signal[^jsdoc-asymmetry-experiment].
+
 [ADR 0012](/decisions/0012-per-area-module-split.md) and [ADR
 0017](/decisions/0017-tolerant-manifest-read.md) both cite an
 *exactly-empty* diff as their purity proof — that held only because those two
@@ -131,3 +153,4 @@ genuinely leave comments alone.
 - [C3Project Handle](/c3project-handle.md) — the `project` module, at the top of the DAG.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
+[^jsdoc-asymmetry-experiment]: Controlled api-surface JSDoc-asymmetry experiment (2026-08-20 capture)
