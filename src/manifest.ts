@@ -87,7 +87,7 @@ export interface C3ProjectManifest {
    *  Absence is a **release property, not a per-project opt-out**: C3 first serializes the
    *  attribute in **r437** (verified by bisecting the editor's own serializer across
    *  `editor.construct.net/r{NNN}/projectResources.js`; r436 emits none), so any project
-   *  last saved before then simply predates it. See `docs/domain-fact-audit.md` (#68). */
+   *  last saved before then simply predates it. See `wiki/c3-domain-facts.md` (#68). */
   functionsName?: string;
   [key: string]: unknown; // forward-compat: viewportWidth, firstLayout, …
 }
@@ -935,7 +935,7 @@ function detectContainerDrift(m: C3ProjectManifest): DriftEntry[] {
  * **Blast radius:** an unmapped MIME throws — via {@link detectManifestDrift}
  * that throw is caught and reported as a `ManifestDrift.degraded` entry (the
  * images section is then absent); via {@link detectImageDrift} /
- * `C3Project.detectImageDrift` it propagates. See `docs/domain-fact-audit.md`
+ * `C3Project.detectImageDrift` it propagates. See `wiki/c3-domain-facts.md`
  * (#68) for the evidence volume.
  */
 export const IMAGE_FILE_TYPE_EXTENSIONS: Record<string, string> = {
@@ -966,7 +966,7 @@ export const IMAGE_FILE_TYPE_EXTENSIONS: Record<string, string> = {
  *
  * **Blast radius:** an unmapped MIME is a silent miss in manifest interpretation, NOT a
  * throw — unlike {@link IMAGE_FILE_TYPE_EXTENSIONS}, which throws. See
- * `docs/domain-fact-audit.md` for the evidence volume.
+ * `wiki/c3-domain-facts.md` for the evidence volume.
  */
 export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
   "application/javascript": ".js",
@@ -1026,7 +1026,7 @@ export interface ExpectedImage {
  *
  * This default is **not a guess**: C3's own project loader applies the identical
  * fallback (`t.fileType ?? "image/png"`, unchanged r402 -> r447), so c3source matches
- * the editor's own behavior rather than inventing a default (see `docs/domain-fact-audit.md`,
+ * the editor's own behavior rather than inventing a default (see `wiki/c3-domain-facts.md`,
  * #68).
  *
  * Do NOT read `exportFormat` (`"lossless"` / `"lossy"`) as a format proxy anywhere — it

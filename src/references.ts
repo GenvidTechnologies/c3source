@@ -150,7 +150,7 @@ export const C3_DEFAULT_FUNCTIONS_NAME = "Functions";
  * source-side counterpart to derive.
  *
  * **UNVALIDATED**: `"theme"` was never actually observed in the real-world corpus
- * (only `plugin`/`behavior`/`effect` were seen). See `docs/domain-fact-audit.md`
+ * (only `plugin`/`behavior`/`effect` were seen). See `wiki/c3-domain-facts.md`
  * (#68) for the evidence volume. The failure mode if this table is wrong is benign
  * either way — it only *suppresses* an `addon-unused` warning, so being wrong costs
  * a missed warning, never a false alarm.

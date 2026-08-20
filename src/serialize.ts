@@ -91,7 +91,7 @@ export function writeC3JsonFile(filePath: string, value: unknown): void {
  *
  * **AUDITED, but on thin evidence.** Only a couple of `.brush.json` files exist
  * corpus-wide, so "no contradictions" rests on very little. No other minified-
- * source form was found. See `docs/domain-fact-audit.md` (#68) for the evidence
+ * source form was found. See `wiki/c3-domain-facts.md` (#68) for the evidence
  * volume.
  *
  * **Blast radius:** cosmetic — a downstream may rewrite a minified file in

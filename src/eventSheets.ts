@@ -407,8 +407,8 @@ export function extractScriptsFromSheet(sheet: EventSheet): ExtractedScript[] {
     // NOTE: visibility is hoisted this way, but *initialization* is not — C3 re-initializes
     // a variable to its initialValue when execution reaches the declaration event, discarding
     // any mutation an earlier-positioned block at this level already made (confirmed by a live
-    // C3-editor experiment; see docs/domain-fact-audit.md, "Variable scope: visibility vs.
-    // re-initialization"). scopeVars below reports visibility only — a consumer must not read
+    // C3-editor experiment; see wiki/c3-domain-facts.md, "A third evidence channel:
+    // live editor execution"). scopeVars below reports visibility only — a consumer must not read
     // it as a guarantee that a pre-declaration reference sees a mutated value.
     const levelVars = events
       .filter((e): e is EventSheetEvent & { eventType: "variable" } => e.eventType === "variable")
@@ -558,7 +558,7 @@ export interface ExtractedFunction {
  *
  * **Blast radius:** a missing id is a silent false negative — {@link
  * getEventVarReferenceName} returns `null` for a real reference. No internal
- * consumer; this is a pure downstream export. See `docs/domain-fact-audit.md`
+ * consumer; this is a pure downstream export. See `wiki/c3-domain-facts.md`
  * (#68) for the evidence volume.
  */
 export const EVENTVAR_REFERENCE_ACES: Record<string, string> = {
@@ -865,7 +865,7 @@ export function extractExpressionReferences(expr: string): ExpressionToken[] {
  *
  * **AUDITED** — all six values `0`–`5` observed across the corpus, spanning eight
  * C3 releases, with no seventh value anywhere; the strongest clean result of the
- * six audited tables (see `docs/domain-fact-audit.md`, #68).
+ * six audited tables (see `wiki/c3-domain-facts.md`, #68).
  *
  * **Assumption:** {@link comparisonSymbol} (and the DSL renderer built on it) keys
  * on the *parameter name* `"comparison"` with no `objectClass` gate, but the
@@ -934,7 +934,7 @@ export interface EditorFieldRule {
  * result. These rules exist for *writers* (tools synthesizing events), and no
  * editor-written corpus can contain a violation. The evidence source that would
  * validate a rule is a deliberate C3-editor import experiment — strip the field,
- * import, observe rejection (see `docs/domain-fact-audit.md`, #68).
+ * import, observe rejection (see `wiki/c3-domain-facts.md`, #68).
  *
  * **That experiment has now been run** (#70), which is why `custom-ace-name-required`
  * is here. It also disproved the corpus's strongest competing candidate:

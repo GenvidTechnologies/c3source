@@ -36,7 +36,7 @@ describe("isEditorLocalPath", () => {
   // scratch state?), not a serialization-form question, and brush files *are*
   // source, merely minified (see `isMinifiedSourcePath` in `src/serialize.ts`).
   // If a future change reintroduces that widening, this assertion catches it:
-  // every consumer following `docs/api-guide.md`'s documented
+  // every consumer following `wiki/layout-traversal.md`'s documented
   // `!isEditorLocalPath(name)` filter would then silently drop hand-authored,
   // non-derivable tilemap brush data instead of treating it as source.
   it("R9: returns false for a .brush.json file — brush files are minified source, not editor-local (ADR 0018)", () => {

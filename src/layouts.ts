@@ -110,7 +110,7 @@ export const C3_TS_DEFS_FOLDER = "ts-defs";
  * measured with the real {@link isEditorLocalPath} predicate rather than a
  * re-encoding of this table. Independent corroboration: C3's own editor skips a
  * `ts-defs` directory at the root of `scripts/` when reconciling a folder project
- * against disk — the same rule this table encodes. See `docs/domain-fact-audit.md`
+ * against disk — the same rule this table encodes. See `wiki/c3-domain-facts.md`
  * (#68) for the evidence volume.
  *
  * **Blast radius: the widest of the six — contaminating.** An unlisted
@@ -153,7 +153,7 @@ const descendSourceDirs = (name: string): boolean => !isEditorLocalPath(name);
  *
  * **Blast radius:** silent over- or under-collection during script discovery — a
  * false negative (or positive) in a walk, never a throw (contrast
- * {@link IMAGE_FILE_TYPE_EXTENSIONS}, which throws). See `docs/domain-fact-audit.md`
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS}, which throws). See `wiki/c3-domain-facts.md`
  * for the evidence volume.
  */
 export const SCRIPT_SOURCE_EXTENSIONS = [".js", ".ts"] as const;
@@ -182,7 +182,7 @@ export function isScriptSourceName(name: string): boolean {
  * `folder + name + ".json"` (`https://editor.construct.net/r{NNN}/projectResources.js`
  * — the release root, not `c3runtime/`); companion artifacts are redirected
  * *out* of these folders by construction (`.uistate.json` alongside, images to
- * `images/`). Corroborated by the project corpus. See `docs/domain-fact-audit.md`
+ * `images/`). Corroborated by the project corpus. See `wiki/c3-domain-facts.md`
  * for the evidence volume.
  *
  * **Blast radius:** a real item silently missing from every name-section

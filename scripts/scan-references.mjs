@@ -8,7 +8,7 @@
 // `functionsName` setting, not a fixed pseudo-class, so `detectEventClassIssues`
 // resolves it separately (see `src/references.ts`) rather than the table
 // growing a second entry. The table was validated by scanning a corpus of 14
-// real C3 projects under `C:\repos` (see `docs/domain-fact-audit.md` for the
+// real C3 projects under `C:\repos` (see `wiki/c3-domain-facts.md` for the
 // corpus inventory); the canonical fixture (`test/fixtures/canonical/`) yields
 // only `{"System"}`, so it alone can never validate this table. This script is
 // the only way to re-validate (or extend) the table on a C3 version bump or

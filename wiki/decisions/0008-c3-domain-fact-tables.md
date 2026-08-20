@@ -1,0 +1,137 @@
+---
+type: decision-context
+title: "ADR 0008 — C3 domain facts owned as exported tables in c3source"
+description: Undocumented C3 platform facts (event-variable-reference ACEs, image MIME-to-extension mapping, editor-loader field requirements, comparison operators, the timeline-transitions folder) are owned here as exported, version-pinned tables rather than re-hardcoded downstream.
+tags: [adr, c3-domain-facts]
+status: stable
+generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+sources:
+  - id: adr-0008
+    resource: ../../raw/adr-0008-c3-domain-fact-tables-2026-08-20.md
+    title: "ADR 0008 (docs/decisions capture, 2026-08-20)"
+    last_modified: 2026-08-20
+---
+
+# ADR 0008 — C3 domain facts owned as exported tables in c3source
+
+**Status:** accepted
+**Date:** 2026-06-03
+**Issue:** #26 (extended by #28, #29, #33, #39)
+
+Migrated verbatim from the `docs/decisions/` ADR record[^adr-0008].
+
+## Context
+
+A number of C3 behaviors are encoded as magic id-lists and number maps: which
+System ACEs reference an event variable (and the parameter *key* holding the
+name); which MIME type an image member maps to which file extension; which fields
+the editor loader requires; what operator symbol a `comparison` parameter value
+means; that a timeline's `transitions/` folder serializes as an unnamed subfolder.
+Every downstream tool that re-hardcodes one of these drifts against C3 on the next
+editor release.
+
+## Decision
+
+Each such fact is **owned here** as an exported table plus accessor,
+version-pinned to C3 (currently r487), so downstream imports the fact instead of
+re-encoding it:
+
+- `EVENTVAR_REFERENCE_ACES` + `isEventVarReference` / `getEventVarReferenceName` (#26)
+- `IMAGE_FILE_TYPE_EXTENSIONS`, driving `deriveExpectedImageNames` (#29)
+- `EDITOR_FIELD_RULES`, driving `validateForEditor` ([ADR 0009](/decisions/0009-editor-strict-validation.md), #33)
+- `COMPARISON_OPERATORS` + `comparisonSymbol` (#39)
+- `TIMELINE_TRANSITIONS_FOLDER` (#28), plus `IMAGES_FOLDER` and `PROJECT_MANIFEST_FILE`
+
+The tables are extensible — a new C3 quirk is a one-line addition — and each new
+fact cites the prior as precedent (e.g. "cf. `EVENTVAR_REFERENCE_ACES`"). Gating
+is deliberate and per-fact: `isEventVarReference` gates on
+`objectClass === "System"` to avoid false positives from a plugin reusing an
+id, while `COMPARISON_OPERATORS` is keyed on the parameter name with no class
+gate.
+
+## Compromise
+
+Letting each consumer hardcode the facts it needs avoids any shared coupling, but
+scatters C3 version knowledge across every downstream tool. Centralizing means
+`c3source` must track C3 version changes, but downstream stops re-encoding magic
+numbers and inherits fixes for free. We chose ownership, keeping the tables lean
+(the fact only) and leaving semantic resolution — name to declaration scope,
+shadowing — to the consumer.
+
+## Consequences
+
+A C3 version bump updates the tables in one place and propagates to every
+consumer. The facts are pinned to r487 and must be revisited on C3 upgrades. This
+is now a recurring convention across the library, and the domain-fact table is
+the mechanism [ADR 0009](/decisions/0009-editor-strict-validation.md) reuses for editor
+validation rules.
+
+**How a table gets seeded is a standing weakness (added 2026-08-03, #60).** Two
+failures, one after the other, in a single feature:
+
+1. **The canonical fixture is a correctness oracle, not a coverage oracle.** It is
+   one small editor-round-tripped project. `C3_PSEUDO_OBJECT_CLASSES` seeded from
+   it alone would have been `["System"]` — the fixture contained *zero* function
+   ACEs — and would have produced **212 false positives in one real project**.
+   Scanning a 14-project corpus found the missing member.
+2. **A corpus scan validates observed *values*, not the *mechanism* behind them.**
+   The corpus then said the missing member was `"Functions"`, so it went into the
+   static table. It should not have: `"Functions"` is the **default** of a
+   per-project `project.c3proj` setting (`functionsName`). Every scanned project
+   used the default, so breadth confirmed the string and concealed that it was
+   configurable at all. A project that renames its functions object would have had
+   *every function call* falsely reported. Fixed by modelling
+   `C3ProjectManifest.functionsName` and resolving per project; see
+   [ADR 0021](/decisions/0021-reference-integrity-detection.md).
+
+The rule this yields: **before pinning a value into a table, ask what in C3
+*determines* it.** If the answer is a project setting, an addon, or an export
+option, the table holds a *default* and the real value must be resolved — a
+corpus of any size cannot tell you this if it is uniform on that dimension.
+
+The tables predating this — `EVENTVAR_REFERENCE_ACES`, `COMPARISON_OPERATORS`,
+`IMAGE_FILE_TYPE_EXTENSIONS`, `EDITOR_FIELD_RULES` — were seeded from the fixture
+and from incident reports, i.e. by the method that failed twice above. There is no
+evidence any is wrong; there is also no evidence any is right.
+`scripts/scan-references.mjs` is the pattern for checking them.
+
+**That closing claim is now falsified (added 2026-08-04, #68).** A 14-project
+corpus audit (`docs/domain-fact-audit.md`, tool `scripts/scan-domain-facts.mjs`)
+checked all six tables and found two of the four "no evidence either way"
+tables were in fact wrong:
+
+- **`EVENTVAR_REFERENCE_ACES`** was missing `reset-eventvar` (491 corpus
+  occurrences, entirely unaccounted for) and separately carried a
+  **fabricated** id, `is-boolean-eventvar-set`, that does not correspond to
+  any real C3 System ACE — a table of facts containing a non-fact. Both fixed
+  in commit `cd0df1b`/`135cc44`.
+- **`IMAGE_FILE_TYPE_EXTENSIONS`**'s *values* audited clean (every present
+  `fileType` mapped) while its *shape* was wrong: it assumed every image node
+  carries a `fileType` field, but pre-r402 C3 releases emit none at all. This
+  is the sharpest illustration yet of this ADR's own rule above — a value
+  audit cannot find a mechanism defect. Fixed via `deriveExpectedImages`/
+  `C3_LEGACY_IMAGE_EXTENSION`; see [ADR
+  0023](/decisions/0023-pre-r402-image-serialization-drift-degradation.md).
+- The remaining four (`COMPARISON_OPERATORS`, `EDITOR_FIELD_RULES`,
+  `EDITOR_LOCAL_EXCLUSIONS`, `C3_MINIFIED_SOURCE_SUFFIXES`) audited clean —
+  with the caveat that `EDITOR_FIELD_RULES` is **not corpus-auditable even in
+  principle**: every corpus project already loads successfully in the
+  editor, so a scan sees which fields are present, never which the loader
+  actually requires (`docs/domain-fact-audit.md`'s ["What a corpus cannot
+  audit at
+  all"](/c3-domain-facts.md#what-a-corpus-cannot-audit-at-all) section).
+
+See [ADR 0022](/decisions/0022-domain-fact-audit-convention.md) for the resulting
+convention — a confidence label (`AUDITED` / `KNOWN INCOMPLETE` /
+`UNVALIDATED` / `NOT CORPUS-AUDITABLE`) now lives in each table's JSDoc, and
+`docs/domain-fact-audit.md` carries the corpus numbers behind it.
+
+## Related
+
+- [ADR 0009 — Lenient parse types + a separate editor-strictness validation layer](/decisions/0009-editor-strict-validation.md) — reuses this record's domain-fact-table convention.
+- [ADR 0021 — Reference integrity detection](/decisions/0021-reference-integrity-detection.md) — the functionsName fix this record's addendum describes.
+- [ADR 0022 — Domain-fact audit convention](/decisions/0022-domain-fact-audit-convention.md) — the confidence-label convention this record's second addendum led to.
+- [ADR 0023 — Pre-r402 image serialization drift degradation](/decisions/0023-pre-r402-image-serialization-drift-degradation.md) — the IMAGE_FILE_TYPE_EXTENSIONS shape fix this record's addendum describes.
+- [C3 Domain Facts](/c3-domain-facts.md) — the current state of every domain-fact table and its confidence label.
+
+[^adr-0008]: ADR 0008 (docs/decisions capture, 2026-08-20)
