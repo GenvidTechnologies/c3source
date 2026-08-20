@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+@CONVENTIONS.md
+
 ## Overview
 
 `c3source` is a TypeScript library of typed interfaces and traversal/formatting
@@ -11,46 +13,51 @@ tools, code generators, and analyzers that inspect or mutate C3 JSON outside
 the C3 editor. There is no runtime application; it ships as a library.
 
 **Known consumers** (all checked out under `C:\repos` on a dev machine, all
-depending on the published `@genvidtech/c3source`): **`burbank`** (the monorepo
-this library was extracted from — still consumes it via `bin/` scripts),
-**`construct3-chef`** (the heaviest consumer; MCP server + generators), and
-**`c3-domain-manager`** (domain index + `list-uncategorized`). Because the
-package is public, that list is a floor rather than a census — but it is the set
-whose breakage is *observable from this machine*, so **measure the blast radius
-of an API change by grepping all three**, not by reasoning about what a
-hypothetical caller might do. That measurement is what settles a policy
-question: for #76 it turned "would anyone rely on the permissive collectors?"
-into "six call sites across two of them pipe permissive output straight into
-`JSON.parse` with no guard" — which inverted the answer from *a capability
-someone may depend on* to *a latent crash*, and decided the direction. The
-consumers' own decision records are evidence too, and can be blocking: on #76
-`c3-domain-manager`'s ADR 0017 recorded this library's inconsistency as "a
-platform fact this repo does not own and is not free to unify by itself", which
-is what ruled out a documentation-only answer.
+depending on the published `@genvidtech/c3source`): **`burbank`**, **`construct3-chef`**
+(the heaviest consumer), and **`c3-domain-manager`**. Because the package is
+public, that list is a floor rather than a census — but it is the set whose
+breakage is *observable from this machine*, so **measure the blast radius of an
+API change by grepping all three**, not by reasoning about what a hypothetical
+caller might do. The consumers' own decision records are evidence too, and can
+be blocking. See [Library Overview](wiki/library-overview.md) for the worked
+examples behind this rule.
 
-## Design records & branches
+## Knowledge base — read this before answering an architecture question
 
-Feature branches are squashed on merge, and work documents under
-`docs/superpowers/` (specs, plans) are routinely cleaned up — treat them as
-ephemeral scaffolding, not durable records. The root `plan.md` produced by the
-`plan-task` workflow is the same, and in this repo it is **gitignored**
-(`/plan.md`): it stays a **local-only working artifact** — never committed, so
-there is no prep commit and nothing to remove at PR creation. (`plan-task`
-detects this via `git check-ignore plan.md` and skips the prep commit.) This
-keeps a stale `plan.md` from ever leaking onto `main` and misleading a later
-session into reading the wrong plan. The durable record of a design or
-decision is the **GitHub issue or PR** (post the spec as an issue comment or in
-the PR body, where it survives the squash) — and the PR body should be a concise
-summary linking to real docs, not a paste of the design spec. For
-**architecture and trade-off decisions** specifically, the durable in-repo
-record is an **ADR under `docs/decisions/`** (MADR-lite, authored via
-`/gvt-dev:create-adr` and indexed in `docs/TOC.md` under *Decision Records*):
-the ADR's **Compromise** section preserves the rejected-alternatives rationale a
-squashed PR body would otherwise lose, complementing — not replacing — the
-issue/PR record. ADRs 0001–0010 were backfilled from commit history on
-2026-07-17. Never cite an unpushed local branch or commit hash in external
-communication (issue/PR comments) — link to something the reader can actually
-open, or push first.
+**This repo's documentation lives in an LLM-wiki under `wiki/`, not in `docs/`.**
+Architecture, the C3 domain facts, the API surface, the fixture mechanism, and
+all 26 Architecture Decision Records were migrated there on 2026-08-20. `docs/`
+now holds only the four files the tooling contract requires.
+
+Start at **[`wiki/index.md`](wiki/index.md)** — it lists every page with a
+one-line description. Direct routes:
+
+| Question | Page |
+|---|---|
+| What is this library, who consumes it, what is it pinned to? | [`wiki/library-overview.md`](wiki/library-overview.md) |
+| Module DAG, the barrel, dist entry points, API-surface verification | [`wiki/module-architecture.md`](wiki/module-architecture.md) |
+| File walks, editor-local vs source, item-hood, layer visitors | [`wiki/layout-traversal.md`](wiki/layout-traversal.md) |
+| `project.c3proj` model, strict/tolerant parse, drift detection | [`wiki/project-manifest.md`](wiki/project-manifest.md) |
+| `openProject`, path fields, the manifest write-through cache | [`wiki/c3project-handle.md`](wiki/c3project-handle.md) |
+| Event numbering, scopes, the DSL, expression tokenizing | [`wiki/event-sheet-extraction.md`](wiki/event-sheet-extraction.md) |
+| `.c3addon` packages, attribution, the ACE model | [`wiki/addon-domain-layer.md`](wiki/addon-domain-layer.md) |
+| Unresolved cross-references, the five `ReferenceIssue` kinds | [`wiki/reference-integrity.md`](wiki/reference-integrity.md) |
+| **A C3 platform fact, and how it was validated** | [`wiki/c3-domain-facts.md`](wiki/c3-domain-facts.md) |
+| The `construct3-sample` golden fixture and pin-bump hazards | [`wiki/canonical-fixture.md`](wiki/canonical-fixture.md) |
+| Tab indent, no trailing newline, the `.brush.json` exception | [`wiki/serialization-form.md`](wiki/serialization-form.md) |
+| Reusable patterns this repo has settled on | [`wiki/design-patterns.md`](wiki/design-patterns.md) |
+| **Why** a design is the way it is | [`wiki/decisions/index.md`](wiki/decisions/index.md) |
+
+Two rules when working with the wiki:
+
+- **`raw/` is immutable.** It holds verbatim captures of every source a wiki
+  page was built from. Never edit a file there; re-capture it as a new file
+  instead. `docs/wiki-schema.md` is the binding maintenance schema.
+- **Never cite `file:line` in a wiki page.** These pages ship to three
+  downstream repos, where a stale line offset misleads longer than it helps.
+  Name the symbol — it is stable, and `grep` finds it. (Existing `file:line`
+  citations inside ADRs 0018/0020/0023 are left alone: an accepted record
+  states the situation at its date.)
 
 ## Commands
 
@@ -81,754 +88,115 @@ invocation above, including a single-file/`--grep` recipe: it arms
 fixture and the SDK sample) are materialized, so a run that hits an
 unexpected `this.skip()` fails outright rather than reporting a quiet
 "0 failing." See [ADR
-0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md).
+0026](wiki/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md).
 
 Tests use **mocha + chai** with `tsx` for on-the-fly TS execution (no build
 step needed). `test/setup.ts` is a mocha root hook that silences `console.log`
 and `console.debug` during runs (warn/error pass through), so library code may
 log freely.
 
-## Architecture
+## Design records & branches
 
-Logic is split across seven per-area modules — `src/serialize.ts`,
-`src/layouts.ts`, `src/eventSheets.ts`, `src/manifest.ts`, `src/addons.ts`,
-`src/references.ts`, `src/project.ts` — imported in an acyclic DAG.
-`serialize` is the sole leaf (it imports nothing from the package); `layouts`
-imports only `serialize`; `eventSheets`, `addons`, and `manifest` all import
-only `layouts` (`manifest` additionally imports `serialize`, for its write
-path) and are mutually independent siblings; `references` sits one tier above
-that sibling group, importing `layouts`, `eventSheets`, `addons`, and
-`manifest`; `project` imports all of the above. `src/c3source.ts` is a thin
-internal re-export barrel over the seven (`export *` from each, in DAG order
-— serialize, layouts, eventSheets, manifest, addons, references, project);
-`src/index.ts` is unchanged and still re-exports it (`export * from
-"./c3source.js"`), so the public API surface did not move. See [ADR
-0012](docs/decisions/0012-per-area-module-split.md) for the split rationale
-(it supersedes the module-layout half of [ADR
-0001](docs/decisions/0001-single-module-esm-library.md)); [ADR
-0016](docs/decisions/0016-c3-source-json-serialization-form.md) adds
-`serialize` beneath `layouts` as the new leaf; [ADR
-0021](docs/decisions/0021-reference-integrity-detection.md) adds `references`
-as the new tier beneath `project`. The `.js`
-extension on intra-package imports is required — the project is ESM
-(`"type": "module"`, `NodeNext` resolution). The package `main`/`types`/`exports` point at the built
-`dist/*.js` and `dist/*.d.ts` — the same artifacts the `files` allowlist
-ships — so a consumer resolves exactly what gets published. (`prepack` builds
-`dist/` before any `npm pack`/`npm publish`.) Do **not** reintroduce the old
-pnpm-style trick of pointing entry points at `src/*.ts` and rewriting them via
-`publishConfig.{main,types,exports}`: npm — unlike pnpm/yarn — ignores those
-manifest-field overrides, so the `src/` paths leak into the tarball and break
-every consumer (this was issue #8, fixed in 0.3.1). `scripts/verify-package.mjs`
-runs in `prepack` and fails the pack if any entry point is missing or falls
-outside `files`.
+Feature branches are squashed on merge, and work documents under
+`docs/superpowers/` (specs, plans) are routinely cleaned up — treat them as
+ephemeral scaffolding, not durable records. The root `plan.md` produced by the
+`plan-task` workflow is the same, and in this repo it is **gitignored**
+(`/plan.md`): it stays a **local-only working artifact** — never committed, so
+there is no prep commit and nothing to remove at PR creation. This keeps a
+stale `plan.md` from ever leaking onto `main` and misleading a later session
+into reading the wrong plan.
 
-A second, **dev-only** verification script sits alongside it:
-`scripts/api-surface.mjs` (added #47, not wired to CI) dumps the **public export
-surface** — every name reachable from the built `dist/index.d.ts` via the TS
-checker (`getExportsOfModule`, following `export *` chains + alias re-exports),
-one sorted `name | flags | canonicalized-declaration-text` line each. Diff two
-builds' dumps to prove a change keeps the API **byte-identical**: this was how
-the #47 module split (`src/c3source.ts` → per-area modules) was verified, and it
-is the check to reach for on any future API-preserving refactor or release.
-Crucially it captures the type-only exports (interfaces/type aliases) that a
-runtime `Object.keys(dist/index.js)` diff cannot see — run the two as a
-value-vs-type pair.
+The durable record of a design or decision is the **GitHub issue or PR** (post
+the spec as an issue comment or in the PR body, where it survives the squash) —
+and the PR body should be a concise summary linking to real docs, not a paste of
+the design spec. For **architecture and trade-off decisions** specifically, the
+durable in-repo record is an **ADR under `wiki/decisions/`** (MADR-lite,
+authored via `/gvt-dev:create-adr` and indexed in
+[`wiki/decisions/index.md`](wiki/decisions/index.md)): the ADR's **Compromise**
+section preserves the rejected-alternatives rationale a squashed PR body would
+otherwise lose, complementing — not replacing — the issue/PR record.
 
-**The declaration text includes JSDoc — but not uniformly**, so
-"byte-identical dump" is a stronger claim than "identical API": a
-**comment-only** edit to a member of an exported interface moves the dump even
-though no signature changed. The asymmetry is worth knowing before you predict
-a delta: an **interface or type member** carries its JSDoc into the dump, while
-a **top-level `const`** does not — its entry is the bare type signature
-(`C3_MINIFIED_SOURCE_SUFFIXES  2  C3_MINIFIED_SOURCE_SUFFIXES: readonly
-string[]`), so editing that const's doc comment moves nothing. Measured on #81,
-which changed `C3_MINIFIED_SOURCE_SUFFIXES`'s JSDoc version pin (`savedWithRelease`
-49500 → 49502), reached `dist/serialize.d.ts`, and still produced a **byte-identical**
-dump — a delta had been predicted from this paragraph's earlier, flatter wording.
-ADR 0012
-and ADR 0017 both cite an *exactly-empty* diff as their purity proof, which
-held only because those refactors happened not to touch JSDoc — a
-doc-carrying PR has no such luxury and will show entries that look like scope
-leaks but are prose. (#63 hit exactly this: the predicted two-line delta came
-back as three, the extra one being `C3Project` after `findAllScripts`'s
-comment was corrected.) When a change deliberately touches comments, strip
-JSDoc blocks from both dumps and re-diff to isolate real signature changes —
-e.g. `sed -E 's#/\*\*[^*]*\*+([^/*][^*]*\*+)*/##g'` over each dump before
-`diff`. Reserve the empty-diff standard for refactors that leave comments
-alone.
+> **ADRs moved on 2026-08-20** from `docs/decisions/` to `wiki/decisions/`,
+> keeping their numbering and filenames. `.gvt-agent.json`'s
+> `paths["docs/decisions/"]` declares the override, so `/gvt-dev:create-adr`
+> and `audit-conventions` resolve the new location. If a skill still scaffolds
+> into `docs/decisions/`, that override is what needs fixing — do not move the
+> ADRs back.
 
-**Citation style differs between this file and `docs/`.** `CLAUDE.md` cites
-`file:line` freely — it is maintained every session and a stale offset is
-noticed and fixed quickly. **`docs/` should not**: those files ship to three
-downstream repos where a stale `:149-151` misleads longer than it helps. Name
-the symbol instead — it is stable, and `grep` finds it. The rot is not
-hypothetical: within #81's own branch a dispatch brief cited `extractFunctions`
-at `:1014` and the agent found it at `:1020`, because an earlier commit in the
-same branch had added six lines above it.
+Never cite an unpushed local branch or commit hash in external communication
+(issue/PR comments) — link to something the reader can actually open, or push
+first.
 
-**This is a forward-looking rule, not a description of the current tree** — a
-correction made in #82, where the earlier wording ("as of #81 there were zero
-`file:line` citations in *any* file under `docs/`") was measured and found
-false. `docs/` carried **20** such citations at that point, all in decision
-records predating #81: **12** in ADR 0018, **6** in ADR 0023, **2** in ADR 0020
-(e.g. ADR 0018's "`src/layouts.ts:101` declares `EDITOR_LOCAL_EXCLUSIONS`…").
-They are left in place — an accepted ADR states the situation at its date, the
-same reason ADR 0024 is left reasoning from "with no CHANGELOG.md in this repo"
-— but they are not the convention, and nothing new should join them. Worth
-recording rather than quietly fixing the number: the paragraph argued *from*
-that absence while the absence did not exist, which is precisely the
-unevidenced-inference failure #81 was written to correct.
+## Commit Format
 
-Four functional areas:
+**Conventional Commits**, lowercase subject, no trailing period:
 
-1. **Layout traversal** (in `src/layouts.ts`) — recursive `find_all_*_path` collectors (skip
-   `.uistate.json` files and never descend into `uistate/` subfolders, which
-   C3 r487+ writes alongside layouts/object-types/event-sheets) plus visitor
-   walkers. The **one canonical definition** of "editor-local vs C3 source" is
-   `isEditorLocalPath(name): boolean` backed by `EDITOR_LOCAL_EXCLUSIONS: {dirs, fileSuffixes, exactNames}`;
-   all four former inline skip sites (the `uistate/` directory check in
-   `find_all_files_path` plus the `.uistate.json` suffix checks in the three
-   named collectors) now consume it uniformly (#19). This classifier is
-   **provenance-only** — source vs. editor-local — and serialization form is
-   deliberately not a membership criterion (see [ADR
-   0018](docs/decisions/0018-brush-json-minified-source-not-editor-local.md)).
-   The named collectors are thin wrappers over the exported generic
-   primitive `find_all_files_path(dir, predicate, descend?)` — the single recursive walk
-   that owns the recursion, the `uistate/` skip, and the per-level
-   `readdirSync().sort()` ordering. It is exported so downstream can discover
-   non-source artifacts (e.g. generated `.dsl.txt` files) through the same walk
-   instead of maintaining a parallel collector that drifts on the next skip-rule
-   fix (issue #16); its `predicate` receives the bare basename. The optional
-   third parameter, `descend`, controls directory *reachability* separately
-   from `predicate`'s file selection, defaulting to the same editor-local rule
-   (`ts-defs` — named via the exported `C3_TS_DEFS_FOLDER` — is otherwise
-   unreachable, which blocked a downstream consumer needing its `.d.ts`
-   files); overriding it disables inherited editor-local classification for
-   the entered subtree, so `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`
-   themselves are unchanged (see [ADR
-   0020](docs/decisions/0020-caller-controlled-walk-descent.md), #63).
-   **Section item-hood** — the third axis, alongside provenance
-   (`isEditorLocalPath`, above) and reachability (`descend`, above).
-   `C3_SECTION_ITEM_EXTENSION = ".json"` is the exported C3 domain fact
-   naming the on-disk extension every item of a `C3_SECTION_FOLDERS` name
-   section carries; `isSectionItemName(name)` tests a bare basename against
-   it, **case-sensitively** — unlike `isScriptSourceName`'s case-insensitive
-   match, since C3's lowercasing-before-testing rule is unverified for
-   `.json` and matching case-insensitively here would silently widen every
-   consumer with no evidence backing the widening.
-   `find_all_section_items_path(dir)` is the single owner of the combined
-   item-hood + provenance policy (`isSectionItemName(file) &&
-   !isEditorLocalPath(file)`, built on `find_all_files_path`); all seven
-   name-section finders — `find_all_eventsheets_path`,
-   `find_all_layouts_path`, `find_all_objectTypes_path`, and the four
-   `C3Project` finders for families, timelines, flowcharts, and 3D models —
-   are thin consumers, so the policy cannot drift between sections again.
-   **Narrowed in 2.0.0** — `find_all_layouts_path`/`find_all_objectTypes_path`
-   previously returned every non-editor-local file regardless of extension
-   (inherited drift from three independently hand-written functions, not a
-   design decision); they now delegate like their five siblings always did,
-   a breaking change in behaviour, not signature. `findAllScripts` (ADR 0024)
-   and `findAllAddons` (`.c3addon`) are explicitly excluded from this axis —
-   both already had a correct, section-specific item-hood rule of their own.
-   The pre-2.0.0 permissive result is recoverable verbatim as
-   `find_all_files_path(dir, (f) => !isEditorLocalPath(f))`. See [ADR
-   0025](docs/decisions/0025-section-item-hood-and-stray-files.md).
-   **Script source classification** — `SCRIPT_SOURCE_EXTENSIONS` (`[".js", ".ts"]`)
-   is the exported C3 domain fact naming the extensions C3 accepts as authored
-   script source under `scripts/`; `isScriptSourceName(name)` tests a bare
-   basename against it case-insensitively and additionally excludes `.d.ts`
-   (`ts-defs/`, where generated declarations live, is already pruned by
-   directory, so the suffix check only ever fires on a stray hand-authored
-   `.d.ts` sitting loose under `scripts/`). A same-basename `.ts` sibling means
-   C3's own folder-project reconcile treats the `.js` as *generated* build
-   output, not authored source — `isGeneratedScriptOutput(name, siblings)`
-   encodes that rule, and `filterAuthoredScriptPaths(paths)` applies it
-   per-directory over a `find_all_files_path` result, dropping every generated
-   `.js`. See ADR 0024 (#73, #74).
-   The key pattern: a `LayerVisitor`
-   returns a _mutation count_ (number) and an `InstanceVisitor` returns a
-   _changed_ boolean; `visit_layers_in_layout` sums the counts and **rewrites
-   the layout file only when the total is > 0**. So visitors that mutate
-   in-place must report it via the return value or the change is silently
-   dropped. Full layer names are `LayoutName.LayerName`; layers flagged
-   `global` reset the prefix to `global`. The single recursive traversal lives
-   in one internal generator, `walkLayerEntries` (it yields a `LayerEntry` per
-   layer: bare `name`, dotted/global-resetting `fullName`, root-first
-   `ancestors` chain, `parent` sibling array, `index`). The in-memory
-   `visitLayers`/`visitLayout`/`visitInstances` and the early-exit finder family
-   `findLayer`/`findLayerEntry`/`findLayerByName`/`findLayerEntryInLayout` are
-   all thin consumers of that one generator (the finders stop on the first
-   predicate hit); the file-based `visit_*_in_layouts` wrap the visitors
-   (read → parse → visit → write-if-count>0). The walk is **fully recursive**
-   through `subLayers` (an earlier version descended only one level), so
-   consumers see nested layers a shallow walk previously skipped.
-   **Project manifest** (in `src/manifest.ts`) — the `project.c3proj` file in the project root (folder
-   format only; not the single-file archive) is modeled by `C3ProjectManifest`
-   and parsed strictly by `parseProjectManifest(json)`/`readProjectManifest(path)`.
-   The tolerant counterpart, `parseProjectManifestTolerant(json)`/
-   `readProjectManifestTolerant(path)`, returns a `ManifestReadResult:
-   {manifest, issues}` instead of throwing on shape violations — `manifest` is
-   the same object by identity (never cloned), `issues` is every violation
-   `validateProjectManifest(json): ManifestValidationIssue[]` (the standalone,
-   never-throwing detector) found. Both the strict and tolerant paths are thin
-   callers of one private collector, so a shape rule is added once and neither
-   path can drift from the other; the serializer (`serializeProjectManifest(m)`
-   / `writeProjectManifest(path, m)`, built on the new `src/serialize.ts` leaf)
-   completes the round trip. See [ADR
-   0017](docs/decisions/0017-tolerant-manifest-read.md) and [ADR
-   0016](docs/decisions/0016-c3-source-json-serialization-form.md).
-   Mapping tables `C3_SECTION_FOLDERS` and `C3_ROOT_FILE_FOLDERS` map manifest
-   section keys to on-disk folder names. The exported domain fact
-   `SCRIPT_FILE_TYPE_EXTENSIONS` (`application/javascript`→`.js`,
-   `application/typescript`→`.ts`) maps a script `C3FileEntry.type` MIME — the
-   `rootFileFolders.script` entries' own `type` field — to its on-disk, dotted
-   extension, mirroring `IMAGE_FILE_TYPE_EXTENSIONS`'s role for images; unlike
-   that table, an unmapped MIME is a silent miss in manifest interpretation,
-   not a throw (#73, #74). `collectManifestItemNames`/`collectManifestFileNames`
-   are thin consumers of the canonical walks `walkManifestNameTree`/`walkManifestFileTree`
-   (no parallel recursion). `detectManifestDrift(projectDir, manifest?)` compares
-   declared membership against on-disk source (editor-local filtered via `isEditorLocalPath`)
-   and returns `ManifestDrift: {sections: SectionDrift[], inSync, degraded?}`. Each `SectionDrift`
-   carries `entries: DriftEntry[]` — a structured list where every entry has a `kind`
-   (`missing` | `untracked` | `moved` | `folder-missing` | `folder-untracked` | `dangling-ref`)
-   and path-segment arrays (`manifestPath`, `diskPath`) locating the item within the
-   subfolder nesting without re-walking. Name-section disk walks use `walkDiskNameTree`
-   (recursive, `readdirSync`-based, section-root-relative paths). File-folder disk walks
-   use `walkDiskFileTree` which recurses **manifest-declared subfolders only** (D3) — so
-   undeclared generated subtrees like `scripts/ts-defs/` are never visited. `diffNameMaps`
-   is the diff engine: it builds `name → path` maps per side and emits `missing`/`untracked`/`moved`
-   entries (a same-name/different-path leaf is a move, not a delete+add, exploiting
-   per-category name uniqueness — a C3 invariant).
-   **Timeline transitions exception** — C3 serializes a timeline's `transitions/` directory
-   (shown as **"Eases"** in the editor) as an **unnamed** subfolder under `timelines` in
-   `project.c3proj` (a `{items, subfolders}` node with no `name` key). This is the one place a
-   nameless manifest subfolder is meaningful, not degenerate. `TIMELINE_TRANSITIONS_FOLDER`
-   (`"transitions"`) is the exported C3 domain fact (cf. `EVENTVAR_REFERENCE_ACES`); the
-   manifest walks `walkManifestNameTree`/`collectManifestFolderPaths` take an optional
-   `unnamedSubfolderName` that names a nameless **top-level** subfolder (not propagated into
-   recursion → direct children of the section root only, matching C3 where transitions is always
-   a direct child). `detectManifestDrift` passes it for `section === "timelines"` so a
-   timeline-with-transitions project round-trips without false `moved`/`folder-*` drift (#28).
-   The model itself stays faithful (the subfolder stays unnamed — the synthetic name lives only
-   in the drift comparison, never written back); c3source now owns the manifest serializer and
-   writer (`serializeProjectManifest`/`writeProjectManifest`, ADR 0016), but emitting the unnamed
-   `timelines/transitions` form correctly **remains the consumer's job**, because the model keeps
-   the subfolder nameless by design. This is *more* load-bearing now that writing is possible: a
-   naive sync that materializes the synthetic name (e.g. writing back `TIMELINE_TRANSITIONS_FOLDER`
-   as an actual `name` field) corrupts the manifest — that was previously a read-only observation,
-   now a real write hazard.
-   **Image-derived drift** — `detectImageDrift(projectDir)` is a best-effort sub-detector that
-   `detectManifestDrift` appends to its sections (wrapped in try/catch — a throw degrades to
-   "images section omitted", never failing core drift). The degradation is **reported, not
-   swallowed**: the catch records a `DriftDegradation {section, message}` on
-   `ManifestDrift.degraded`, so a caller can tell "images verified, no drift" from "image
-   verification threw and was discarded" — previously indistinguishable. `inSync` stays
-   `sections.length === 0` (a degradation is not drift), and `C3Project.detectImageDrift()`
-   still throws on a direct call, because that *is* the caller's request (ADR 0021's policy).
-   Unlike the manifest walks it **ignores
-   the manifest**: it walks `objectTypes/` and the flat `images/` folder **directly** and diffs
-   derived-expected vs on-disk filenames. `deriveExpectedImageNames(objectType)` derives the
-   expected filenames structurally — `<name><ext>` for a top-level `image` field, one
-   `<name>-<anim>-<frame3><ext>` per animation frame — where `<ext>` is a **dotted** extension
-   (issue #74) coming from the member's `fileType` MIME via the exported domain fact
-   `IMAGE_FILE_TYPE_EXTENSIONS` (`image/png`→`.png`, `image/jpeg`→`.jpg`, `image/svg+xml`→`.svg`,
-   `image/webp`→`.webp`; cf. `EVENTVAR_REFERENCE_ACES`).
-   The MIME is read from `image.fileType` (single-image) or each frame's own `fileType`
-   (animations — frames may differ). The two failure modes are **not** the same and no longer
-   share a behaviour (#68): a present-but-**unmapped** `fileType` still **throws** (unknown
-   format — #29's decision stands), but an **absent** one does not. C3 first emits `fileType`
-   at **r402**, so an older project records no MIME at all while the on-disk file is a perfectly
-   ordinary image — calling that "malformed" was simply wrong. The structured
-   `deriveExpectedImages(objectType): ExpectedImage[]` (`{stem, ext?, context}`) is now the
-   primitive; `deriveExpectedImageNames` is a one-line renderer over it that fills a missing
-   `ext` with `C3_LEGACY_IMAGE_EXTENSION` (`".png"` — **not a guess**: C3's own loader applies the
-   identical `fileType ?? "image/png"` fallback). The two read paths deliberately diverge —
-   `deriveExpectedImageNames` must answer with a concrete name, while `detectImageDrift` must not
-   fabricate a finding, so it matches `ext`-less entries on their **stem**. The detector is
-   strictly the more conservative of the two, so the default can never *manufacture* drift. See
-   [ADR 0023](docs/decisions/0023-pre-r402-image-serialization-drift-degradation.md).
-   Because the manifest keys object types on
-   **names**, not filenames, a fixture's image format can be varied (change `fileType` + rename
-   the on-disk image) without churning any manifest-membership test.
-   **Stray files** — `detectStrayFiles(projectDir)` is the exact complement of
-   `find_all_section_items_path` over the same seven `C3_SECTION_FOLDERS`
-   walks: a non-editor-local file under a name-section root that fails
-   `isSectionItemName` is a `StrayFile` (`section`, `folder`, `name`,
-   `diskPath` — deliberately **no** `manifestPath`, since a stray has no
-   manifest position to map). It is **manifest-independent** (reads no
-   `project.c3proj`, takes none) and scoped to the seven name sections only —
-   `scripts/`/`images/`/other root file folders are out of scope by design,
-   since file-folder membership is extension-agnostic and there is no
-   item-hood rule for a stray to violate there. `detectManifestDrift` appends
-   the result as the optional `ManifestDrift.strays?` field, populated only
-   when non-empty (the same convention as `degraded`, so a clean project's
-   result stays byte-identical to a pre-2.0.0 one); a stray is **never
-   drift** — `inSync` and `DriftKind` are both unaffected. `C3Project.detectStrayFiles()`
-   wraps it, passing **no** manifest — unlike its `detectManifestDrift()`/
-   `detectReferenceIntegrity()` siblings, it works even when `project.c3proj`
-   is missing or malformed. See [ADR
-   0025](docs/decisions/0025-section-item-hood-and-stray-files.md).
-   **C3Project handle** (in `src/project.ts`) — `openProject(root): C3Project` is a root-bound handle that
-   unifies the previously-split API: callers no longer assemble section paths by
-   hardcoding `"eventSheets"`/`"layouts"`/etc., because the handle derives all path
-   fields from `C3_SECTION_FOLDERS`/`C3_ROOT_FILE_FOLDERS` at construction (#36, #38).
-   Construction does **no I/O** — path fields are string joins, `manifest()` reads
-   lazily and caches, `has*()` methods call `existsSync` fresh. The handle covers the
-   **full canonical set of C3 on-disk subfolders**: every key in `C3_SECTION_FOLDERS`
-   (event sheets, layouts, object types, families, timelines, flowcharts, 3D models)
-   and every key in `C3_ROOT_FILE_FOLDERS` (scripts, sounds, music, videos, fonts,
-   icons, files), plus the flat `images/` folder via the exported domain fact
-   `IMAGES_FOLDER = "images"` (cf. `TIMELINE_TRANSITIONS_FOLDER`). Every dir gets a
-   `*Dir` path field and a `has*()` presence check. `findAll*(sub?)` finders exist for
-   the traversable `.json` name sections: event sheets, layouts, object types, families,
-   timelines, flowcharts, and 3D models; all are graceful-empty (return `[]` when the
-   directory is absent). Binary asset dirs (images, sounds, music, videos, fonts, icons,
-   files) expose `*Dir` + `has*()` only — no `findAll*`. `findAllFamilies` filters `.json`
-   via `find_all_files_path`; `findAllScripts` selects both `.js` and `.ts` source via
-   `isScriptSourceName` (excludes `.d.ts` — all generated declaration files live under
-   `ts-defs/`), then drops any generated `.js` that shares a basename with a `.ts` sibling
-   via `filterAuthoredScriptPaths` (#73, #74). `detectManifestDrift()` and
-   `detectImageDrift()` delegate to the free functions, passing the cached manifest.
-   `detectStrayFiles()` delegates likewise but, unlike those two, passes **no**
-   manifest — it works even on a project whose `project.c3proj` is missing or
-   malformed. The exported constants `PROJECT_MANIFEST_FILE = "project.c3proj"`
-   (#36) and `IMAGES_FOLDER` (#38) are also defined here as C3 domain facts.
-   The free functions remain exported — names, arities, and types unchanged —
-   and the handle stays additive; the one exception is `find_all_layouts_path`/
-   `find_all_objectTypes_path`'s 2.0.0 result-set narrowing above, a
-   behavioural change the handle's `findAllLayouts`/`findAllObjectTypes`
-   inherit automatically since they delegate to those same functions.
-   **Write surface** (#57, #58) — `writeManifest(m?)` writes `m` (or, with no
-   argument, the already-cached manifest) via `writeProjectManifest`, and only
-   *after* the write succeeds assigns `cachedManifest = m`: a **write-through,
-   never-invalidate** cache rule, not the more obvious write-then-drop-cache.
-   Invalidating would force the next `manifest()` to re-read strictly, which
-   turns a successful repair of a `manifestTolerant()` document into a crash on
-   the very next read — write-through has no such trap. `manifestTolerant()`
-   delegates to `readProjectManifestTolerant`, always reading fresh from disk
-   and touching `cachedManifest` in **neither** direction (isolated on read
-   *and* write), so a tolerant peek can never leak an unvalidated document into
-   `manifest()`'s cache. `reloadManifest()` is the cache's one true invalidation
-   path — it discards `cachedManifest` and re-reads `manifestPath` strictly.
-   See [ADR 0016](docs/decisions/0016-c3-source-json-serialization-form.md) for
-   the write-through rationale.
+```
+<type>: <subject> (#<issue>) (#<pr>)
+```
 
-2. **Event sheet extraction** (in `src/eventSheets.ts`) — `extractScriptsFromSheet` does a depth-first
-   walk that mirrors **C3's own event numbering** (groups, blocks,
-   function-blocks, and custom-ace-blocks each increment the counter;
-   variables, comments, and includes do not). The canonical counter lives in
-   `visitEvents` (which exposes each event's `eventNumber` via
-   `EventVisitContext`); `extractScriptsFromSheet` reads its event numbers from
-   that one walk, so `eventNumber`, `eventIndex`, and `generateFunctionName`
-   cannot drift. It composes lexical scope as a
-   stack of `ScopeSegment`s: all `variable` events at a level are in scope for
-   every block at that level regardless of declaration order, so they are
-   pre-collected before traversal — a live-editor experiment confirmed this
-   is C3's own visibility rule, and also found that *initialization* is not
-   hoisted the same way: C3 re-initializes a variable to its `initialValue`
-   when execution reaches the declaration, discarding any mutation an
-   earlier-positioned block at that level already made, so `scopeVars` signals
-   visibility only, never that reset (see
-   [docs/domain-fact-audit.md](docs/domain-fact-audit.md#variable-scope-visibility-vs-re-initialization-editor-experiment)).
-   Regular sibling blocks disambiguate their
-   scope keys with `#<eventIndex>`; functions/ACEs use their unique names.
-   `formatAction`/`formatCondition` render events into a single-line DSL (see
-   the doc comment on `formatAction` for the full grammar). Sibling extractors
-   `walkScriptActions`, `extractFunctions`, and `extractIncludes` are thin
-   consumers of the same `visitEvents` walk, returning (respectively) script
-   actions, function/custom-ACE definitions (each carrying its `params` +
-   `returnType` signature), and include edges (`IncludeReference` =
-   `includeSheet` + `jsonPath`), all in canonical event order. The
-   `isFunctionDefinition` guard narrows an event to the two signature-bearing
-   kinds for callers that walk events themselves.
-   **Event-variable references** — `isEventVarReference(ace)` and
-   `getEventVarReferenceName(ace)` classify a single action/condition as
-   referencing a C3 event variable. The canonical fact table
-   `EVENTVAR_REFERENCE_ACES` maps each known System ACE id (`set-eventvar-value`,
-   `compare-eventvar`, `compare-boolean-eventvar`, …) to the parameter **key**
-   that holds the variable name — a key, not a positional index, because ACE
-   parameters are a keyed `Record`. `isEventVarReference` gates on
-   `objectClass === "System"` (avoiding false positives from a plugin reusing an
-   id); `getEventVarReferenceName` resolves `parameters[nameParamKey]`
-   defensively. This is the C3 *domain fact* (id-list + name param) owned here so
-   downstream need not re-hardcode it (#26); name→declaration scope resolution
-   (incl. shadowing) stays the consumer's job.
-   **SID traversal** — `walkSids(node, visit: (sid, segments) => void)` is the
-   exported primitive that recursively visits every object carrying a numeric
-   `sid`, delivering both the sid value and its structured
-   `SidPathSegment[] = (string | number)[]` path. `formatSidPath(segments)`
-   renders segments into the canonical dotted/indexed string (`""` for root,
-   `[i]` for array positions, `.key` for object keys with no leading dot).
-   `collectSids` and `collectSidsWithPaths` are thin consumers: they call
-   `walkSids` once and accumulate; callers that need a different rendering (e.g.
-   a semantic label when `segments.length === 0`) can drive `walkSids` directly.
-   **Editor-strictness validation** — `validateForEditor(sheet)` and
-   `validateEventForEditor(event, jsonPath?)` model the **C3 editor loader's
-   required-field set**, which is stricter than c3source's intentionally lenient
-   parse types (fields like `EventSheetVariable.comment` / `GroupEvent.description`
-   are typed optional here but the editor rejects `undefined` on import with
-   `Error: expected string`). Detection-only — no mutation. Returns
-   `EditorValidationIssue[]: {path, rule, message}` where `path` is the
-   `visitEvents` `jsonPath` (cannot drift). `validateForEditor` is a thin
-   `visitEvents` consumer; `validateEventForEditor` validates a single detached
-   event (optional `jsonPath` defaults to `"event"`). The exported extensible
-   `EDITOR_FIELD_RULES: EditorFieldRule[]` table follows the same domain-fact
-   convention as `EVENTVAR_REFERENCE_ACES` / `IMAGE_FILE_TYPE_EXTENSIONS` — each
-   new C3-load bug becomes a one-line rule addition. Rule check is
-   `typeof === "string"` so an **empty string passes**; only `undefined`/non-string
-   is flagged (originating incident: adding `comment: ""` / `description: ""`
-   resolved C3 import failures). Seed rules: `eventvar-comment-required`
-   (`variable` → `.comment`) and `group-description-required` (`group` →
-   `.description`) (#33); `custom-ace-name-required` (`custom-ace-block` →
-   `.aceName`) was added in #70 from a **direct C3-editor import experiment** —
-   the table's only non-incident-seeded rule. That experiment also **disproved**
-   the corpus's strongest competing candidate: `function-block.functionDescription`
-   is present on every instance in the corpus and is still optional, so **corpus
-   ubiquity is not evidence of a loader requirement** and an "always-present" field
-   list is a hypothesis generator, not a rule list. C3's own diagnostics vary
-   sharply — a missing `comment` **crashes** the editor, a missing `aceName` yields
-   a generic "Failed to open project" naming no field — which is most of why
-   reporting the exact field + `jsonPath` is worth doing. See
-   [docs/domain-fact-audit.md](docs/domain-fact-audit.md).
-   **Comparison operators** — `COMPARISON_OPERATORS: Record<number, string>` is
-   the exported C3 domain fact mapping each bare `comparison` ACE parameter value
-   to its operator symbol: `0`=`=`, `1`=`≠`, `2`=`<`, `3`=`≤`, `4`=`>`, `5`=`≥`,
-   version-pinned to C3 r487. `comparisonSymbol(n): string | undefined` looks up
-   the symbol, returning `undefined` for out-of-range values. The DSL renderer
-   (`formatCondition`/`formatRecordParams`) annotates a `comparison` param with the
-   symbol alongside the numeric value (e.g. `comparison=4 (>)`), keeping the number
-   as the round-trippable source form; out-of-range or non-numeric values render raw.
-   Owned here so downstream need not re-hardcode the magic numbers (#39); keyed on
-   param name, no `objectClass` gate.
-   **Expression references** — `extractExpressionReferences(expr: string): ExpressionToken[]`
-   is a single-pass, stateful tokenizer over a raw C3 expression string (an
-   action/condition parameter value, not a DSL-rendered string), sibling to the
-   event-variable-reference classifiers above. It returns a flat, source-ordered
-   discriminated union `ExpressionToken = ExpressionReferenceToken |
-   SystemFunctionToken | VariableToken` (`kind: "reference" | "systemFunction" |
-   "variable"`), tracking nesting with a general paren-frame stack — one frame per
-   open `(`, whether or not it belongs to a call — so every token gets a
-   `parentIndex` pointing at the nearest enclosing call token and every call token
-   gets a best-effort `argCount` from its own `(...)`. Like the editor-strictness
-   rules, it is **never-throws, best-effort**: string literals (C3's `"…"` form
-   with `""` as the doubled-quote escape) are skipped so refs inside quotes are
-   never reported, nested-call and operator-concat refs are never dropped, and
-   malformed input (an unterminated string, a trailing `Sprite.`, unbalanced
-   parens) degrades to a partial or empty result rather than raising. This is C3
-   *domain grammar* owned here so downstream need not re-roll a tokenizer (cf.
-   `EVENTVAR_REFERENCE_ACES` / `isEventVarReference`) (#43). It is grammar-level
-   only — no name→id resolution, no decision about which ACE parameters are
-   expression-typed, and no event-sheet iteration; all three stay the consumer's
-   job (the last is already covered by `visitEvents`).
+- **Types in use:** `feat`, `fix`, `docs`, `test`, `chore`. A breaking change
+  is `feat!` (e.g. `feat!: uniform .json item policy for the seven
+  name-section finders, plus stray reporting (#76) (#79)`).
+- **The trailing `(#issue) (#pr)` pair** is the issue number(s) first, then
+  the PR — multiple issues comma-separate inside one group (`(#73, #74)
+  (#75)`). **Omit the pair entirely when there is no issue or PR**: release
+  and housekeeping commits like `chore: release 2.0.1` carry neither. Do not
+  invent a number to fill the shape.
+- Branches are squashed on merge, so the subject is usually the whole message.
+  Write a body only when the *why* would otherwise be lost — and remember the
+  durable record is the issue or PR, not the commit (see **Design records &
+  branches** above).
+- End the message with:
+  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 
-3. **Addon domain layer** (in `src/addons.ts`) — parsing and discovery for
-   Construct's `.c3addon` plugin/behavior/effect packages (#44). It follows
-   the same domain/presentation split as the rest of the library: c3source
-   models and discovers addon data; validation, diffing, and rendering stay
-   the consumer's job. `addons` sits at the same DAG tier as
-   `eventSheets`/`manifest` (imports only `layouts`, for `ObjectType`/`Family`/
-   `find_all_files_path`/`isEditorLocalPath`).
-   **Attribution** — `attributeObjectType(ot)`/`attributeFamily(f)` derive an
-   `AddonAttribution` (`name`, `source: "objectType" | "family"`, `pluginId`,
-   `behaviorIds[]`, `effectIds[]`) purely from an object type's or family's
-   own declared fields: `plugin-id` plus the `behaviorId`/`effectId` of each
-   entry in `behaviorTypes: BehaviorTypeRef[] {behaviorId, name, sid?}` /
-   `effectTypes: EffectTypeRef[] {effectId, name}` (both added to `ObjectType`
-   and the new `Family` in `src/layouts.ts`, pinned from real fixtures as C3
-   domain facts) — no manifest cross-reference, no I/O.
-   `collectAddonAttribution(objectTypes, families)` maps a full set (object
-   types first, then families) and is the primitive the `C3Project` handle's
-   `collectAddonAttribution()` wraps.
-   **`usedAddons`** (in `src/manifest.ts`) — `C3UsedAddon` (`type`, `id`,
-   `name`, `author`, `bundled`, `version?` — optional, observed absent in real
-   fixtures even when `bundleAddons` is true) models one entry of the
-   manifest's optional `usedAddons` list; `getUsedAddons(m)` returns it, or
-   `[]` when the section is absent.
-   **Discovery** — `C3ADDON_EXTENSION = ".c3addon"` and `findAllAddons(dir)`
-   find every `.c3addon` package under a directory, built on the same
-   `find_all_files_path` primitive as the named layout collectors; there is no
-   canonical C3 subfolder for addon-source storage, so it takes a bare
-   directory rather than a project-derived path. The `C3Project` handle's
-   `findAllAddons(sub?)` wraps it against the project root.
-   **Reader** — `readAddonPackage(source): AddonPackage` opens a `.c3addon`
-   package for reading, auto-detecting its on-disk form (an unpacked
-   directory, or the zip archive C3 itself loads) via **fflate — c3source's
-   first runtime dependency** (see [ADR
-   0013](docs/decisions/0013-fflate-dependency-c3addon-reader.md)). Both
-   modes share one `entryNames`/`hasEntry`/`readBytes`/`readText`/`readJson`
-   interface and one BOM-strip + decode path. The domain facts
-   `ADDON_MANIFEST_FILE = "addon.json"` and `ADDON_ACES_FILE = "aces.json"`
-   name the two package entries; `UTF8_BOM`/`stripBom` exist because some
-   package files carry a leading UTF-8 BOM (observed on `aces.json`, not
-   `addon.json`, in real SDK samples) that readers must tolerate. That BOM is
-   **not** a C3 behavior and is not version-pinned: C3 neither authors nor
-   generates addons — a `.c3addon` is hand-written by a third-party developer,
-   so the BOM is an artifact of that author's text editor and is unpredictable
-   per file and per addon. Hence stripping unconditionally on every read rather
-   than allowlisting known-BOM'd entries.
-   **ACE model** — `parseAcesModel(json)`/`parseAddonMetadata(json)` are pure
-   parsers behind the reader's pre-read-JSON boundary (they take an
-   already-parsed value, never a path, so they stay testable without
-   `fflate`). `aceIdentity(kind, id)` builds an ACE's canonical `(kind, id)`
-   identity — an action and a condition may legally share an `id` — and
-   `findAce` resolves by that identity, while `findExpression` resolves an
-   expression by its distinct `expressionName` (the PascalCase name used in
-   event-sheet expressions, which need not share a stem with `id`).
-   Real, BOM'd `addon.json`/`aces.json` fixtures come from the [Construct
-   Addon SDK](https://github.com/Scirra/Construct-Addon-SDK), vendored as the
-   `SDK/` git submodule; SDK-gated tests self-skip when it is absent or
-   checked out non-recursively, so CI must check out submodules recursively
-   for that coverage to actually run. See
-   [api-guide-addons.md](docs/api-guide-addons.md) for the full reference.
+For a multi-line body, write the message to a temp file and pass it with `git
+commit -F <file>` — building it inline is what the shell mangles.
 
-4. **Reference integrity** (in `src/references.ts`, #60) — detects **unresolved**
-   name-keyed cross-references the manifest/source's own data implies, not
-   editor-observed rejections. Five kinds via one `ReferenceIssue` type:
-   `addon-undeclared`/`family-member-missing`/`instance-type-missing` are
-   `error` (C3 fails to load); `addon-unused` is `warning` (hygiene);
-   `event-class-unresolved` is `warning` because the detector cannot
-   distinguish a deleted object type from a pseudo-class its table doesn't yet
-   know. Shape: four **pure** detectors (`detectAddonReferenceIssues`,
-   `detectFamilyMemberIssues`, `detectInstanceTypeIssues`,
-   `detectEventClassIssues` — take already-parsed `SourceDoc<T>[]`, no I/O) plus
-   one I/O orchestrator (`detectReferenceIntegrity(projectDir, manifest?,
-   options?)`) plus the `C3Project` handle's `detectReferenceIntegrity(options?)`,
-   which passes the cached manifest. The exported table `C3_PSEUDO_OBJECT_CLASSES`
-   (`objectClass` values resolving to no object type/family **by design**;
-   statically known members only, currently just `"System"`) is **known
-   incomplete** — corpus-derived, not C3-source-derived — with
-   `scripts/scan-references.mjs` (dev-only, mirrors `scripts/api-surface.mjs`)
-   as the tool to re-validate it against real projects on a C3 version bump.
-   C3's functions object is deliberately **not** in that table: its name is a
-   **per-project setting** (`project.c3proj`'s optional `functionsName`,
-   defaulting to `C3_DEFAULT_FUNCTIONS_NAME` = `"Functions"`), so
-   `detectEventClassIssues` resolves it separately, one additional name atop
-   the pseudo-class set, with precedence `options.functionsName` →
-   `manifest.functionsName` → the default; a renamed functions object means
-   the literal `"Functions"` stops resolving. This was a real defect (#60,
-   fixed in commit 353f571): the table originally hardcoded `"Functions"`
-   too, which the 14-project corpus scan never caught because every scanned
-   project used the default name — the scan validated the *value*, not the
-   *mechanism*. `collectLayoutEffectIds` **supplements**
-   `collectAddonAttribution` rather than widening it — a layout/layer effect is
-   not an item's own declared field, and adding it to `AddonAttribution.source`
-   would break any consumer's exhaustive `switch`. Error policy deliberately
-   diverges from `detectImageDrift`: findings are collected, but I/O/parse
-   failures throw rather than degrading to a partial result, because reference
-   integrity *is* the caller's request. Ownership boundary: c3source ships the
-   declared-`usedAddons` ↔ used-in-source edge; the `.c3addon`-package ↔
-   `usedAddons` direction stays construct3-chef's (`addonValidator.ts`,
-   `addonInventory.ts`). See [ADR
-   0021](docs/decisions/0021-reference-integrity-detection.md) and
-   [api-guide-references.md](docs/api-guide-references.md).
+## Pull Request Format
 
-All file writes go through `src/serialize.ts`'s `serializeC3Json`/
-`writeC3JsonFile` (`C3_JSON_INDENT = "\t"`) — the single owner of the C3
-source-JSON write form: **tab-indented, and — the inverse of the usual
-text-file convention — with no trailing newline**. Text from
-expressions/comments is run through `normalizeLineEndings` (CRLF -> LF) for
-cross-platform stability. See [ADR
-0016](docs/decisions/0016-c3-source-json-serialization-form.md). `serialize.ts`
-also owns the one documented exception: `tilemapBrushes/**/*.brush.json` is
-project **source**, not editor-local — just written in a second, minified form
-— per the `C3_MINIFIED_SOURCE_SUFFIXES`/`isMinifiedSourcePath` domain fact and
-[ADR 0018](docs/decisions/0018-brush-json-minified-source-not-editor-local.md).
+- **Title:** the same Conventional Commits shape as the squash subject, since
+  the PR title becomes the commit subject on merge.
+- **Body:** a concise summary that **links to real docs rather than pasting a
+  design spec** — the durable record is the issue/PR plus, for architecture
+  and trade-off decisions, an ADR under `wiki/decisions/`. Close with the
+  issue reference (`Closes #NN`).
+- Host is **GitHub** (`GenvidTechnologies/c3source`); use `gh pr create
+  --body-file` so the body survives shell quoting.
+- Never cite an unpushed branch or commit hash in the body — push first.
 
-## Domain-fact tables: how they are validated (#68)
+## Branching
 
-[ADR 0008](docs/decisions/0008-c3-domain-fact-tables.md) owns *that* C3 facts live
-here as exported tables; [ADR
-0022](docs/decisions/0022-domain-fact-audit-convention.md) owns *how one is
-validated*. Three rules:
+- `main` is the default branch. **Never commit directly to `main`** — branch
+  first, even for a docs-only change.
+- Branch names are `<type>/<kebab-slug>`, reusing the commit types
+  (`docs/migrate-to-llm-wiki`, `chore/genvid-conventions-setup`).
+- Rebase onto `main` rather than merging; branches are squash-merged, so
+  intermediate commits are working state, not history.
+- Publishing is tag-triggered on `v*.*.*` — see **CI & Publishing** below, and
+  move `## [Unreleased]` in `CHANGELOG.md` into a dated section *before*
+  pushing the tag.
 
-1. **Every table's JSDoc carries a confidence label** — `AUDITED` / `KNOWN
-   INCOMPLETE` / `UNVALIDATED` / `NOT CORPUS-AUDITABLE` (the last must name the
-   evidence source that *would* validate it) — **paired with the blast radius of
-   being wrong**, which differs sharply per table: `EDITOR_LOCAL_EXCLUSIONS`
-   contaminates every drift section, `IMAGE_FILE_TYPE_EXTENSIONS` throws, the rest
-   are silent false negatives or cosmetic.
-2. **Numbers never go in JSDoc.** JSDoc ships to consumers in `dist/*.d.ts`, where
-   "audited against 14 projects" is false the day a 15th appears. Counts, releases
-   and the scan date live in [docs/domain-fact-audit.md](docs/domain-fact-audit.md);
-   JSDoc holds only the label and a pointer. A **release pin** (`r402`, `r437`) is
-   the one exception — a fixed historical fact, not a rotting count.
-3. **`scripts/scan-domain-facts.mjs` reports partitions; the maintainer produces the
-   verdict.** It never concludes a table is correct — `scripts/*.mjs` is unlinted,
-   untypechecked, untested and not in CI, so a probe bug must yield odd-looking
-   evidence a human notices, not a wrong conclusion baked into a table. Every verdict
-   line carries its own observation count, and zero observations prints `NOT
-   EXERCISED`, never a pass (a probe once printed "NO CONTRADICTIONS" having scanned
-   nothing).
+## Agent Dispatch Guide
 
-**Reach for C3's own bundle before a corpus scan.**
-`https://editor.construct.net/r{NNN}/` is permanently hosted and fetchable per
-release (`construct.net`'s human-facing docs are Cloudflare-gated; this is not):
-`plugins/allAces.json` is C3's **authoritative ACE table**, and bisecting
-`projectResources.js` (release root, **not** `c3runtime/` — an earlier version
-of this note cited the wrong path, corrected and re-verified 2026-08-10) across
-releases **pins exactly when a field appeared**. A corpus answers *what values
-occur*; the bundle answers *what the
-mechanism is* — the distinction ADR 0008's addendum says a corpus structurally
-cannot make. In #68 it proved `EVENTVAR_REFERENCE_ACES` complete, proved
-`is-boolean-eventvar-set` **fabricated** (not merely unobserved), and converted two
-corpus brackets into exact pins (`fileType`→r402, `functionsName`→r437).
+**This repo is a TypeScript library *about* Construct 3 files — not a C3 game
+project.** That distinction decides the dispatch:
 
-**The corollary: a table's findings section carries *two* provenances, and only
-one half is scanner-refreshable.** Because both evidence sources are in play, a
-section in [docs/domain-fact-audit.md](docs/domain-fact-audit.md) typically mixes
-corpus-derived **numbers** (occurrence counts, release lists, on-disk breakdowns)
-with bundle-derived **facts** (an exact release pin, a "there are exactly two
-branches" proof, a false-positive trap). Re-running the scanner refreshes the
-first and cannot reproduce, confirm, or refute the second — so the doc's own
-"re-run it … and update this doc's numbers" instruction, followed literally,
-**deletes the stronger evidence**. Refresh the numbers; re-verify the bundle
-facts against `editor.construct.net/r{NNN}/` instead; never overwrite them with
-anything the scanner prints. This was not hypothetical: #77 shipped with an
-acceptance criterion asking for exactly that wholesale refresh, which would have
-destroyed `SCRIPT_SOURCE_EXTENSIONS`'s `.ts`→r433 pin, its one-ternary proof and
-its `.tsx`/Tiled trap — the criterion was corrected rather than executed, and
-`## How to re-run` now carries the warning at the point of use.
-
-## Canonical reference fixture (`construct3-sample`)
-
-A **second** git submodule, `construct3-sample/` (pinned at the commit tagged
-`v1.1.0`, added #51), is the **canonical golden C3 project** — the single,
-editor-round-tripped
-source of on-disk shape that c3source and its sibling tools consume instead of
-each hand-maintaining a drifting fixture. c3source is the **validator, not the
-owner** (it runs `validateForEditor`/`detectManifestDrift` over it). See [ADR
-0015](docs/decisions/0015-canonical-c3-reference-fixture.md) for the ownership +
-tag-pinned-submodule mechanism and the rejected alternatives (npm companion,
-vendored copy). This is distinct from — and additive to — the retained Scirra
-`SDK/` submodule (its retirement, #50, was closed won't-do).
-`scripts/prep-fixture.mjs` materializes the golden into the **gitignored**
-`test/fixtures/canonical/` — a byte-for-byte copy of `construct3-sample/project/`'s
-**tracked HEAD content** (via `git archive`, not a working-tree copy — see [ADR
-0019](docs/decisions/0019-hermetic-fixture-materialization.md) / #64) + an
-additive `test/fixtures/canonical-overlay/` − the `canonical.striplist.txt`
-paths; a `pretest` npm hook runs it before every `npm test`, and it is a
-**guarded no-op** (exit 0) when the submodule is absent or its checked-out
-directory isn't a git repository, so tests self-skip rather than the run
-breaking. Because materialization reads tracked HEAD content, enriching the
-golden now requires a **local commit in the `construct3-sample` submodule**
-before the change appears in the materialized fixture — an uncommitted edit
-there is invisible to the fixture. As of **#54**, all the formerly
-`c3source-fixture/`-backed tests consume the materialized `test/fixtures/canonical/`
-(via the `PROJECT_FIXTURE` constant in `test/fixtureHelpers.ts`), and the committed
-`test/fixtures/c3source-fixture/` has been retired. The pin advanced to **v0.2.0**
-for that migration — v0.1.0 had no event-var-reference ACEs; v0.2.0 adds them to
-`Event sheet 1`, which `eventVarReference.test.ts` needs — and then to **v0.4.1**,
-which adds a **global layer with override** to both layouts (exercising the
-prefix-resetting `global` path in `walkLayerEntries`) plus upstream-owned addon
-sources. Then **v0.5.0** (#60), adding Functions ACEs to `Event sheet 1`; **v0.6.0**
-(#68), adding a boolean event variable plus a
-`compare-boolean-eventvar` condition to `Event sheet 2` — the golden had no
-boolean-event-variable construct at all, which is part of how a **fabricated**
-ACE id survived unnoticed in `EVENTVAR_REFERENCE_ACES`; **v0.7.0** (#70/#72),
-adding a custom ACE on `NavButton` and sampling a function without a
-description — the enrichment behind `custom-ace-name-required` (an
-`EDITOR_FIELD_RULES` entry added from a direct C3-editor import experiment)
-and the disproof that `function-block.functionDescription` is a loader
-requirement; **v1.0.0 — MAJOR** ("Cross-domain coupling coverage", driven
-upstream by `c3-domain-manager`#34, not by any c3source issue),
-folding `eventSheets/` and `layouts/` into `Gameplay/`/`UI/` subfolders and
-adding a cross-domain include event, an object-member expression reference,
-and an event-variable reference — each deliberately crossing a folder
-boundary so consumers can exercise cross-domain dependency analysis, which
-the golden previously could not support. `Templates Layout` deliberately
-stays unfoldered at the `layouts/` root (it has no assigned event sheet),
-preserving coverage of root-level/unclassified paths; sheet `name` fields
-were untouched, since includes and layout `eventSheet` fields resolve sheets
-by name, so no reference moved with the files. Per the sample's own
-versioning convention a MAJOR means a consumer with a generated read-surface
-keyed on those paths must regenerate it before bumping this pin, and a
-consumer's own overlay/strip-list (here,
-`canonical-overlay/`/`canonical.striplist.txt`) must be re-checked against
-the new shape. And **v1.1.0** (#81), sampling a local variable referenced
-before its declaration — an `on-start-of-layout` block in `UI/Event sheet 2`
-whose children straddle a local `variable` declaration (`inner1`), one
-incrementing and displaying above the declaration and one below, both
-rendering `3`: the observable signature of two distinct C3 semantics,
-level-wide visibility (the upper block already sees `inner1` holding its
-`initialValue`) and re-initialization at the declaration point (the upper
-block's increment is discarded, so the lower block reads 2, not 3). Saved
-with r49502, up from r49500.
-
-Every bump through v0.7.0 was corpus-neutral in the strong sense — both
-counts *and* paths held, because each edited existing files rather than
-adding, removing, or moving any (non-`project/` additions are never copied
-by `prep-fixture`). **v1.0.0 breaks that stronger sense while preserving the
-weaker one**: the `.json`/`.c3proj` counts are unchanged (29/3/26, 26 kept
-round-tripping bar the brush file), because the fold renamed every
-event-sheet and layout path rather than adding or removing a file — but the
-*paths* moved, and anything keyed on a hardcoded path (a generated
-read-surface, a fixture-gated test's literal path string) breaks even though
-a count-only check would not have caught it. Measured fallout in this repo:
-the bump broke `R-C1`/`R-C2`/`R-C14` in `test/projectManifest.test.ts`
-outright, and caused `eventVarReference.test.ts`,
-`fixtureFieldFidelity.test.ts`, `layerVisitor.test.ts`, and
-`makeDefaultLayer.test.ts` to silently self-skip on their now-stale
-hardcoded paths — the same hazard this section already flags for a
-missing/non-git submodule below ("would self-skip silently rather than
-fail"), now with a second trigger: watch the **pending** count after any pin
-bump, not just the pass/fail line, since a path-keyed test gone vacuous
-looks identical to green. **When bumping the pin, re-measure paths as well as
-counts** — a tag that adds or removes a `project/` JSON file still moves the
-corpus counts `manifestSerialize.test.ts` asserts, but a bump can be
-count-neutral and still invalidate a third of the fixture-gated suite,
-exactly as v1.0.0 did here. **As of #82 ([ADR
-0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md)),
-a moved path like this is caught automatically** at every gate converted to
-`fixtureProjectAvailable`/`sdkFixtureAvailable` (throws naming the path) and,
-as a backstop, by the computed `.mocharc.cjs` arming `--forbid-pending`
-whenever both gated fixtures are present (fails the run on any remaining
-unexpected skip). Both require the fixtures to be materialized in the first
-place, though, so a pin bump run against a partial or absent checkout still
-needs the manual check above.
-**Fetch the submodule's own remote before doing anything in it.** A `git fetch`
-in this repo says nothing about `construct3-sample` — `origin/main` here can be
-current while the pinned commit is several releases behind. Run `git -C
-construct3-sample fetch` and check `git log HEAD..origin/main` there *before*
-committing an enrichment, not after: on #81 the pin was four commits and one
-**major** (`v1.0.0`, the `Gameplay/`/`UI/` fold) behind, which was invisible from
-this repo and invalidated a plan written against `v0.7.0`. Push the branch and
-its tag as one chained command (`git push origin main && git push origin vX.Y.Z`)
-— unchained, the tag push still succeeds after a rejected branch push and strands
-the tag on a commit unreachable from `main`, in a repo three projects pin.
-**What is actually pinned is a commit, not a tag:** the superproject tree stores a
-`160000 commit <sha>` entry and `.gitmodules` carries no `branch`/tag field, so git
-never consults a tag when updating the submodule — `git describe --tags` merely
-resolves that sha to a nearby tag name for humans. Tagging each golden release (ADR
-0015's convention) stays worthwhile as a readable label and a signal that a fixture
-state was deliberately published, but a bump is complete the moment the commit
-pointer is staged; the tag name in this doc is documentation, not configuration.
-**Overlay vs. upstream-enrich — the decision rule:** coverage the golden
-genuinely *should* carry (a real C3 construct a downstream test needs, e.g.
-event-var-reference ACEs) is added **upstream in `construct3-sample`**
-(editor-round-trip → commit → push → new tag → bump the pin), **never** faked
-into `canonical/` — an overlaid, hand-authored event sheet would couple those
-bytes to `canonicalFixture.test.ts`'s `validateForEditor`/drift gate. The
-additive `canonical-overlay/` is reserved for c3source-specific shaping the
-golden **deliberately omits** (e.g. `uistate/` + `*.instancesBar.json`, which
-the golden's own `.gitignore` excludes) so the `isEditorLocalPath` drift-filter
-coverage isn't vacuous. When enriching the golden, verify before pushing to the
-shared submodule (parses, `validateForEditor` == 0 issues, referenced var
-declared + in scope, minimal `git diff --stat`). `construct3-sample`'s remote is
-**SSH** (`git@github.com:GenvidTechnologies/construct3-sample`, set in
-`.gitmodules`), so pushing there goes through the same 1Password SSH-agent path
-as a c3source push and may need the user present to approve — it is no longer
-the "HTTPS, no prompt" exception this section once described. The SCP-style
-`git@github.com:` spelling is deliberate: `actions/checkout` rewrites that form
-to token-authenticated HTTPS for submodule clones, whereas a `git+ssh://` URL is
-not covered by that rewrite and would break CI's recursive checkout — and with it
-every fixture-backed test, which would **self-skip silently** rather than fail
-(watch the `pending` count, not just the green check). This is the one case
-[ADR 0026](docs/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md)'s
-`--forbid-pending` backstop does **not** cover, and cannot by design: a broken
-recursive checkout leaves the gated fixtures absent, which is exactly the
-degradation state ([ADR 0019](docs/decisions/0019-hermetic-fixture-materialization.md))
-that keeps `.mocharc.cjs` from arming strictness — the manual check above is
-still the only defense here.
+- **Implementation → `gvt-dev:ts-implementer`.** All work here is TypeScript,
+  ESM `.mjs` tooling, or mocha tests.
+- **Planning recon → `gvt-dev:analyst`** (the generic default). There is no
+  project-specific explorer to name.
+- **`gvt-construct3:c3-explorer` / `c3-implementer` are usually the *wrong*
+  dispatch here.** They target a real C3 game project — DSL, layouts, domain
+  index, event-sheet mutation recipes. This repo's only C3 project is the
+  materialized fixture under `test/fixtures/canonical/`, which is *test data*.
+  Reach for `c3-explorer` only when the question is genuinely about that
+  fixture's C3 content (e.g. verifying what a pin bump changed); never to
+  understand c3source itself, which means reading TypeScript.
+- **Documentation → `gvt-dev:tech-writer`**, which also owns wiki `ingest`
+  writes. Tell it explicitly whether it is dispatched (stage, don't commit) or
+  standalone (commit) — its protocol defaults to standalone when the brief is
+  silent.
 
 ## Formatting
 
@@ -891,5 +259,5 @@ it is easy to miss on a hand-cut release. Note the file is deliberately **not**
 in `package.json`'s `files` allowlist (`dist`, `LICENSE`, `README.md`), so it
 ships on GitHub but not in the npm tarball. Two older records predate it and are
 left unedited, since an accepted ADR states the situation at its date: [ADR
-0024](docs/decisions/0024-script-source-fact-and-dotted-extensions.md) reasons
+0024](wiki/decisions/0024-script-source-fact-and-dotted-extensions.md) reasons
 explicitly from "with no CHANGELOG.md in this repo".

@@ -2,7 +2,9 @@
   "project": {
     "name": "c3source",
     "description": "Typed interfaces and traversal/formatting utilities for reading and mutating Construct 3 project source files (layouts, layers, instances, event sheets) on disk.",
-    "languages": ["typescript"]
+    "languages": [
+      "typescript"
+    ]
   },
   "commands": {
     "test": "npm run test",
@@ -22,6 +24,12 @@
     "triagedLabel": "triaged",
     "needsInfoLabel": "question"
   },
+  "wiki": {
+    "wikiDir": "wiki",
+    "rawDir": "raw"
+  },
   "features": {},
-  "paths": {}
+  "paths": {
+    "docs/decisions/": "wiki/decisions/"
+  }
 }

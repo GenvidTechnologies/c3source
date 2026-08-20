@@ -9,7 +9,7 @@
 // name-section roots with that exact same predicate.
 //
 // Why this exists (durable asset, not scaffolding): ADR 0008's "Consequences"
-// section (docs/decisions/0008-c3-domain-fact-tables.md:52-79) records that the
+// section (wiki/decisions/0008-c3-domain-fact-tables.md, "Consequences") records that the
 // seeding method for these tables FAILED TWICE during #60 — a small canonical
 // fixture is a correctness oracle, not a coverage oracle, and even a 14-project
 // corpus scan can validate an observed *value* while concealing that the value

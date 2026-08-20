@@ -5,50 +5,27 @@ Genvid plugin skills consult this index to find your project's docs.
 Each entry should be a one-line description. Only list docs that exist.
 -->
 
+> **This project's documentation lives in an LLM-wiki, not in `docs/`.**
+> On 2026-08-20 the API guides, the domain-fact audit, the design-patterns
+> reference and all 26 Architecture Decision Records were migrated to
+> [`wiki/`](../wiki/index.md). `docs/` now holds only the files the plugin
+> convention contract and the wiki's own maintenance schema require.
+> Verbatim, immutable captures of every migrated file are kept under
+> [`raw/`](../raw/README.md).
+
+## Knowledge Base
+
+- `wiki-schema.md` — the binding maintenance schema for the three-tier wiki (`raw/` → `wiki/` → this schema): OKF v0.2 page format, the create-vs-update page lifecycle, the `raw/` immutability convention, this project's `stale_after` policy, and the `ingest`/`query`/`lint` verb contract
+- [`../wiki/index.md`](../wiki/index.md) — **the wiki's own table of contents**, and the place to start for anything about this library's architecture, API surface, C3 domain facts, fixtures, or workflow. Every page carries a one-line description there
+- [`../wiki/decisions/index.md`](../wiki/decisions/index.md) — Architecture Decision Records 0001–0026 (MADR-lite). Authored via `/gvt-dev:create-adr`; `.gvt-agent.json`'s `paths["docs/decisions/"]` override points the ADR tooling here
+- [`../raw/README.md`](../raw/README.md) — the immutable provenance tier: captured sources every wiki page is built from. Never edited in place; a changed source is re-captured as a new file
+
 ## Project context
 
-- `../CLAUDE.md` — overview, commands, architecture, formatting & CI conventions
+- `../CLAUDE.md` — session context: overview, the wiki routing table, commands, design-record conventions, formatting rules, CI & publishing
 - `../CHANGELOG.md` — per-version release notes (Keep a Changelog); introduced at 2.0.0, earlier entries backfilled from git history, and records the `@genvid` → `@genvidtech` scope rename at 1.6.0
-- `design-patterns.md` — reusable patterns (single-source event counter, thin file-walker wrappers, real-export-vs-inline test strategy, collect-then-throw-first validation)
-- `api-guide.md` — usage reference for SID traversal and editor-local classification; links to manifest/drift doc
-- `api-guide-manifest.md` — project manifest model, strict vs tolerant parsing, shape validation, canonical serialization/writing, drift detection types, walk primitives, and 0.x migration (#19 #21 #57 #58)
-- `api-guide-project.md` — C3Project handle and openProject(root) factory: path fields, presence checks, file finders, drift delegation, manifest write surface + write-through cache rule (#36 #57 #58)
-- `api-guide-extraction.md` — event-sheet extraction API: visitEvents, extractScriptsFromSheet, extractFunctions, extractIncludes, walkScriptActions, formatAction/formatCondition, isFunctionDefinition, isEventVarReference/getEventVarReferenceName, extractExpressionReferences, validateForEditor/EDITOR_FIELD_RULES
-- `api-guide-addons.md` — addon domain layer: usedAddons manifest support, addon attribution (behaviorTypes/effectTypes), findAllAddons, readAddonPackage, parseAcesModel/parseAddonMetadata (#44)
-- `api-guide-references.md` — reference-integrity detection: the five ReferenceIssue kinds, C3_PSEUDO_OBJECT_CLASSES/NON_ATTRIBUTABLE_ADDON_TYPES domain-fact tables, the four pure detectors + detectReferenceIntegrity orchestrator, C3Project.detectReferenceIntegrity, error policy, ownership boundary vs. construct3-chef (#60)
-- `domain-fact-audit.md` — 14-project corpus-scan results for the eight domain-fact tables: corpus inventory, per-table findings, two defects found and fixed, bounds on what a corpus can prove, and the editor.construct.net validation channel. The two script tables (`SCRIPT_SOURCE_EXTENSIONS`, `SCRIPT_FILE_TYPE_EXTENSIONS`) were added #73/#74; the scanner grew to match and the sections gained a two-provenance warning in #77 (#68 #73 #74 #77)
+- `../README.md` — public-facing usage overview; the only documentation file shipped in the npm tarball
 
 ## Process
 
 - `issue-triage.md` — issue-triage conventions (flat GitHub label set, no priority/area scheme): categories, required fields, splitting, duplicates, dependencies, and the `gh` mutation recipes consumed by `/gvt-dev:triage-issues`
-
-## Decision Records
-
-Architecture Decision Records (ADRs) in `decisions/` — see [`decisions/README.md`](decisions/README.md). Backfilled 2026-07-17 from commit history.
-
-- `decisions/0001-single-module-esm-library.md` — single-module, ESM-only library (`type:module`, NodeNext, `.js` imports); module-layout superseded by 0012
-- `decisions/0002-canonical-event-numbering.md` — one canonical event-numbering counter in `visitEvents` (#3)
-- `decisions/0003-github-actions-oidc-publishing.md` — CI/publish via GitHub Actions + npm + OIDC trusted publishing (#6)
-- `decisions/0004-dist-entry-points-no-publishconfig.md` — package entry points at `dist/`, not `src/*.ts` via `publishConfig` (#8)
-- `decisions/0005-single-canonical-traversal-walk.md` — one canonical recursive walk per traversal; collectors/finders/visitors are thin consumers (#10 #14 #16)
-- `decisions/0006-editor-local-classifier.md` — single canonical editor-local classifier; skip C3 r487 `uistate/` (#12 #19)
-- `decisions/0007-coordinate-bearing-returns.md` — structured, coordinate-bearing returns over bare values (#21)
-- `decisions/0008-c3-domain-fact-tables.md` — C3 domain facts owned as exported tables (#26 #28 #29 #33 #39)
-- `decisions/0009-editor-strict-validation.md` — lenient parse types + separate editor-strictness validation (#33)
-- `decisions/0010-c3project-root-handle.md` — `C3Project`/`openProject` root handle; derive paths from mapping tables, no I/O at construction (#36 #38)
-- `decisions/0011-c3-expression-tokenizer.md` — C3-expression tokenizer for reference extraction; flat source-ordered `ExpressionToken[]` (#43)
-- `decisions/0012-per-area-module-split.md` — split `c3source.ts` into `layouts.ts`/`eventSheets.ts`/`manifest.ts`/`project.ts` behind an internal barrel, supersedes 0001's module-layout (#47)
-- `decisions/0013-fflate-dependency-c3addon-reader.md` — depend on `fflate` for `.c3addon` zip reading, partially revising 0001's no-runtime-deps stance (#44)
-- `decisions/0014-sdk-submodule-recursive-ci-checkout.md` — keep the Construct Addon SDK submodule read-only; recursive CI checkout via the shared workflow's `submodules` input (#49 #50)
-- `decisions/0015-canonical-c3-reference-fixture.md` — adopt standalone `construct3-sample` as the canonical, tag-pinned-submodule C3 reference fixture; c3source validates, it does not own (#51)
-- `decisions/0016-c3-source-json-serialization-form.md` — c3source owns the C3 source-JSON write form (tab indent, no trailing newline); new `src/serialize.ts` leaf, `C3Project` write surface, write-through-never-invalidate cache rule (#57)
-- `decisions/0017-tolerant-manifest-read.md` — lenient `project.c3proj` parse plus collected `ManifestValidationIssue[]`; strict stays default; shared shape-rule collector; write path stays deliberately un-gated (#58)
-- `decisions/0018-brush-json-minified-source-not-editor-local.md` — `*.brush.json` is minified project source, not editor-local; `EDITOR_LOCAL_EXCLUSIONS` deliberately unchanged; new `isMinifiedSourcePath` domain fact (#59)
-- `decisions/0019-hermetic-fixture-materialization.md` — materialize the canonical fixture from the `construct3-sample` submodule's tracked HEAD content (`git archive`) instead of its working tree, so the corpus no longer differs between a developer machine and CI (#64)
-- `decisions/0020-caller-controlled-walk-descent.md` — `find_all_files_path` gains an optional `descend` parameter so callers can opt a directory (e.g. `ts-defs/`) back into reachability without narrowing `EDITOR_LOCAL_EXCLUSIONS`; classification stays unchanged (#63)
-- `decisions/0021-reference-integrity-detection.md` — reference-integrity detection lives in a new `src/references.ts` module/DAG tier with its own `ReferenceIssue` type, not folded into `detectManifestDrift`/`DriftEntry` (#60)
-- `decisions/0022-domain-fact-audit-convention.md` — domain-fact tables carry a confidence label in JSDoc (`AUDITED`/`KNOWN INCOMPLETE`/`UNVALIDATED`/`NOT CORPUS-AUDITABLE`); the scanner reports partitions, never verdicts; numbers live in `docs/domain-fact-audit.md`, not JSDoc (#68); amended (#81) to require any prose claim about C3 platform behaviour, not just table entries, to name its evidence channel (corpus scan / editor bundle / editor experiment)
-- `decisions/0023-pre-r402-image-serialization-drift-degradation.md` — `deriveExpectedImageNames`/`deriveExpectedImages` stop throwing on pre-r402 images with no `fileType`, defaulting to `C3_LEGACY_IMAGE_EXTENSION` (matching C3's own loader fallback); `ManifestDrift.degraded` surfaces a previously-silent `detectImageDrift` swallow (#68)
-- `decisions/0024-script-source-fact-and-dotted-extensions.md` — `SCRIPT_SOURCE_EXTENSIONS`/`isScriptSourceName`/`isGeneratedScriptOutput`/`filterAuthoredScriptPaths` (`layouts.ts`) plus `SCRIPT_FILE_TYPE_EXTENSIONS` (`manifest.ts`) as owned C3 domain facts, including the generated-`.js`-sibling rule; all extension-valued domain facts now carry a leading dot (BREAKING) (#73 #74)
-- `decisions/0025-section-item-hood-and-stray-files.md` — `C3_SECTION_ITEM_EXTENSION`/`isSectionItemName`/`find_all_section_items_path` name item-hood as a third walk axis alongside provenance (ADRs 0006/0018) and reachability (ADR 0020), narrowing `find_all_layouts_path`/`find_all_objectTypes_path` to `.json` (BREAKING); `StrayFile`/`detectStrayFiles`/`ManifestDrift.strays` surface non-item files as a diagnostic, never drift (#76)
-- `decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md` — split fixture-existence gates into skip-if-absent/throw-if-moved (`fixtureProjectAvailable`/`sdkFixtureAvailable`), backed by a computed `.mocharc.cjs` arming `--forbid-pending` only when both gated fixtures are present, so a golden restructure like `construct3-sample`'s v1.0.0 fold fails loudly instead of silently disarming tests (#82)

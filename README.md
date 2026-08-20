@@ -9,7 +9,7 @@ Utilities for reading and traversing Construct 3 project source files: layouts, 
 ## Compatibility & caveats
 
 > [!IMPORTANT]
-> - **Folder-based projects only.** This library reads and writes the JSON files of a C3 project saved as a **folder** (the "Save as project folder" layout, with separate `layouts/`, `eventSheets/`, `objectTypes/` files). It does **not** handle the single-file `.c3p`/`.c3proj` archive export. The folder project's `project.c3proj` **manifest** (a JSON file in the project root, distinct from the archive) is modeled by `C3ProjectManifest`, parsed strictly by `parseProjectManifest`/`readProjectManifest`, drift-checked by `detectManifestDrift`, and can now be written back in canonical form via `serializeProjectManifest`/`writeProjectManifest`. A tolerant opt-in — `parseProjectManifestTolerant`/`readProjectManifestTolerant`, paired with the never-throwing `validateProjectManifest` — reads a manifest that fails the strict shape check without losing the document, for repair workflows; see [docs/api-guide-manifest.md](docs/api-guide-manifest.md).
+> - **Folder-based projects only.** This library reads and writes the JSON files of a C3 project saved as a **folder** (the "Save as project folder" layout, with separate `layouts/`, `eventSheets/`, `objectTypes/` files). It does **not** handle the single-file `.c3p`/`.c3proj` archive export. The folder project's `project.c3proj` **manifest** (a JSON file in the project root, distinct from the archive) is modeled by `C3ProjectManifest`, parsed strictly by `parseProjectManifest`/`readProjectManifest`, drift-checked by `detectManifestDrift`, and can now be written back in canonical form via `serializeProjectManifest`/`writeProjectManifest`. A tolerant opt-in — `parseProjectManifestTolerant`/`readProjectManifestTolerant`, paired with the never-throwing `validateProjectManifest` — reads a manifest that fails the strict shape check without losing the document, for repair workflows; see [wiki/project-manifest.md](wiki/project-manifest.md).
 > - **Pinned to a specific C3 version.** The types and traversal logic were derived from Construct 3 **r487** (`savedWithRelease: 48700`, `projectFormatVersion: 1`) and are validated against the canonical `construct3-sample` reference fixture, now at **r495** (`savedWithRelease: 49500`, `projectFormatVersion: 1`; materialized to `test/fixtures/canonical/` from the `construct3-sample` submodule). Other releases may serialize differently.
 > - **Built on undocumented internals.** Construct 3's on-disk format is **not a documented or stable public interface**. These interfaces were reverse-engineered from project output, so a future C3 release can change the shape without notice and **break this library**. Pin your C3 version, and re-validate the fixtures against any new C3 release before upgrading.
 
@@ -62,7 +62,7 @@ Recursively collect `.json` files (excluding `.uistate.json`) from a directory t
 > `find_all_eventsheets_path`. Both now narrow to `.json` section items like
 > their sibling always did, so all three functions match what this section has
 > always documented. See [ADR
-> 0025](docs/decisions/0025-section-item-hood-and-stray-files.md).
+> 0025](wiki/decisions/0025-section-item-hood-and-stray-files.md).
 
 ### Layout traversal
 
@@ -160,7 +160,18 @@ input), so the SDK-gated tier runs there unconditionally.
 
 ## Further reading
 
-For usage reference covering SID traversal, editor-local classification, and project manifest parsing/drift detection, see [docs/api-guide.md](docs/api-guide.md).
+This project's documentation lives in an LLM-wiki under [`wiki/`](wiki/index.md)
+— start at [`wiki/index.md`](wiki/index.md), which lists every page with a
+one-line description. For usage reference covering SID traversal and
+editor-local classification see [`wiki/layout-traversal.md`](wiki/layout-traversal.md);
+for project manifest parsing and drift detection see
+[`wiki/project-manifest.md`](wiki/project-manifest.md). The architecture
+decisions behind the API are recorded in
+[`wiki/decisions/`](wiki/decisions/index.md).
+
+(These are repository-relative links: they resolve on GitHub, not from inside
+the npm tarball, whose `files` allowlist ships only `dist`, `LICENSE` and this
+README.)
 
 ## Notes
 

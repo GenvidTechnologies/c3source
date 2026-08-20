@@ -1,0 +1,196 @@
+---
+type: decision-context
+title: "ADR 0021 — Reference integrity as a separate module, not an extension of drift detection"
+description: A new src/references.ts module and DAG tier reports five kinds of unresolved name-keyed cross-reference (addon-undeclared, addon-unused, family-member-missing, instance-type-missing, event-class-unresolved) through its own ReferenceIssue type, deliberately not folded into detectManifestDrift's DriftEntry.
+tags: [adr, references, manifest, module-architecture]
+status: stable
+generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+sources:
+  - id: adr-0021
+    resource: ../../raw/adr-0021-reference-integrity-detection-2026-08-20.md
+    title: "ADR 0021 (docs/decisions capture, 2026-08-20)"
+    last_modified: 2026-08-20
+---
+
+# ADR 0021 — Reference integrity as a separate module, not an extension of drift detection
+
+**Status:** accepted
+**Date:** 2026-08-03
+**Issue:** #60
+
+Migrated verbatim from the `docs/decisions/` ADR record[^adr-0021].
+
+## Context
+
+`project.c3proj` and the project's source files form a web of **name-keyed**
+cross-references — every cross-file reference in C3 source is by name, not
+`sid`. c3source validated manifest *shape* (`validateProjectManifest`) and
+*membership* against disk filenames (`detectManifestDrift`), but with one
+narrow exception — `detectContainerDrift`'s `dangling-ref` for container
+members — it never checked whether a reference **resolves**. Since #57
+c3source owns the manifest write path, so it can now *introduce* these
+breakages, not merely observe them. That raises the stakes on detection.
+
+The issue was **reframed** before this work: it was originally filed as a
+field-presence rule table (a `project.c3proj` analogue of
+`validateForEditor`/`EDITOR_FIELD_RULES`, #33) and declared itself blocked on
+observing C3 editor loader rejections. That framing was wrong — c3source owns
+the write path and `validateProjectManifest` already gates shape, so such a
+table would mostly restate it. The failure modes that matter are referential,
+and those are **internal-consistency** checks derivable from the project's own
+data, needing no editor observation. Recording this saves a future reader
+re-deriving it from the issue history.
+
+## Decision
+
+A new `src/references.ts` module, forming a new DAG tier:
+`serialize` ← `layouts` ← `{eventSheets, addons, manifest}` ← **`references`** ← `project`.
+
+Five issue kinds (`addon-undeclared`, `addon-unused`, `family-member-missing`,
+`instance-type-missing`, `event-class-unresolved`) reported through its own
+`ReferenceIssue` type, not `DriftEntry`. Four **pure** detectors
+(`detectAddonReferenceIssues`, `detectFamilyMemberIssues`,
+`detectInstanceTypeIssues`, `detectEventClassIssues` — no I/O) plus one I/O
+orchestrator (`detectReferenceIntegrity`) plus a `C3Project` handle method
+(`detectReferenceIntegrity`, delegating with the cached manifest).
+`detectManifestDrift` is **untouched**.
+
+## Compromise
+
+**1. Why not extend the drift engine.** Three independent reasons, all
+decisive:
+
+- `DriftEntry`'s `manifestPath`/`diskPath` are *manifest-subfolder /
+  disk-subfolder* segment arrays. R6 (`instance-type-missing`) needs an
+  **intra-file** locator (`layers[2].subLayers[0].subLayers[0].instances[0]`)
+  and R7 (`event-class-unresolved`) needs `visitEvents`' `jsonPath`.
+  `detectContainerDrift`'s synthetic `[`#${i}`]` container-index segment is
+  already a stretch of that field; four more kinds would entrench a type lie
+  no consumer could distinguish from real subfolder segments.
+- Adding members to the exported `DriftKind` union **breaks any consumer with
+  an exhaustive `switch`** — a major bump for a purely additive feature. This
+  design stays **minor**.
+- **Measured cost:** on a real 2,004-file project, parsing all source JSON
+  takes **278 ms**, where `detectManifestDrift` already takes **707 ms**.
+  Folding it in would have made every existing drift call ~40% slower,
+  silently.
+
+**2. Why a new DAG tier rather than `manifest` importing `addons`.** The addon
+check needs `collectAddonAttribution` (in `addons`) and `getUsedAddons` (in
+`manifest`); `manifest` does not import `addons`. Importing it would invert
+the documented sibling tiering ([ADR 0012](/decisions/0012-per-area-module-split.md))
+**and** make `addons` — which carries the `fflate` runtime dependency ([ADR
+0013](/decisions/0013-fflate-dependency-c3addon-reader.md)) — reachable from the
+manifest dependency path. A `project.ts`-only placement (no new module) was
+also rejected: it breaks the free-function-vs-handle convention (every
+existing handle method wraps an exported free function) and, decisively,
+**destroys parameterized testability** — without exported free functions
+taking `SourceDoc` arrays, every negative case would need a temp project on
+disk instead of an in-memory clone.
+
+**3. Why `collectAddonAttribution` was supplemented, not widened.**
+`collectLayoutEffectIds` (in `references.ts`) is a sibling function, not an
+addition to `collectAddonAttribution`. Widening `collectAddonAttribution`
+would add `"layout" | "layer"` to its exported `AddonAttribution.source`
+union — the same exhaustive-`switch` break — and violates its documented
+contract of deriving from an item's **own declared fields** (a layer is
+neither an object type nor a family). With the number: on a real project,
+covering the layer/layout effect surface took false positives from **2 → 0**.
+Note it cuts both ways — an undeclared layer effect is a real load failure
+that is now detected, not merely a false-positive fix.
+
+**4. The corpus evidence for `C3_PSEUDO_OBJECT_CLASSES`.** The canonical
+fixture yields only `{"System"}`. Scanning 16 real projects (this figure was
+a miscount at the time of writing; the corpus is 14 projects — corrected
+2026-08-04, see `docs/domain-fact-audit.md`) found `"Functions"` occurring
+**212 times in a single project** (ACE ids
+`set-function-return-value`, `map-function`, `map-function-default`,
+`call-mapped-function`), with zero other unresolved values across ~30k ACEs.
+**Shipping the fixture-derived table would have produced 212 false positives
+on that project alone.** This is the standing argument for keeping
+`scripts/scan-references.mjs` and re-running it on every C3 version bump —
+stated explicitly here because the fixture *demonstrably cannot* validate
+this table.
+
+**5. Severity semantics.** `event-class-unresolved` and `addon-unused` are
+`warning`; the other three kinds are `error`. The event-class kind is named
+*unresolved* rather than *missing* because the detector genuinely cannot
+distinguish "deleted object type" (a load breaker) from "a pseudo-class this
+table doesn't yet know about" (harmless, given point 4) — naming that
+honestly beats a confident wrong label.
+
+**6. The error-policy divergence from `detectImageDrift`.**
+`detectManifestDrift` wraps its call to `detectImageDrift` in try/catch so a
+throw degrades to an omitted section — image drift is a best-effort
+*addition* to a result the caller wanted anyway. `detectReferenceIntegrity`
+deliberately does **not** catch: reference integrity **is** the request, so
+silently returning `{ok: true, issues: []}` for a project with an unparseable
+layout would be a false clean bill of health.
+
+## Consequences
+
+- **Correction (2026-08-03, #60):** the "212 occurrences" finding in point 4
+  above is unchanged and still stands as the argument for
+  `scripts/scan-references.mjs` — but the conclusion originally drawn from it
+  was wrong. `"Functions"` is not a fixed pseudo-class; it is the **default
+  value of a per-project setting** (`project.c3proj`'s `functionsName`
+  attribute, now modeled as `C3ProjectManifest.functionsName?: string`). A
+  project that renames its functions object emitted `objectClass` values the
+  static table could never contain, producing a false `event-class-unresolved`
+  on **every** function call in that project — the exact failure mode the
+  table existed to prevent. `C3_PSEUDO_OBJECT_CLASSES` is now `["System"]`
+  only; the functions object's name is resolved per-project via the new
+  `C3_DEFAULT_FUNCTIONS_NAME` constant and `ReferenceIntegrityOptions.functionsName`,
+  with precedence explicit option → `manifest.functionsName` → the default
+  (fixed in commit 353f571). It slipped through because all 14 corpus projects
+  scanned used the default name, so the scan confirmed the observed **value**
+  but was structurally unable to reveal the **mechanism** behind it — every
+  sample happened to exercise the same code path. That sharpens, rather than
+  weakens, the case for keeping the scanner: it shows a corpus scan alone is
+  sufficient evidence for a domain-fact table's *values* but not for its
+  *shape* (fixed string vs. per-project setting) — a distinct question the
+  scan was never positioned to answer, no matter how many projects it covers.
+- Semver **minor** (1.8.0 → 1.9.0); the bump is a separate release commit.
+- **Unvalidated assumption, recorded honestly:** `NON_ATTRIBUTABLE_ADDON_TYPES
+  = ["theme"]` is derived from `C3UsedAddon`'s JSDoc and was **never
+  observed** across the 16-project scan (corrected 2026-08-04: the corpus is
+  14 projects, see `docs/domain-fact-audit.md`; only `plugin`/`behavior`/`effect`
+  were seen). The failure mode is benign either way — it only *suppresses* an
+  `addon-unused` warning, so being wrong costs a missed warning, not a false
+  alarm.
+- **`C3_PSEUDO_OBJECT_CLASSES` is empirically grounded but not provably
+  complete.** Three mitigations, in order: the table itself (a one-line
+  c3source change to extend), `ReferenceIntegrityOptions.pseudoObjectClasses`
+  (a downstream consumer unblocks itself without waiting for a release), and
+  the `warning` severity (point 5).
+- **Residual risk / adjacent scope deliberately excluded**, so a later author
+  doesn't assume it was missed:
+  - `Layout.eventSheet` and `IncludeEvent.includeSheet` (event-sheet name
+    references) are not checked.
+  - A future `LAYOUT_REFERENCE_ACES` table for System ACEs naming a layout is
+    not implemented — `go-to-layout` carries a **bare** `parameters.layout`,
+    `go-to-layout-by-name` a quoted expression, so the two need different
+    handling.
+  - `Condition/Action.behaviorType` is not checked — and **must not** be
+    checked naively: the canonical fixture has `{"objectClass":"Text",
+    "behaviorType":"Timer"}` where object type `Text` has **no** behaviors of
+    its own, because `Timer` is inherited through family `TextFamily`. A
+    naive object-type-only lookup would false-positive.
+  - The `.c3addon`-package ↔ `usedAddons` direction stays
+    **construct3-chef's** (`addonValidator.ts`, `addonInventory.ts`'s
+    four-state model). c3source ships the missing third edge — declared ↔
+    used-in-source. This ownership boundary is stated explicitly so it isn't
+    mistaken for a gap.
+- Zero existing tests required modification; `detectManifestDrift` and
+  `collectAddonAttribution` keep their exact shapes.
+
+## Related
+
+- [ADR 0012 — Per-area module split](/decisions/0012-per-area-module-split.md) — the sibling-tiering convention this decision's new DAG tier respects.
+- [ADR 0013 — Depend on fflate for .c3addon zip reading](/decisions/0013-fflate-dependency-c3addon-reader.md) — the dependency this decision avoids pulling into the manifest path by placing `references` above both `addons` and `manifest`.
+- [ADR 0022 — Domain-fact audit convention](/decisions/0022-domain-fact-audit-convention.md) — the confidence-labeling convention that later formalizes this ADR's `C3_PSEUDO_OBJECT_CLASSES` correction.
+- [ADR 0025 — Section item-hood and stray files](/decisions/0025-section-item-hood-and-stray-files.md) — a later, unrelated-in-mechanism addition to the same manifest/drift surface this ADR extends with a sibling detector.
+- [Reference Integrity](/reference-integrity.md) — the current state of the module this ADR establishes.
+- [Module Architecture](/module-architecture.md) — the current, further-grown module DAG including the `references` tier.
+
+[^adr-0021]: ADR 0021 (docs/decisions capture, 2026-08-20)

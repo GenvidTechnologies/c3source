@@ -34,10 +34,36 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 >   majors' worth of breaking changes. Depend on `@genvidtech/c3source`.
 >
 > Ranges below are per git tag. Detailed rationale for architectural decisions
-> lives in [`docs/decisions/`](docs/decisions/), not here — this file records
-> *what changed*, the ADRs record *why*.
+> lives in [`wiki/decisions/`](wiki/decisions/index.md), not here — this file
+> records *what changed*, the ADRs record *why*.
+>
+> - **The ADRs moved on 2026-08-20.** They were migrated from `docs/decisions/`
+>   into the project wiki at [`wiki/decisions/`](wiki/decisions/index.md), keeping
+>   their numbering and filenames. Entries below this preamble still link to the
+>   old `docs/decisions/` paths; those are **dated records left deliberately
+>   unedited** (the same reason ADR 0024 keeps its "with no CHANGELOG.md"
+>   reasoning above). To resolve one, swap the `docs/` prefix for `wiki/`, or read
+>   the verbatim pre-migration capture under `raw/`.
 
 ## [Unreleased]
+
+### Changed
+
+- **All project documentation moved into an LLM-wiki.** `docs/` guides and the
+  26 ADRs were migrated to `wiki/` (14 synthesized concept pages) and
+  `wiki/decisions/` (the ADRs, numbering and filenames preserved), with verbatim
+  immutable captures of every original under `raw/`. `docs/` retains only the
+  four files the tooling contract requires: `TOC.md`, `wiki-schema.md`,
+  `issue-triage.md`, and the new `wiki-schema.md` maintenance rules. `CLAUDE.md`
+  keeps its operational sections and points at the wiki for architecture and
+  domain knowledge.
+- **JSDoc doc-pointers now name the wiki.** Thirteen `@see`-style pointers in
+  `eventSheets`, `layouts`, `manifest`, `references` and `serialize` referenced
+  `docs/domain-fact-audit.md`; they now reference `wiki/c3-domain-facts.md`.
+  **This reaches the published tarball** — JSDoc ships in `dist/*.d.ts`, and the
+  `functionsName` pointer sits on an interface member, so the
+  `scripts/api-surface.mjs` dump moves. No signature, export, or behaviour
+  changed; verify with a JSDoc-stripped diff rather than expecting an empty one.
 
 ## [2.0.1] - 2026-08-19
 
