@@ -8,8 +8,11 @@ Each entry should be a one-line description. Only list docs that exist.
 > **This project's documentation lives in an LLM-wiki, not in `docs/`.**
 > On 2026-08-20 the API guides, the domain-fact audit, the design-patterns
 > reference and all 26 Architecture Decision Records were migrated to
-> [`wiki/`](../wiki/index.md). `docs/` now holds only the files the plugin
-> convention contract and the wiki's own maintenance schema require.
+> [`wiki/`](../wiki/index.md). `docs/` now holds three files, each pinned to
+> that path by plugin tooling: `TOC.md` (the convention contract),
+> `wiki-schema.md` (`maintain-wiki` probes it there and would re-scaffold it),
+> and `issue-triage.md` (read by `triage-issues`). They move once the plugin
+> honours `paths` overrides (gvt-dev #374).
 > Verbatim, immutable captures of every migrated file are kept under
 > [`raw/`](../raw/README.md).
 
@@ -28,4 +31,4 @@ Each entry should be a one-line description. Only list docs that exist.
 
 ## Process
 
-- `issue-triage.md` — issue-triage conventions (flat GitHub label set, no priority/area scheme): categories, required fields, splitting, duplicates, dependencies, and the `gh` mutation recipes consumed by `/gvt-dev:triage-issues`
+- `issue-triage.md` — issue-triage conventions (flat GitHub label set, no priority/area scheme): categories, required fields, splitting, duplicates, dependencies, and the `gh` mutation recipes consumed by `/gvt-dev:triage-issues`. The explanation and rationale live in [`../wiki/issue-triage.md`](../wiki/issue-triage.md); this file stays in `docs/` because the plugin reads that exact path (gvt-dev #580)

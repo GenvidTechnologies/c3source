@@ -53,10 +53,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   26 ADRs were migrated to `wiki/` (14 synthesized concept pages) and
   `wiki/decisions/` (the ADRs, numbering and filenames preserved), with verbatim
   immutable captures of every original under `raw/`. `docs/` retains only the
-  four files the tooling contract requires: `TOC.md`, `wiki-schema.md`,
-  `issue-triage.md`, and the new `wiki-schema.md` maintenance rules. `CLAUDE.md`
-  keeps its operational sections and points at the wiki for architecture and
-  domain knowledge.
+  three files plugin tooling reads at a fixed path: `TOC.md`, `wiki-schema.md`
+  (the wiki maintenance rules), and `issue-triage.md`, whose rationale is now
+  also synthesized into `wiki/issue-triage.md`. `CLAUDE.md` keeps its
+  operational sections and points at the wiki for architecture and domain
+  knowledge.
 - **JSDoc doc-pointers now name the wiki.** Thirteen `@see`-style pointers in
   `eventSheets`, `layouts`, `manifest`, `references` and `serialize` referenced
   `docs/domain-fact-audit.md`; they now reference `wiki/c3-domain-facts.md`.
