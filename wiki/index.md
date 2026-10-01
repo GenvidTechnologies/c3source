@@ -54,4 +54,5 @@ See `docs/wiki-schema.md` for the page format and maintenance rules.
 ## Process
 
 * [Development Workflow](development-workflow.md) - c3source's day-to-day working conventions — npm/Node, the four checks and the gate that chains them, mocha/chai/tsx test invocation, the hard rule against running Prettier, the file:line citation policy, and the ephemeral-work-doc / durable-record split.
+* [Issue Triage](issue-triage.md) - How c3source triages GitHub issues — the flat-label variant (default category labels plus triaged, no priority or area scheme), the double meaning of the question label and the rule it forces, the splitting/duplicate/dependency policies, and why the operational contract still lives at docs/issue-triage.md.
 * [CI & Publishing](ci-and-publishing.md) - c3source's CI runs the shared, secret-free node-gate reusable workflow on GitHub Actions; publishing to the public npm registry as @genvidtech/c3source is tag-triggered and uses OIDC trusted publishing with no long-lived token, and CHANGELOG.md must have Unreleased moved into a dated section before a tag is pushed.

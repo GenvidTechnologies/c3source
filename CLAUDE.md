@@ -27,7 +27,9 @@ examples behind this rule.
 **This repo's documentation lives in an LLM-wiki under `wiki/`, not in `docs/`.**
 Architecture, the C3 domain facts, the API surface, the fixture mechanism, and
 all 26 Architecture Decision Records were migrated there on 2026-08-20. `docs/`
-now holds only the four files the tooling contract requires.
+now holds only three files — `TOC.md`, `wiki-schema.md`, and `issue-triage.md` —
+each pinned to that path by plugin tooling until the plugin honours `paths`
+overrides (gvt-dev #374).
 
 Start at **[`wiki/index.md`](wiki/index.md)** — it lists every page with a
 one-line description. Direct routes:
@@ -46,6 +48,7 @@ one-line description. Direct routes:
 | The `construct3-sample` golden fixture and pin-bump hazards | [`wiki/canonical-fixture.md`](wiki/canonical-fixture.md) |
 | Tab indent, no trailing newline, the `.brush.json` exception | [`wiki/serialization-form.md`](wiki/serialization-form.md) |
 | Reusable patterns this repo has settled on | [`wiki/design-patterns.md`](wiki/design-patterns.md) |
+| How issues are triaged — labels, the `question` double meaning, duplicates | [`wiki/issue-triage.md`](wiki/issue-triage.md) |
 | **Why** a design is the way it is | [`wiki/decisions/index.md`](wiki/decisions/index.md) |
 
 Two rules when working with the wiki:

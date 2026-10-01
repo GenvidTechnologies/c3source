@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See `docs/wiki-schema.md` for
 the full maintenance schema.
 
+## 2026-10-01
+
+* **Creation**: issue-triage.md, driven by `raw/docs-issue-triage-2026-10-01.md`.
+
 ## 2026-08-20
 
 * **Update**: module-architecture.md — strengthened the JSDoc-dump asymmetry evidence with a controlled both-halves experiment, driven by `raw/2026-08-20-jsdoc-dump-asymmetry-experiment.md`.
