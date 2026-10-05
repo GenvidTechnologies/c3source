@@ -974,6 +974,82 @@ export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
 };
 
 /**
+ * File extension, dotted and lowercase (`".png"`), -> the `type` (MIME) the C3 editor
+ * records on a {@link C3FileEntry} under `rootFileFolders`. The writer direction of
+ * {@link IMAGE_FILE_TYPE_EXTENSIONS} / {@link SCRIPT_FILE_TYPE_EXTENSIONS}, which
+ * map the other way. The mapping is flat across the `rootFileFolders` sections (the
+ * r49502 experiment showed general, sound, music and font agree). Exported so callers
+ * can introspect/extend — an open `Record<string, string>`, see ADR 0024 Compromise 5.
+ *
+ * **KNOWN INCOMPLETE** — this table is not exhaustive and never claims to be.
+ *
+ * **AUDITED** (observed in two or more independent editor-saved projects): `.css`,
+ * `.html`, `.json`, `.png`, `.js`, `.ts`, `.ttf`, `.webm`, `.plist`.
+ *
+ * **UNVALIDATED** (seen in one project or one editor save): `.txt`, `.xml`, `.vtt`,
+ * `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.mp4`, `.mp3`, `.m4a`.
+ *
+ * **Observed, not specified:** the editor bundle reads `type` from an opaque getter, so
+ * these values are observed editor outputs (C3 r49502), not a documented contract.
+ * Residuals: a video-content `.webm`, and other OSes, are untested.
+ *
+ * **Blast radius:** a silently wrong `type` is written into `project.c3proj`; whether
+ * C3 re-derives it on load is unknown.
+ *
+ * **Fallback policy**, contrasted with both siblings: {@link IMAGE_FILE_TYPE_EXTENSIONS}
+ * throws on an unknown key (via its accessor), and {@link SCRIPT_FILE_TYPE_EXTENSIONS}
+ * yields a silent `undefined`. This table, indexed directly, is also `undefined`;
+ * {@link fileTypeForName} instead falls back to {@link C3_DEFAULT_FILE_TYPE}. See
+ * `wiki/c3-domain-facts.md` for the evidence.
+ */
+export const EXTENSION_FILE_TYPES: Record<string, string> = {
+  // AUDITED
+  ".css": "text/css",
+  ".html": "text/html",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".js": "application/javascript",
+  ".ts": "application/typescript",
+  ".ttf": "application/font-sfnt",
+  ".webm": "audio/webm; codecs=opus",
+  ".plist": "application/octet-stream",
+  // UNVALIDATED
+  ".txt": "text/plain",
+  ".xml": "text/xml",
+  ".vtt": "application/octet-stream",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+};
+
+/** The `type` {@link fileTypeForName} returns for an extension absent from {@link EXTENSION_FILE_TYPES}. */
+export const C3_DEFAULT_FILE_TYPE = "application/octet-stream";
+
+/**
+ * The `type` (MIME) the C3 editor would record for a file entry named `name`, resolved
+ * from its extension via {@link EXTENSION_FILE_TYPES}. Case-insensitive; accepts a bare
+ * name or a `/`- or `\`-separated path (only the basename is considered). A name with no
+ * extension, a trailing dot, or an unlisted extension returns {@link C3_DEFAULT_FILE_TYPE}.
+ *
+ * @example
+ * fileTypeForName("files/sub/PHOTO.JPG"); // "image/jpeg"
+ * fileTypeForName("LICENSE"); // "application/octet-stream"
+ */
+export function fileTypeForName(name: string): string {
+  const base = name.slice(Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\")) + 1).toLowerCase();
+  const dot = base.lastIndexOf(".");
+  const ext = dot === -1 ? "" : base.slice(dot);
+  return Object.prototype.hasOwnProperty.call(EXTENSION_FILE_TYPES, ext)
+    ? EXTENSION_FILE_TYPES[ext]
+    : C3_DEFAULT_FILE_TYPE;
+}
+
+/**
  * Resolve the on-disk extension for a C3 image `fileType` MIME string, treating an
  * absent/empty value as malformed (throws) rather than tolerating it as a pre-r402
  * legacy node. Unmapped (present but unrecognized) `fileType` also throws.

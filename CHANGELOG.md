@@ -47,6 +47,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **`EXTENSION_FILE_TYPES`, `C3_DEFAULT_FILE_TYPE` and `fileTypeForName`** — the
+  writer direction of the file-entry `type` fact: file extension to the MIME `type`
+  the C3 editor records on a `rootFileFolders` file entry. The table is tiered
+  (AUDITED / UNVALIDATED) and marked known-incomplete; `fileTypeForName(name)` is
+  case-insensitive and falls back to `C3_DEFAULT_FILE_TYPE`
+  (`application/octet-stream`) for an unknown or missing extension (#86).
+
 ### Changed
 
 - **All project documentation moved into an LLM-wiki.** `docs/` guides and the
