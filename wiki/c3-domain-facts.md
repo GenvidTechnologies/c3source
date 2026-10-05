@@ -15,6 +15,10 @@ sources:
     resource: ../raw/docs-domain-fact-audit-2026-08-20.md
     title: "docs/domain-fact-audit.md (c3source C3 domain-fact audit, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: issue-86-evidence
+    resource: ../raw/issue-86-file-entry-type-evidence-2026-10-01.md
+    title: "Issue #86 file-entry type evidence (capture, 2026-10-01)"
+    last_modified: 2026-10-01
 ---
 
 # C3 Domain Facts
@@ -105,12 +109,13 @@ point of use[^claude-md].
 
 ## Per-table inventory and confidence labels
 
-Nine exported tables have been corpus-scanned as of this capture. The first
+Ten exported tables have been corpus-scanned as of this capture. The first
 six were scanned 2026-08-04 for issue #68; `SCRIPT_SOURCE_EXTENSIONS`/
 `SCRIPT_FILE_TYPE_EXTENSIONS` were added 2026-08-10 for issue #73/#74;
-`C3_SECTION_ITEM_EXTENSION` was added 2026-08-11 for issue #76 — the three
+`C3_SECTION_ITEM_EXTENSION` was added 2026-08-11 for issue #76;
+`EXTENSION_FILE_TYPES` was added 2026-10-01 for issue #86 — the four
 groups were not scanned together and should not be read as equally
-fresh[^domain-fact-audit].
+fresh[^domain-fact-audit][^issue-86-evidence].
 
 | Table | Predicate/accessor | Corpus verdict | Blast radius if wrong |
 |---|---|---|---|
@@ -123,6 +128,7 @@ fresh[^domain-fact-audit].
 | `SCRIPT_SOURCE_EXTENSIONS` | `isScriptSourceName` | NO GAPS at value level; `.ts`→r433 bundle-pinned | Silent over/under-collection in script discovery, never a throw |
 | `SCRIPT_FILE_TYPE_EXTENSIONS` | — | NO GAPS; same corpus as above | Silent miss in manifest interpretation, never a throw — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS` |
 | `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one) | Silent mis-partition between "section item" and "stray" |
+| `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, two tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
 
 The corpus is 14 Genvid-authored projects spanning 8 releases (`37900,
 38802, 39700, 40702, 44002, 44902, 47604, 49500`), skewed heavily toward
@@ -130,6 +136,51 @@ The corpus is 14 Genvid-authored projects spanning 8 releases (`37900,
 ~97% of all ACEs and ~99.5% of all image nodes in the entire corpus, so
 every other project is, on volume, a rounding error next to it. Scan **can
 find gaps; it can never prove completeness**[^domain-fact-audit].
+
+## EXTENSION_FILE_TYPES: the writer-direction fact
+
+Every other MIME table maps MIME to extension, for reading. This one maps an
+extension to the `type` the editor records on a `rootFileFolders` file entry,
+for a tool that writes entries; [ADR
+0027](/decisions/0027-file-entry-type-writer-fact.md) owns the decision. The
+mechanism is hidden: the editor bundle reads `type` from an opaque getter, so
+the values are **observed editor outputs, not a specification**[^issue-86-evidence].
+
+**Corpus evidence.** Probe 10 (`fileEntryType`) of the scanner covers the 14
+inventoried projects: 567 file entries across 8 releases (`37900` to `49500`),
+with 0 mismatches and 0 unmapped. The heavy rows are `.ts` in `script` (132
+entries, 3 projects), `.png` in `icon` (128 entries, 14 projects), and `.webm`
+in `sound` and `music` (107 and 42 entries, one project each)[^issue-86-evidence].
+
+**Editor saves outside that scan.** `construct3-sample` was saved at C3 r49502
+for upstream #5 and for the maintainer's 2026-10-01 experiment: one save each of
+general `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`, `.mp4`, `.mp3`, `.m4a` and
+`.plist`, and the same audio `.webm` and `.ttf` saved in `sound`/`music`/`font`
+and under `files/`. Both placements recorded identical strings
+(`audio/webm; codecs=opus`, `application/font-sfnt`), so the table is **flat**
+across sections. A browser `File.type` would not yield `; codecs=opus`, so the
+value is probably probed by the editor — an inference, not a bundle
+finding[^issue-86-evidence].
+
+**Tiers.** Counted in independent editor-saved projects, the sample included:
+
+- **AUDITED** (2 or more): `.png` (14 projects), `.json` (4), `.html` (4), `.ts`
+  (3), `.css` (2), `.js` (2); then `.ttf`, `.webm` and `.plist` at 2 each —
+  burbank plus the sample's r49502 saves.
+- **UNVALIDATED** (one project or one save): `.txt` and `.xml` (burbank only),
+  `.vtt` (`c3addon-gcore-video-plugin` only), and `.jpeg`, `.gif`, `.svg`,
+  `.webp`, `.mp4`, `.mp3`, `.m4a` (one sample save each). `.jpg` is
+  UNVALIDATED too: burbank's 26 `.jpg` entries were **hand-edited**, not
+  editor-written, so the only editor-written `.jpg` is the sample's.
+
+The 14-project scan prints `.ttf`, `.webm` and `.plist` at **1 project** each
+only because it does not include the sample's r49502 saves; the tier above
+counts them. Across all 38 manifests on the maintainer machine, duplicates
+included, no extension was ever observed with two different types in any
+section, and the `video` section is empty[^issue-86-evidence].
+
+**Residuals, untested:** a `.webm` carrying video, and other operating
+systems.
 
 ## Two defects the audit found and fixed
 
@@ -208,11 +259,22 @@ failure[^domain-fact-audit]. Scan the inventoried corpus, not every
 `project.c3proj` reachable from a broad `find` — a naive walk can
 double-count a project reached through both a top-level checkout and a
 backup/submodule copy, inflating counts and adding phantom
-releases[^domain-fact-audit]. On any future C3 version bump, re-run it and
+releases[^domain-fact-audit].
+
+**The recorded re-run glob is no longer safe.** The command in the audit
+capture (`ls /c/repos/*/project.c3proj /c/repos/*/*/project.c3proj`) now
+returns **15** projects on the maintainer machine, not 14, because
+`/c/repos/google/burbank` duplicates burbank at depth 2. Deduplicate against
+the inventory before scanning; burbank holds ~97% of all ACEs, so a second
+copy skews every count[^issue-86-evidence].
+
+On any future C3 version bump, re-run it and
 update this doc's **numbers** — never the JSDoc labels.
 
 ## Related
 
+- [ADR 0027 — File-entry type as a writer-direction domain fact](/decisions/0027-file-entry-type-writer-fact.md) — why `EXTENSION_FILE_TYPES` is an open table with an accessor and two tiers.
+- [Project Manifest](/project-manifest.md) — where `EXTENSION_FILE_TYPES` sits beside its reading-direction siblings.
 - [Reference Integrity](/reference-integrity.md) — `C3_PSEUDO_OBJECT_CLASSES` and the functions-object defect this convention's rules were built to catch.
 - [Layout Traversal](/layout-traversal.md) — `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`, one of the tables audited here.
 - [Serialization Form](/serialization-form.md) — `C3_MINIFIED_SOURCE_SUFFIXES`/`isMinifiedSourcePath`, another audited table.
@@ -220,3 +282,4 @@ update this doc's **numbers** — never the JSDoc labels.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^domain-fact-audit]: docs/domain-fact-audit.md (c3source C3 domain-fact audit, 2026-08-20 capture)
+[^issue-86-evidence]: Issue #86 file-entry type evidence (capture, 2026-10-01)

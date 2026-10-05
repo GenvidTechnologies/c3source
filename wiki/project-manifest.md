@@ -106,6 +106,18 @@ C3 derives both the extension and the MIME from a single ternary, so exactly
 two script languages exist; `.ts` is only recognized from C3 release r433
 onward[^api-guide-manifest].
 
+Both of those tables, and `IMAGE_FILE_TYPE_EXTENSIONS`, run **MIME to
+extension**, the direction a manifest *reader* needs. `EXTENSION_FILE_TYPES`
+runs the other way — dotted lowercase extension to the `type` the editor
+records on a `rootFileFolders` file entry — for a tool that *writes* entries.
+`fileTypeForName(name)` resolves a bare name or a `/`- or `\`-separated path
+case-insensitively and falls back to `C3_DEFAULT_FILE_TYPE`
+(`application/octet-stream`); indexing the table directly gives `undefined`
+instead. The table is flat across sections, `KNOWN INCOMPLETE`, and split into
+AUDITED and UNVALIDATED tiers; see [ADR
+0027](/decisions/0027-file-entry-type-writer-fact.md) and [C3 Domain
+Facts](/c3-domain-facts.md) for the evidence.
+
 ## Canonical walks and their thin collectors
 
 `collectManifestItemNames`/`collectManifestFileNames` are thin consumers of
