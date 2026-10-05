@@ -1,12 +1,14 @@
-// Corpus scanner for NINE exported C3 domain-fact tables (ADR 0008):
+// Corpus scanner for TEN exported C3 domain-fact tables (ADR 0008):
 // EVENTVAR_REFERENCE_ACES, COMPARISON_OPERATORS, IMAGE_FILE_TYPE_EXTENSIONS,
 // EDITOR_FIELD_RULES, EDITOR_LOCAL_EXCLUSIONS (via isEditorLocalPath),
 // C3_MINIFIED_SOURCE_SUFFIXES (via isMinifiedSourcePath),
 // SCRIPT_SOURCE_EXTENSIONS (via isScriptSourceName),
-// SCRIPT_FILE_TYPE_EXTENSIONS, and C3_SECTION_ITEM_EXTENSION (via
-// isSectionItemName). The last probe additionally doubles as the STRAY-FILE
-// INVENTORY (src/manifest.ts's `detectStrayFiles`), since it walks the seven
-// name-section roots with that exact same predicate.
+// SCRIPT_FILE_TYPE_EXTENSIONS, C3_SECTION_ITEM_EXTENSION (via
+// isSectionItemName), and EXTENSION_FILE_TYPES (probe 10, fileEntryType, which
+// walks every `rootFileFolders` section of the manifest). The section-item
+// probe additionally doubles as the STRAY-FILE INVENTORY (src/manifest.ts's
+// `detectStrayFiles`), since it walks the seven name-section roots with that
+// exact same predicate.
 //
 // Why this exists (durable asset, not scaffolding): ADR 0008's "Consequences"
 // section (wiki/decisions/0008-c3-domain-fact-tables.md, "Consequences") records that the
@@ -71,6 +73,7 @@ const {
   EDITOR_FIELD_RULES,
   EDITOR_LOCAL_EXCLUSIONS,
   EVENTVAR_REFERENCE_ACES,
+  EXTENSION_FILE_TYPES,
   IMAGES_FOLDER,
   IMAGE_FILE_TYPE_EXTENSIONS,
   PROJECT_MANIFEST_FILE,
@@ -526,6 +529,69 @@ function scanSectionItem(result, projectDir, release) {
   }
 }
 
+// ─── probe 10: fileEntryType ────────────────────────────────────────────────
+
+/**
+ * Structural walk over one `rootFileFolders` section's `{items, subfolders}` tree,
+ * returning each item's raw `name` and `type` (MIME, or undefined when absent).
+ */
+function collectFileEntryNodes(folder) {
+  const nodes = [];
+  if (!folder || typeof folder !== "object") return nodes;
+  for (const item of Array.isArray(folder.items) ? folder.items : []) {
+    nodes.push({
+      name: item && typeof item === "object" ? item.name : undefined,
+      type: item && typeof item === "object" ? item.type : undefined,
+    });
+  }
+  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
+    nodes.push(...collectFileEntryNodes(sub));
+  }
+  return nodes;
+}
+
+/** Lowercased extension of a bare or path-like entry name, `(none)` when it has no extension. */
+function fileEntryExt(name) {
+  const base = String(name).slice(Math.max(String(name).lastIndexOf("/"), String(name).lastIndexOf("\\")) + 1).toLowerCase();
+  const dot = base.lastIndexOf(".");
+  return dot === -1 || dot === base.length - 1 ? "(none)" : base.slice(dot);
+}
+
+function bumpFileEntryType(map, ext, section, type, status, projectDir) {
+  const key = [ext, section, type, status].join("\t");
+  let e = map.get(key);
+  if (!e) {
+    e = { count: 0, ext, section, type, status, projects: new Set() };
+    map.set(key, e);
+  }
+  e.count++;
+  e.projects.add(projectDir);
+}
+
+/**
+ * Walks EVERY section of the MANIFEST's `rootFileFolders` (recursively through
+ * `subfolders`) and buckets each file entry by lowercased extension x section x
+ * recorded `type` x status against the imported `EXTENSION_FILE_TYPES` table:
+ * MATCH (extension is a key and the value equals the recorded `type`), MISMATCH
+ * (key present, value differs), UNMAPPED (extension is not a key). Reports
+ * partitions only; the AUDITED-tier verdict (>=2 independent projects) is the
+ * maintainer's, recomputed from the per-bucket distinct-project counts.
+ */
+function scanFileEntryType(result, projectDir, manifest) {
+  const folders = manifest && typeof manifest === "object" ? manifest.rootFileFolders : undefined;
+  if (!folders || typeof folders !== "object") return;
+  for (const [section, folder] of Object.entries(folders)) {
+    for (const node of collectFileEntryNodes(folder)) {
+      result.fileEntryTypeCount++;
+      const ext = fileEntryExt(node.name);
+      const type = node.type === undefined ? ABSENT : String(node.type);
+      const keyed = Object.prototype.hasOwnProperty.call(EXTENSION_FILE_TYPES, ext);
+      const status = !keyed ? "UNMAPPED" : EXTENSION_FILE_TYPES[ext] === node.type ? "MATCH" : "MISMATCH";
+      bumpFileEntryType(result.fileEntryType, ext, section, type, status, projectDir);
+    }
+  }
+}
+
 // ─── per-project orchestration ──────────────────────────────────────────────
 
 function newResult() {
@@ -540,6 +606,7 @@ function newResult() {
     minifiedJsonCount: 0,
     scriptSourceFileCount: 0,
     scriptFileTypeCount: 0,
+    fileEntryTypeCount: 0,
     sectionItemCount: 0,
     strayFileCount: 0,
     eventvar: new Map(),
@@ -553,6 +620,7 @@ function newResult() {
     scriptPairing: { paired: 0, unpaired: 0 },
     scriptFileType: new Map(),
     sectionItem: new Map(),
+    fileEntryType: new Map(),
     failedProbes: [],
   };
 }
@@ -633,6 +701,28 @@ function printScriptFileTypeTable(map, count, heading) {
   if (map.size === 0) console.log("  (no declared script items found)");
 }
 
+function sortedFileEntryBuckets(map) {
+  return [...map.values()].sort(
+    (a, b) =>
+      b.count - a.count ||
+      a.ext.localeCompare(b.ext) ||
+      a.section.localeCompare(b.section) ||
+      a.type.localeCompare(b.type) ||
+      a.status.localeCompare(b.status),
+  );
+}
+
+function printFileEntryTypeTable(map, count, heading) {
+  console.log(`${heading}: ${count} file entr(ies)`);
+  if (count === 0) {
+    console.log("  NOT EXERCISED (0 file entries observed)");
+    return;
+  }
+  for (const e of sortedFileEntryBuckets(map)) {
+    console.log(`  ${e.count}\t${e.ext}\t${e.section}\t${e.type}\t${e.status}`);
+  }
+}
+
 function printSectionItemTable(map, itemCount, strayCount, heading) {
   console.log(`${heading}: ${itemCount} section item(s) / ${strayCount} stray file(s)`);
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
@@ -682,6 +772,7 @@ function scanProject(projectDir) {
     scanScriptFileType(result, projectDir, release, manifest),
   );
   runProbe(projectDir, result.failedProbes, "sectionItem", () => scanSectionItem(result, projectDir, release));
+  runProbe(projectDir, result.failedProbes, "fileEntryType", () => scanFileEntryType(result, projectDir, manifest));
 
   printEventVarTable(result.eventvar, result.sheetCount, result.aceCount, "TABLE EVENTVAR_REFERENCE_ACES");
   printComparisonTable(result.comparison, result.comparisonCount, "TABLE COMPARISON_OPERATORS");
@@ -697,6 +788,7 @@ function scanProject(projectDir) {
     result.strayFileCount,
     "TABLE C3_SECTION_ITEM_EXTENSION / STRAY-FILE INVENTORY",
   );
+  printFileEntryTypeTable(result.fileEntryType, result.fileEntryTypeCount, "TABLE EXTENSION_FILE_TYPES (fileEntryType)");
 
   console.log(
     `SUMMARY ${projectDir}: release=${release ?? "UNKNOWN"}, sheets=${result.sheetCount}, aces=${result.aceCount}, ` +
@@ -704,6 +796,7 @@ function scanProject(projectDir) {
       `editorLocalFiles=${result.editorLocalFileCount}, minifiedJson=${result.minifiedJsonCount}, ` +
       `scriptSourceFiles=${result.scriptSourceFileCount}, scriptFileTypeItems=${result.scriptFileTypeCount}, ` +
       `sectionItems=${result.sectionItemCount}, strayFiles=${result.strayFileCount}, ` +
+      `fileEntries=${result.fileEntryTypeCount}, ` +
       `failedProbes=${result.failedProbes.length > 0 ? result.failedProbes.join(",") : "none"}`,
   );
 
@@ -849,6 +942,18 @@ function mergeSectionItem(target, source) {
       tse.count += se.count;
       for (const r of se.releases) tse.releases.add(r);
     }
+  }
+}
+
+function mergeFileEntryType(target, source) {
+  for (const [key, e] of source) {
+    let t = target.get(key);
+    if (!t) {
+      t = { count: 0, ext: e.ext, section: e.section, type: e.type, status: e.status, projects: new Set() };
+      target.set(key, t);
+    }
+    t.count += e.count;
+    for (const p of e.projects) t.projects.add(p);
   }
 }
 
@@ -1021,6 +1126,25 @@ function printScriptFileTypeRollup(map, count, releaseSet) {
   if (map.size === 0) console.log("  (no declared script items found across corpus)");
 }
 
+/** probe 10 rollup: per-bucket observation count and DISTINCT-project count, then a per-status total. */
+function printFileEntryTypeRollup(map, count, releaseSet) {
+  console.log(`TABLE EXTENSION_FILE_TYPES (fileEntryType): ${count} file entr(ies) / ${releaseSet.size} releases`);
+  if (count === 0) {
+    console.log("  NOT EXERCISED (0 file entries observed across corpus)");
+    return;
+  }
+  console.log("  count\tprojects\text\tsection\ttype\tstatus");
+  for (const e of sortedFileEntryBuckets(map)) {
+    console.log(`  ${e.count}\t${e.projects.size}\t${e.ext}\t${e.section}\t${e.type}\t${e.status}`);
+  }
+  for (const status of ["MATCH", "MISMATCH", "UNMAPPED"]) {
+    const buckets = [...map.values()].filter((e) => e.status === status);
+    const total = buckets.reduce((n, e) => n + e.count, 0);
+    const projects = new Set(buckets.flatMap((e) => [...e.projects]));
+    console.log(`  -> ${status}: ${total} entr(ies) in ${buckets.length} bucket(s) across ${projects.size} distinct project(s)`);
+  }
+}
+
 /**
  * Per-section rollup: NOT EXERCISED for a section with zero files scanned
  * (directory absent from every project, e.g. `models3d/`) is distinct from a
@@ -1068,6 +1192,7 @@ const corpus = {
   minifiedJsonCount: 0,
   scriptSourceFileCount: 0,
   scriptFileTypeCount: 0,
+  fileEntryTypeCount: 0,
   sectionItemCount: 0,
   strayFileCount: 0,
   eventvar: new Map(),
@@ -1081,6 +1206,7 @@ const corpus = {
   scriptPairing: { paired: 0, unpaired: 0 },
   scriptFileType: new Map(),
   sectionItem: new Map(),
+  fileEntryType: new Map(),
 };
 
 for (const projectDir of projectDirs) {
@@ -1110,6 +1236,7 @@ for (const projectDir of projectDirs) {
   corpus.minifiedJsonCount += result.minifiedJsonCount;
   corpus.scriptSourceFileCount += result.scriptSourceFileCount;
   corpus.scriptFileTypeCount += result.scriptFileTypeCount;
+  corpus.fileEntryTypeCount += result.fileEntryTypeCount;
   corpus.sectionItemCount += result.sectionItemCount;
   corpus.strayFileCount += result.strayFileCount;
   mergeEventVar(corpus.eventvar, result.eventvar);
@@ -1123,6 +1250,7 @@ for (const projectDir of projectDirs) {
   mergeScriptPairing(corpus.scriptPairing, result.scriptPairing);
   mergeScriptFileType(corpus.scriptFileType, result.scriptFileType);
   mergeSectionItem(corpus.sectionItem, result.sectionItem);
+  mergeFileEntryType(corpus.fileEntryType, result.fileEntryType);
 }
 
 console.log("\n=== corpus roll-up ===");
@@ -1139,5 +1267,6 @@ printMinifiedRollup(corpus.minified, corpus.minifiedJsonCount);
 printScriptSourceRollup(corpus.scriptSource, corpus.scriptSourceFileCount, corpus.scriptPairing, releaseSet);
 printScriptFileTypeRollup(corpus.scriptFileType, corpus.scriptFileTypeCount, releaseSet);
 printSectionItemRollup(corpus.sectionItem, corpus.sectionItemCount, corpus.strayFileCount, releaseSet);
+printFileEntryTypeRollup(corpus.fileEntryType, corpus.fileEntryTypeCount, releaseSet);
 
 process.exit(failedCount > 0 ? 1 : 0);
