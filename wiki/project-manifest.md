@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-10-05T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -93,8 +93,9 @@ export including `objectTypes`, which has no per-type directory).
 `C3_ROOT_FILE_FOLDERS` maps each `rootFileFolders` category to its on-disk
 source folder, with a deliberate singular-to-plural naming shift (`script`→
 `scripts`, `icon`→`icons`, both fixture-confirmed; `sound`, `music`,
-`video`, `font`, `general` follow the same pattern but are inferred, not
-fixture-validated against a project with those assets populated)[^api-guide-manifest].
+`font`, `general` follow the same pattern and are fixture-validated since
+construct3-sample v1.2.0; only `video` remains inferred, not
+fixture-validated)[^api-guide-manifest].
 
 `SCRIPT_FILE_TYPE_EXTENSIONS` maps a script `C3FileEntry.type` MIME
 (`application/javascript`→`.js`, `application/typescript`→`.ts`) to its
@@ -105,6 +106,18 @@ difference: **an unmapped MIME here is a silent miss, never a throw**, unlike
 C3 derives both the extension and the MIME from a single ternary, so exactly
 two script languages exist; `.ts` is only recognized from C3 release r433
 onward[^api-guide-manifest].
+
+Both of those tables, and `IMAGE_FILE_TYPE_EXTENSIONS`, run **MIME to
+extension**, the direction a manifest *reader* needs. `EXTENSION_FILE_TYPES`
+runs the other way — dotted lowercase extension to the `type` the editor
+records on a `rootFileFolders` file entry — for a tool that *writes* entries.
+`fileTypeForName(name)` resolves a bare name or a `/`- or `\`-separated path
+case-insensitively and falls back to `C3_DEFAULT_FILE_TYPE`
+(`application/octet-stream`); indexing the table directly gives `undefined`
+instead. The table is flat across sections, `KNOWN INCOMPLETE`, and split into
+AUDITED and UNVALIDATED tiers; see [ADR
+0027](/decisions/0027-file-entry-type-writer-fact.md) and [C3 Domain
+Facts](/c3-domain-facts.md) for the evidence.
 
 ## Canonical walks and their thin collectors
 

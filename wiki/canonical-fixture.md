@@ -5,7 +5,7 @@ description: construct3-sample is the tag-pinned, editor-round-tripped golden C3
 tags: [canonical-fixture, construct3-sample, submodule, fixture-gate, mocharc]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-10-05T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -16,7 +16,7 @@ sources:
 # Canonical Reference Fixture
 
 `construct3-sample/` is a **second** git submodule (added issue #51), pinned
-at the commit tagged `v1.1.0` as of this capture — the single,
+at the commit tagged `v1.2.0` (`fe53059`) as of 2026-10-05 — the single,
 editor-round-tripped golden C3 project that c3source and its sibling tools
 consume instead of each hand-maintaining a drifting fixture[^claude-md].
 
@@ -63,6 +63,19 @@ fixture.** Because materialization reads tracked HEAD content, enriching the
 golden requires a **local commit in the `construct3-sample` submodule**
 before the change appears in the materialized fixture[^claude-md].
 
+**The same rule bites in reverse: the archive is of the submodule's
+checked-out HEAD, not of the gitlink c3source records.** If the checkout has
+drifted from the pin (on 2026-10-01 it sat at `b3001bd` while the gitlink was
+`c6884ff`), `npm test` silently grades an unpinned golden. Before trusting a
+fixture-gated result, confirm `git -C construct3-sample rev-parse HEAD` equals
+the commit in `git ls-tree HEAD construct3-sample`. A guard in
+`prep-fixture.mjs` is proposed in c3source#88.
+
+Do not run an editor experiment in `test/fixtures/canonical/`. It is
+gitignored and `pretest` deletes it (`rmSync` in `prep-fixture.mjs`) on the
+next `npm test`, so the work would be lost. Run editor experiments in the
+`construct3-sample` submodule working tree, which survives.
+
 ## Overlay vs. upstream-enrich: the decision rule
 
 Coverage the golden genuinely *should* carry — a real C3 construct a
@@ -96,6 +109,7 @@ adding, removing, or moving any[^claude-md]:
 | v0.7.0 | Custom ACE on `NavButton`; a function sampled without a description — the enrichment behind `custom-ace-name-required` and the disproof that `functionDescription` is a loader requirement |
 | v1.0.0 (**MAJOR**) | "Cross-domain coupling coverage" (driven upstream by `c3-domain-manager`#34): folds `eventSheets/`/`layouts/` into `Gameplay/`/`UI/` subfolders, adds a cross-domain include, an object-member expression reference, and an event-variable reference, each deliberately crossing a folder boundary |
 | v1.1.0 | Local variable referenced before its declaration in `UI/Event sheet 2` — the observable signature separating level-wide visibility from re-initialization-at-declaration (see [Event-Sheet Extraction](/event-sheet-extraction.md)) |
+| v1.2.0 | File-entry media (upstream #5, #6), all editor-registered at r49502: nine `general` (`files/`) entries (`.jpg .jpeg .webp .gif .svg .mp4 .mp3 .m4a` plus `GoogleService-Info.plist`), generated `tone_sound.webm` (sound) and `tone_music.webm` (music and `files/`), and `Saira.ttf` (font and `files/`; SIL OFL, licence kept outside `project/`). The manifest now has 23 `rootFileFolders` entries over 13 extensions. Added so c3source #86's FE9 can assert every entry against `fileTypeForName`; the materialized fixture grows to 122 files, the `.json`/`.c3proj` count (27 tracked) and `savedWithRelease` (49502) are unchanged, and no c3source test pin moved |
 
 Per the sample's own versioning convention, a **MAJOR** bump means a
 consumer with a generated read-surface keyed on those paths must regenerate

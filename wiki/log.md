@@ -15,6 +15,13 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See `docs/wiki-schema.md` for
 the full maintenance schema.
 
+## 2026-10-05
+
+* **Update**: canonical-fixture.md — pin bumped to construct3-sample v1.2.0 (version-history row, 122 materialized files), plus the HEAD-vs-gitlink and gitignored-fixture-dir hazards (#86, #88); project-manifest.md — sound/music/font/general now fixture-validated, only video inferred.
+* **Creation**: decisions/0027-file-entry-type-writer-fact.md, driven by `raw/issue-86-file-entry-type-evidence-2026-10-01.md`.
+* **Update**: c3-domain-facts.md — added the EXTENSION_FILE_TYPES writer-direction fact (tiers, evidence numbers), the Ten-tables count, and the google/burbank re-run glob warning, driven by `raw/issue-86-file-entry-type-evidence-2026-10-01.md`.
+* **Update**: project-manifest.md — added the mapping-direction paragraph for EXTENSION_FILE_TYPES / fileTypeForName / C3_DEFAULT_FILE_TYPE.
+
 ## 2026-10-01
 
 * **Creation**: issue-triage.md, driven by `raw/docs-issue-triage-2026-10-01.md`.
