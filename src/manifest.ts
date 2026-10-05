@@ -439,9 +439,11 @@ export const TIMELINE_TRANSITIONS_FOLDER = "transitions";
 
 /**
  * Manifest rootFileFolders category → on-disk source folder (plural).
- * CONFIRMED by fixture: script→scripts, icon→icons.
- * INFERRED (shipped anyway; c3source owns the fix if wrong):
- * sound→sounds, music→music, video→videos, font→fonts, general→files.
+ * CONFIRMED by fixture: script→scripts, icon→icons, sound→sounds, music→music,
+ * font→fonts, general→files (the last four since construct3-sample v1.2.0, which
+ * populates them; the drift tests walk each one).
+ * INFERRED (shipped anyway; c3source owns the fix if wrong): video→videos. No corpus
+ * project populates the `video` section.
  */
 export const C3_ROOT_FILE_FOLDERS = {
   script: "scripts",

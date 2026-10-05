@@ -7,6 +7,7 @@ import {
   IMAGE_FILE_TYPE_EXTENSIONS,
   SCRIPT_FILE_TYPE_EXTENSIONS,
 } from "../src/c3source.js";
+import { fixtureProjectAvailable, loadFixtureProject, PROJECT_MANIFEST } from "./fixtureHelpers.js";
 
 describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
   it("FE1: the table holds exactly the audited and unvalidated pairs", () => {
@@ -78,4 +79,47 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
   it("FE8: the default type is application/octet-stream", () => {
     expect(C3_DEFAULT_FILE_TYPE).to.equal("application/octet-stream");
   });
+
+  it("FE9: every canonical-fixture rootFileFolders entry type matches fileTypeForName", function () {
+    if (!fixtureProjectAvailable("files")) return this.skip();
+    const manifest = JSON.parse(loadFixtureProject(PROJECT_MANIFEST)) as {
+      rootFileFolders: Record<string, FileFolder>;
+    };
+    const walk = (section: string, folder: FileFolder, out: Visited[]): void => {
+      for (const entry of folder.items ?? []) out.push({ section, name: entry.name, type: entry.type });
+      for (const sub of folder.subfolders ?? []) walk(section, sub, out);
+    };
+    const visited: Visited[] = [];
+    const bySection: Record<string, number> = {};
+    for (const [section, folder] of Object.entries(manifest.rootFileFolders)) {
+      const before = visited.length;
+      walk(section, folder, visited);
+      bySection[section] = visited.length - before;
+    }
+    const extensions = new Set<string>();
+    for (const { section, name, type } of visited) {
+      const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
+      extensions.add(ext);
+      expect(type, `${section}/${name}`).to.equal(fileTypeForName(name));
+      expect(Object.prototype.hasOwnProperty.call(EXTENSION_FILE_TYPES, ext), `${section}/${name}: ${ext}`).to.equal(
+        true,
+      );
+    }
+    expect(visited.length).to.equal(23);
+    expect(extensions.size).to.equal(13);
+    for (const section of ["general", "sound", "music", "font"]) {
+      expect(bySection[section], section).to.be.greaterThan(0);
+    }
+  });
 });
+
+interface FileFolder {
+  items?: { name: string; type: string }[];
+  subfolders?: FileFolder[];
+}
+
+interface Visited {
+  section: string;
+  name: string;
+  type: string;
+}
