@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { findGitlinkDrift } from "../scripts/gitlink-drift.mjs";
+import { findGitlinkDrift, parseStrictFlag, STRICT_ENV } from "../scripts/gitlink-drift.mjs";
 
 const IDENTITY = ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"];
 
@@ -72,5 +72,25 @@ describe("findGitlinkDrift", () => {
     mkdirSync(plain);
     expect(() => git(plain, "rev-parse", "--git-dir")).to.throw();
     expect(findGitlinkDrift(plain, "sub")).to.equal(null);
+  });
+});
+
+describe("parseStrictFlag", () => {
+  it("S1: \"1\" and \"true\" -> true, and the env var is PREP_FIXTURE_STRICT", () => {
+    expect(STRICT_ENV).to.equal("PREP_FIXTURE_STRICT");
+    expect(parseStrictFlag("1")).to.equal(true);
+    expect(parseStrictFlag("true")).to.equal(true);
+  });
+
+  it("S2: unset, \"\", \"0\", \"false\" -> false", () => {
+    for (const raw of [undefined, "", "0", "false"]) {
+      expect(parseStrictFlag(raw), String(raw)).to.equal(false);
+    }
+  });
+
+  it("S3: unrecognized values -> null (strict equality, not merely falsy)", () => {
+    for (const raw of ["yes", "TRUE", " 1", "on"]) {
+      expect(parseStrictFlag(raw), raw).to.equal(null);
+    }
   });
 });
