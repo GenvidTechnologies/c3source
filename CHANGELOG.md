@@ -58,6 +58,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **`prep-fixture` warns when `construct3-sample` drifts from its pin.** The
+  development script that materializes the test fixture now compares the
+  submodule's checked-out HEAD with the gitlink in the superproject's index
+  (new `findGitlinkDrift` helper in `scripts/`) and prints a warning naming both
+  SHAs and the remedy; it still exits 0. A staged pin bump is not reported.
+  Development tooling only: `scripts/` is not in the npm tarball, so there is no
+  change to the published package (#88).
 - **All project documentation moved into an LLM-wiki.** `docs/` guides and the
   26 ADRs were migrated to `wiki/` (14 synthesized concept pages) and
   `wiki/decisions/` (the ADRs, numbering and filenames preserved), with verbatim

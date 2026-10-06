@@ -17,6 +17,10 @@ the full maintenance schema.
 
 ## 2026-10-05
 
+* **Update**: design-patterns.md — added "Testing a `scripts/*.mjs` helper from a TS test" and "A hermetic git superproject in a test" (first instance `findGitlinkDrift`, #88).
+* **Update**: decisions/0028-prep-fixture-warns-on-gitlink-drift.md and canonical-fixture.md — now cite `raw/issue-88-gitlink-drift-2026-10-05.md`; ADR links follow-up #90 for the CI-fatal option.
+* **Creation**: decisions/0028-prep-fixture-warns-on-gitlink-drift.md, driven by issue #88 (see the `raw/issue-88-gitlink-drift-2026-10-05.md` capture added in the entry above).
+* **Update**: canonical-fixture.md — replaced the manual HEAD-vs-gitlink check and the "proposed" note with the shipped prep-fixture drift warning (#88), linking ADR 0028.
 * **Update**: canonical-fixture.md — pin bumped to construct3-sample v1.2.0 (version-history row, 122 materialized files), plus the HEAD-vs-gitlink and gitignored-fixture-dir hazards (#86, #88); project-manifest.md — sound/music/font/general now fixture-validated, only video inferred.
 * **Creation**: decisions/0027-file-entry-type-writer-fact.md, driven by `raw/issue-86-file-entry-type-evidence-2026-10-01.md`.
 * **Update**: c3-domain-facts.md — added the EXTENSION_FILE_TYPES writer-direction fact (tiers, evidence numbers), the Ten-tables count, and the google/burbank re-run glob warning, driven by `raw/issue-86-file-entry-type-evidence-2026-10-01.md`.

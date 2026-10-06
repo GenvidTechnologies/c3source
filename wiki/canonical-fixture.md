@@ -11,6 +11,13 @@ sources:
     resource: ../raw/claude-md-2026-08-20.md
     title: "CLAUDE.md (c3source project instructions, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: issue-88
+    resource: ../raw/issue-88-gitlink-drift-2026-10-05.md
+    title: "c3source#88 and its comments (2026-10-05 capture)"
+    last_modified: 2026-10-05
+  - id: issue-88-upstream
+    resource: https://github.com/GenvidTechnologies/c3source/issues/88
+    title: "c3source#88 — prep-fixture should detect a construct3-sample checkout that drifted from its pin"
 ---
 
 # Canonical Reference Fixture
@@ -66,10 +73,18 @@ before the change appears in the materialized fixture[^claude-md].
 **The same rule bites in reverse: the archive is of the submodule's
 checked-out HEAD, not of the gitlink c3source records.** If the checkout has
 drifted from the pin (on 2026-10-01 it sat at `b3001bd` while the gitlink was
-`c6884ff`), `npm test` silently grades an unpinned golden. Before trusting a
-fixture-gated result, confirm `git -C construct3-sample rev-parse HEAD` equals
-the commit in `git ls-tree HEAD construct3-sample`. A guard in
-`prep-fixture.mjs` is proposed in c3source#88.
+`c6884ff`[^issue-88]), `npm test` would grade an unpinned golden. `prep-fixture.mjs` now
+guards this: before materializing, `findGitlinkDrift` (in
+`scripts/gitlink-drift.mjs`) compares the submodule's checked-out HEAD with the
+gitlink, and on a mismatch prints a **warning** naming both SHAs, then
+continues (exit 0, fixture still materialized). The pin is read from the
+superproject's **index**, not the committed tree, so a staged pin bump is not
+reported as drift. The warning names both remedies: `git submodule update
+construct3-sample` restores the pin, and `git add construct3-sample` stages a
+deliberate bump. It warns rather than fails so testing an unpinned upstream
+commit stays possible. See [ADR
+0028](/decisions/0028-prep-fixture-warns-on-gitlink-drift.md) for the
+alternatives rejected.
 
 Do not run an editor experiment in `test/fixtures/canonical/`. It is
 gitignored and `pretest` deletes it (`rmSync` in `prep-fixture.mjs`) on the
@@ -203,3 +218,4 @@ is the only defense here[^claude-md].
 - [Development Workflow](/development-workflow.md) — `.mocharc.cjs` and the mocha test-invocation conventions this fixture-gate story depends on.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
+[^issue-88]: c3source#88 and its comments (2026-10-05 capture)

@@ -78,6 +78,13 @@ The full validation gate is the **`.gvt-agent.json` `commands.validate`**
 chain (`npm run lint && npm run typecheck && npm run test && npm run build`),
 **not** an npm script — there is no `npm run validate`.
 
+**`scripts/` is outside every check.** `lint` covers only `src/` and `test/`,
+and `typecheck` only `.ts` files, so the `.mjs` tooling under `scripts/` is
+neither linted nor typechecked. A script helper that a test imports gets its
+types from a hand-written `.d.mts` sibling, kept in sync by hand
+(`scripts/gitlink-drift.d.mts` is the first). That constrains the callers, not
+the script body.
+
 Run a single test file or filter by name:
 
 ```sh

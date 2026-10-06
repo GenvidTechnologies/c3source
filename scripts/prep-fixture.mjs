@@ -29,6 +29,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
+import { findGitlinkDrift } from "./gitlink-drift.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRepo = resolve(root, "construct3-sample");
@@ -54,6 +55,21 @@ try {
 		"[prep-fixture] construct3-sample is not a git repository (no .git dir found); skipping (run: git submodule update --init --recursive)",
 	);
 	process.exit(0);
+}
+
+// Warn (never fail) when the checkout differs from the pinned gitlink: the
+// archive below reads the checkout's HEAD, so a drifted checkout means the
+// tests grade a golden no c3source commit points at (#88). The pin is read
+// from the index, so a staged pin bump passes. A warning, not a throw:
+// deliberately testing an unpinned upstream commit is legitimate.
+const drift = findGitlinkDrift(root, "construct3-sample");
+if (drift) {
+	console.warn(
+		`[prep-fixture] WARNING: construct3-sample is checked out at ${drift.head}, but c3source pins ${drift.pinned}; ` +
+			"the fixture will be materialized from the unpinned checkout. " +
+			"Run `git submodule update construct3-sample` to restore the pin, " +
+			"or `git add construct3-sample` to stage a deliberate pin bump.",
+	);
 }
 
 // (a) Wipe the materialized output for an idempotent rebuild.
