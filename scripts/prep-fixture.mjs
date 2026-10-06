@@ -22,6 +22,12 @@
 // failing, so it is safe to wire into `pretest` on any checkout (the
 // downstream test then self-skips on the missing fixture).
 //
+// Drift check: if the checkout differs from the pinned gitlink, this warns by
+// default and continues. When `PREP_FIXTURE_STRICT` is `1` or `true` the drift
+// is fatal instead (exit 1, before anything is wiped). An unrecognized value
+// is also fatal, so a typo cannot silently disable the check. CI opts in via
+// node-gate's `extra-env` (#90, ADR 0029).
+//
 // Usage: node scripts/prep-fixture.mjs
 
 import { execFileSync } from "node:child_process";
@@ -29,7 +35,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
-import { findGitlinkDrift } from "./gitlink-drift.mjs";
+import { findGitlinkDrift, parseStrictFlag, STRICT_ENV } from "./gitlink-drift.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRepo = resolve(root, "construct3-sample");
@@ -37,6 +43,14 @@ const sourceDir = resolve(sourceRepo, "project");
 const outputDir = resolve(root, "test/fixtures/canonical");
 const overlayDir = resolve(root, "test/fixtures/canonical-overlay");
 const striplistFile = resolve(root, "test/fixtures/canonical.striplist.txt");
+
+const strict = parseStrictFlag(process.env[STRICT_ENV]);
+if (strict === null) {
+	console.error(
+		`[prep-fixture] ${STRICT_ENV} must be 1 or true (on), or 0, false or empty (off); got ${JSON.stringify(process.env[STRICT_ENV])}`,
+	);
+	process.exit(1);
+}
 
 // Guard: detect an absent/uninitialized submodule via its known root file.
 if (!existsSync(join(sourceDir, "project.c3proj"))) {
@@ -57,12 +71,23 @@ try {
 	process.exit(0);
 }
 
-// Warn (never fail) when the checkout differs from the pinned gitlink: the
-// archive below reads the checkout's HEAD, so a drifted checkout means the
-// tests grade a golden no c3source commit points at (#88). The pin is read
-// from the index, so a staged pin bump passes. A warning, not a throw:
-// deliberately testing an unpinned upstream commit is legitimate.
+// Warn (fail only in strict mode, #90) when the checkout differs from the
+// pinned gitlink: the archive below reads the checkout's HEAD, so a drifted
+// checkout means the tests grade a golden no c3source commit points at (#88).
+// The pin is read from the index, so a staged pin bump passes. A warning by
+// default, not a throw: deliberately testing an unpinned upstream commit is
+// legitimate.
 const drift = findGitlinkDrift(root, "construct3-sample");
+// Exits before the wipe below, so the existing fixture survives.
+if (drift && strict) {
+	console.error(
+		`[prep-fixture] ERROR: construct3-sample is checked out at ${drift.head}, but c3source pins ${drift.pinned}; ` +
+			`${STRICT_ENV} is on, so the fixture will not be materialized from an unpinned checkout. ` +
+			"Run `git submodule update construct3-sample` to restore the pin, " +
+			"or `git add construct3-sample` to stage a deliberate pin bump.",
+	);
+	process.exit(1);
+}
 if (drift) {
 	console.warn(
 		`[prep-fixture] WARNING: construct3-sample is checked out at ${drift.head}, but c3source pins ${drift.pinned}; ` +
