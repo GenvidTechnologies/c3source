@@ -1,11 +1,11 @@
 ---
 type: reference
 title: Design Patterns
-description: Reusable engineering patterns c3source has settled on — single-source counters, thin traversal wrappers, traversal-vs-rendering splits, path-bearing drift diffing, collect-then-throw-first validation, evidence-bearing audit tooling, and a real-export-ground-truth testing strategy — each kept with its motivating problem and trade-off.
+description: Reusable engineering patterns c3source has settled on — single-source counters, thin traversal wrappers, traversal-vs-rendering splits, path-bearing drift diffing, collect-then-throw-first validation, evidence-bearing audit tooling, testing a scripts helper from a TS test, a hermetic git superproject, and a real-export-ground-truth testing strategy — each kept with its motivating problem and trade-off.
 tags: [design-patterns, traversal, validation, testing, drift]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-10-05T21:00:00Z }
 sources:
   - id: docs-design-patterns
     resource: ../raw/docs-design-patterns-2026-08-20.md
@@ -304,6 +304,46 @@ an unexercised probe reports "no gaps." Both are absence of evidence
 rendered as evidence of absence, and both cost extra plumbing (an
 observation counter here, a fixture-gate skip/throw split there) purely to
 keep that confusion structurally impossible rather than merely unlikely.
+
+## Testing a `scripts/*.mjs` helper from a TS test
+
+**Problem.** Tooling logic that lives in `scripts/*.mjs` (a guard in
+`prep-fixture.mjs`, say) is untested by default: `scripts/` is neither linted
+nor typechecked, and an `.mjs` file inlined in a script's top level can't be
+imported without running the script.
+
+**Shape.** Extract the logic into an importable `.mjs` module with a
+hand-written `.d.mts` sibling, and let the script call it. Under
+`moduleResolution: NodeNext`, a TS import of `../scripts/x.mjs` resolves to
+`x.d.mts`, so `tsconfig.test.json` needs no `allowJs`; `tsx` runs the `.mjs`
+directly at test time. First instance: `findGitlinkDrift` in
+`scripts/gitlink-drift.mjs`, tested by `test/gitlinkDrift.test.ts` (#88; see
+[ADR 0028](/decisions/0028-prep-fixture-warns-on-gitlink-drift.md)).
+
+**Trade-off.** The declaration is kept in sync with the module by hand, and
+nothing checks that it is. The script body itself stays unchecked: eslint's
+scope is `src/` and `test/`, and typecheck follows only the declaration, so
+the test is the only verification the `.mjs` logic gets.
+
+## A hermetic git superproject in a test
+
+**Problem.** A test of git-submodule logic needs a superproject with a pinned
+gitlink, without network access and without depending on the real
+`construct3-sample` checkout (which may be absent in CI).
+
+**Shape.** Build the "submodule" as a nested `git init` repo, and pin it with
+`git update-index --add --cacheinfo 160000,<sha>,<path>` plus a commit, rather
+than `git submodule add`. That sidesteps git's `protocol.file.allow`
+restriction on local-path submodules (git 2.38.1 and later) and any network
+use. Pass `-c user.name=… -c user.email=… -c commit.gpgsign=false` on every git
+call: CI runners have no identity, and a dev machine may sign commits. Call
+`execFileSync("git", [...])` with no shell, under `mkdtemp`, and remove the
+tree in `afterEach`. First instance: `test/gitlinkDrift.test.ts` (#88).
+
+**Trade-off.** The fabricated gitlink is not what `git submodule add` writes
+byte for byte (no `.gitmodules` entry), so the test covers the index-and-HEAD
+comparison, not submodule registration. Every git call repeats the identity
+flags, which the test's single `git(cwd, ...args)` wrapper keeps to one place.
 
 ## Testing: real-export ground truth + inline legibility
 

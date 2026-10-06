@@ -45,7 +45,7 @@ See `docs/wiki-schema.md` for the page format and maintenance rules.
 
 * [C3 Domain Facts](c3-domain-facts.md) - c3source owns exported tables naming undocumented C3 platform facts, each carrying a confidence label paired with its blast radius, validated via two evidence channels — a corpus scan of real projects and C3's own editor bundle — that answer different questions and must never be conflated when a table's findings mix both provenances.
 * [Canonical Reference Fixture](canonical-fixture.md) - construct3-sample is the tag-pinned, editor-round-tripped golden C3 project c3source validates against rather than owns, materialized hermetically into the gitignored test fixture directory and enriched only upstream, never by hand-authoring the overlay.
-* [Design Patterns](design-patterns.md) - Reusable engineering patterns c3source has settled on — single-source counters, thin traversal wrappers, traversal-vs-rendering splits, path-bearing drift diffing, collect-then-throw-first validation, evidence-bearing audit tooling, and a real-export-ground-truth testing strategy — each kept with its motivating problem and trade-off.
+* [Design Patterns](design-patterns.md) - Reusable engineering patterns c3source has settled on — single-source counters, thin traversal wrappers, traversal-vs-rendering splits, path-bearing drift diffing, collect-then-throw-first validation, evidence-bearing audit tooling, testing a scripts helper from a TS test, a hermetic git superproject, and a real-export-ground-truth testing strategy — each kept with its motivating problem and trade-off.
 
 ## Decision Records
 

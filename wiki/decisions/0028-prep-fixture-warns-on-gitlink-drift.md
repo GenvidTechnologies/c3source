@@ -7,6 +7,10 @@ status: stable
 generated: { by: process:maintain-wiki, at: 2026-10-05T12:00:00Z }
 sources:
   - id: issue-88
+    resource: ../../raw/issue-88-gitlink-drift-2026-10-05.md
+    title: "c3source#88 and its comments (2026-10-05 capture)"
+    last_modified: 2026-10-05
+  - id: issue-88-upstream
     resource: https://github.com/GenvidTechnologies/c3source/issues/88
     title: "c3source#88 — prep-fixture should detect a construct3-sample checkout that drifted from its pin"
 ---
@@ -24,7 +28,7 @@ sources:
 0019](/decisions/0019-hermetic-fixture-materialization.md)), not from the gitlink
 the superproject records. When the two differ, `npm test` silently grades an
 unpinned golden. This happened on 2026-10-01: the checkout sat at `b3001bd`
-while the gitlink was `c6884ff`. Any fixture-gated run in that state would have
+while the gitlink was `c6884ff`[^issue-88]. Any fixture-gated run in that state would have
 graded the wrong corpus with nothing in the output to say so; it was caught
 only because a design agent compared the two SHAs by hand. The only safeguard
 afterwards was the documentation note
@@ -80,8 +84,9 @@ is what failed on 2026-10-01: a note only helps whoever reads it, while the
 warning prints in the run where the drift matters.
 
 **Fatal under CI.** Deferred, not rejected. In CI a mismatch is never intended,
-so a hard failure there would cost nothing. It is left to a follow-up so this
-change stays a pure addition with no new failure mode.
+so a hard failure there would cost nothing. It is left to a follow-up,
+[#90](https://github.com/GenvidTechnologies/c3source/issues/90) (filed
+2026-10-05), so this change stays a pure addition with no new failure mode.
 
 ## Consequences
 
@@ -105,3 +110,5 @@ change stays a pure addition with no new failure mode.
 - [ADR 0019 — Hermetic fixture materialization](/decisions/0019-hermetic-fixture-materialization.md) — defines the checked-out-HEAD source whose drift this guard reports.
 - [ADR 0026 — Fixture gate: skip-if-absent / throw-if-moved](/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md) — the sibling warn-vs-throw decision for the path axis.
 - [Canonical Reference Fixture](/canonical-fixture.md) — the current-state description of the drift guard.
+
+[^issue-88]: c3source#88 and its comments (2026-10-05 capture)
