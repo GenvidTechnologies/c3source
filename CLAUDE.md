@@ -100,6 +100,13 @@ unexpected `this.skip()` fails outright rather than reporting a quiet
 "0 failing." See [ADR
 0026](wiki/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md).
 
+`pretest` (`scripts/prep-fixture.mjs`) only **warns** locally when the
+`construct3-sample` checkout drifts from its pinned gitlink; CI makes that
+fatal by setting `PREP_FIXTURE_STRICT=1` through node-gate's `extra-env`
+input. Run `PREP_FIXTURE_STRICT=1 npm test` to reproduce CI's strict pin check
+locally. See [ADR
+0029](wiki/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md).
+
 Tests use **mocha + chai** with `tsx` for on-the-fly TS execution (no build
 step needed). `test/setup.ts` is a mocha root hook that silences `console.log`
 and `console.debug` during runs (warn/error pass through), so library code may

@@ -12,6 +12,21 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
+/** Env var that turns prep-fixture's gitlink-drift warning into a hard failure (#90, ADR 0029). */
+export const STRICT_ENV = "PREP_FIXTURE_STRICT";
+
+/**
+ * Parses the PREP_FIXTURE_STRICT value: "1"/"true" → on; unset, "", "0", "false" → off;
+ * anything else → null (unrecognized — the caller treats that as a configuration error).
+ * @param {string | undefined} raw
+ * @returns {boolean | null}
+ */
+export function parseStrictFlag(raw) {
+	if (raw === undefined || raw === "" || raw === "0" || raw === "false") return false;
+	if (raw === "1" || raw === "true") return true;
+	return null;
+}
+
 function git(cwd, args) {
 	return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 }

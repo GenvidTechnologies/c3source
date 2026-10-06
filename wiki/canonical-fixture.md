@@ -5,7 +5,7 @@ description: construct3-sample is the tag-pinned, editor-round-tripped golden C3
 tags: [canonical-fixture, construct3-sample, submodule, fixture-gate, mocharc]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-05T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-06T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -18,6 +18,10 @@ sources:
   - id: issue-88-upstream
     resource: https://github.com/GenvidTechnologies/c3source/issues/88
     title: "c3source#88 — prep-fixture should detect a construct3-sample checkout that drifted from its pin"
+  - id: issue-90
+    resource: ../raw/issue-90-prep-fixture-strict-2026-10-06.md
+    title: "c3source#90 and its comments (2026-10-06 capture)"
+    last_modified: 2026-10-06
 ---
 
 # Canonical Reference Fixture
@@ -77,14 +81,18 @@ drifted from the pin (on 2026-10-01 it sat at `b3001bd` while the gitlink was
 guards this: before materializing, `findGitlinkDrift` (in
 `scripts/gitlink-drift.mjs`) compares the submodule's checked-out HEAD with the
 gitlink, and on a mismatch prints a **warning** naming both SHAs, then
-continues (exit 0, fixture still materialized). The pin is read from the
+continues (exit 0, fixture still materialized). When `PREP_FIXTURE_STRICT` is
+`1` or `true` (CI sets it through the shared workflow's `extra-env` input), the
+mismatch is **fatal** instead: the script exits 1 before wiping, so an existing
+fixture survives; an unrecognized value is itself an error. The pin is read from the
 superproject's **index**, not the committed tree, so a staged pin bump is not
 reported as drift. The warning names both remedies: `git submodule update
 construct3-sample` restores the pin, and `git add construct3-sample` stages a
-deliberate bump. It warns rather than fails so testing an unpinned upstream
-commit stays possible. See [ADR
-0028](/decisions/0028-prep-fixture-warns-on-gitlink-drift.md) for the
-alternatives rejected.
+deliberate bump. It warns by default so testing an unpinned upstream commit
+stays possible locally. See [ADR
+0028](/decisions/0028-prep-fixture-warns-on-gitlink-drift.md) and [ADR
+0029](/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md) for
+the alternatives rejected.
 
 Do not run an editor experiment in `test/fixtures/canonical/`. It is
 gitignored and `pretest` deletes it (`rmSync` in `prep-fixture.mjs`) on the

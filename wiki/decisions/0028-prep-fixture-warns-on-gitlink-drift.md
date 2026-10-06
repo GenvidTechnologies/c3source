@@ -17,7 +17,7 @@ sources:
 
 # ADR 0028 — prep-fixture warns (does not fail) when construct3-sample drifts from its pinned gitlink, comparing against the index
 
-**Status:** accepted
+**Status:** partially superseded by [ADR 0029](/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md) — drift is fatal when PREP_FIXTURE_STRICT is on; the index comparison and the default warning below remain in effect
 **Date:** 2026-10-05
 **Issue:** [#88](https://github.com/GenvidTechnologies/c3source/issues/88)
 
@@ -109,6 +109,7 @@ so a hard failure there would cost nothing. It is left to a follow-up,
 
 - [ADR 0019 — Hermetic fixture materialization](/decisions/0019-hermetic-fixture-materialization.md) — defines the checked-out-HEAD source whose drift this guard reports.
 - [ADR 0026 — Fixture gate: skip-if-absent / throw-if-moved](/decisions/0026-fixture-gate-skip-vs-throw-and-forbid-pending.md) — the sibling warn-vs-throw decision for the path axis.
+- [ADR 0029 — prep-fixture treats gitlink drift as fatal only under an explicit PREP_FIXTURE_STRICT opt-in](/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md) — resolves the "Fatal under CI" deferral above.
 - [Canonical Reference Fixture](/canonical-fixture.md) — the current-state description of the drift guard.
 
 [^issue-88]: c3source#88 and its comments (2026-10-05 capture)

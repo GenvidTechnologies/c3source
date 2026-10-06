@@ -13,3 +13,7 @@ jobs:
       # Recursive checkout inits the SDK/ submodule (Scirra Construct Addon SDK) so the
       # SDK-gated .c3addon reader/parser tests run in CI instead of self-skipping (#49).
       submodules: recursive
+      # Makes prep-fixture's construct3-sample pin check fatal on drift instead of a warning
+      # (#90, ADR 0029). A caller's own env: does not reach node-gate, hence extra-env.
+      extra-env: |
+        PREP_FIXTURE_STRICT=1
