@@ -15,6 +15,11 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See `docs/wiki-schema.md` for
 the full maintenance schema.
 
+## 2026-10-06
+
+* **Update**: decisions/0028-prep-fixture-warns-on-gitlink-drift.md and canonical-fixture.md — status and prose now point to ADR 0029 for the strict-mode (CI-fatal) follow-through; canonical-fixture.md also cites `raw/issue-90-prep-fixture-strict-2026-10-06.md`.
+* **Creation**: decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md, driven by issue #90 (see the `raw/issue-90-prep-fixture-strict-2026-10-06.md` capture).
+
 ## 2026-10-05
 
 * **Update**: design-patterns.md — added "Testing a `scripts/*.mjs` helper from a TS test" and "A hermetic git superproject in a test" (first instance `findGitlinkDrift`, #88).
