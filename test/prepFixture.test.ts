@@ -159,6 +159,12 @@ describe("prep-fixture strict mode (child process)", function () {
     expect(ci).to.match(new RegExp("^\\s+" + STRICT_ENV + "=1\\s*$", "m"));
   });
 
+  it("P13: publish.yml's gate checks out submodules and opts in with a PREP_FIXTURE_STRICT=1 line", () => {
+    const publish = readFileSync(path.join(REPO, ".github", "workflows", "publish.yml"), "utf8");
+    expect(publish).to.match(/^\s+submodules: recursive\s*$/m);
+    expect(publish).to.match(new RegExp("^\\s+" + STRICT_ENV + "=1\\s*$", "m"));
+  });
+
   it("P8: off + not checked out -> the original note byte-for-byte, exit 0", () => {
     const c = buildCase();
     rmSync(path.join(c.sub, "project", "project.c3proj"));
