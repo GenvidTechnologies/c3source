@@ -104,8 +104,11 @@ unexpected `this.skip()` fails outright rather than reporting a quiet
 `construct3-sample` checkout drifts from its pinned gitlink; CI makes that
 fatal by setting `PREP_FIXTURE_STRICT=1` through node-gate's `extra-env`
 input. Run `PREP_FIXTURE_STRICT=1 npm test` to reproduce CI's strict pin check
-locally. See [ADR
-0029](wiki/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md).
+locally. Strict also fails (exit 1, before the wipe) when the submodule is
+absent, isn't its own git repository, or the pin can't be established, so
+`PREP_FIXTURE_STRICT=1 npm test` fails fast without the submodule. See [ADR
+0029](wiki/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md) and
+[ADR 0030](wiki/decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md).
 
 Tests use **mocha + chai** with `tsx` for on-the-fly TS execution (no build
 step needed). `test/setup.ts` is a mocha root hook that silences `console.log`
@@ -246,7 +249,9 @@ runs lint -> typecheck -> test -> build (plus a non-failing `npm publish
 
 Publishing is to the **public npm registry** as the scoped package
 `@genvidtech/c3source`. `.github/workflows/publish.yml` triggers on **git tags
-matching `v*.*.*`** (e.g. `v0.3.0`): it re-runs the gate, verifies the tag
+matching `v*.*.*`** (e.g. `v0.3.0`): it re-runs the gate (with the same
+recursive submodule checkout and `PREP_FIXTURE_STRICT=1` opt-in as ci.yml, [ADR
+0030](wiki/decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md)), verifies the tag
 matches `package.json` `version`, then runs `npm publish --provenance --access
 public`. Authentication uses **npm OIDC trusted publishing** — short-lived
 credentials minted per run from the GitHub OIDC token (`id-token: write`), so

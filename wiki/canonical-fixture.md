@@ -65,9 +65,10 @@ c3source is documentation, not configuration[^claude-md].
 0019](/decisions/0019-hermetic-fixture-materialization.md), issue
 #64) — plus an additive `test/fixtures/canonical-overlay/` minus the
 `canonical.striplist.txt` paths[^claude-md]. A `pretest` npm hook runs it
-before every `npm test`, and it is a **guarded no-op** (exit 0) when the
-submodule is absent or its checked-out directory isn't a git repository, so
-tests self-skip rather than the run breaking[^claude-md].
+before every `npm test`, and by default it is a **guarded no-op** (exit 0)
+when the submodule is absent or its checked-out directory isn't its own git
+repository, so tests self-skip rather than the run breaking[^claude-md].
+Under `PREP_FIXTURE_STRICT` those same cases exit 1 instead (see below).
 
 **Consequence: an uncommitted edit in the submodule is invisible to the
 fixture.** Because materialization reads tracked HEAD content, enriching the
@@ -84,7 +85,12 @@ gitlink, and on a mismatch prints a **warning** naming both SHAs, then
 continues (exit 0, fixture still materialized). When `PREP_FIXTURE_STRICT` is
 `1` or `true` (CI sets it through the shared workflow's `extra-env` input), the
 mismatch is **fatal** instead: the script exits 1 before wiping, so an existing
-fixture survives; an unrecognized value is itself an error. The pin is read from the
+fixture survives; an unrecognized value is itself an error. Strict also exits
+1 before the wipe, with an `ERROR:` line, when `project.c3proj` is absent, the
+submodule isn't its own git repository, or `checkGitlinkPin` (the
+never-throwing helper `findGitlinkDrift` wraps) reports the pin as unknown;
+non-strict output and exit codes are unchanged ([ADR
+0030](/decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md)). The pin is read from the
 superproject's **index**, not the committed tree, so a staged pin bump is not
 reported as drift. The warning names both remedies: `git submodule update
 construct3-sample` restores the pin, and `git add construct3-sample` stages a
@@ -213,11 +219,15 @@ whereas a `git+ssh://` URL is not covered by that rewrite and would break
 CI's recursive checkout — and with it, **every** fixture-backed test, which
 would **self-skip silently** rather than fail[^claude-md]. This is the one
 case ADR 0026's `--forbid-pending` backstop does **not** cover, and cannot
-by design: a broken recursive checkout leaves the gated fixtures absent,
+by design. Under `PREP_FIXTURE_STRICT`, which CI and the release gate set, a
+missing or unverifiable construct3-sample now fails the run instead ([ADR
+0030](/decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md)). Without
+strict a broken recursive checkout leaves the gated fixtures absent,
 which is exactly the degradation state ([ADR
 0019](/decisions/0019-hermetic-fixture-materialization.md)) that
 keeps `.mocharc.cjs` from arming strictness. The manual pending-count check
-is the only defense here[^claude-md].
+remains the sole safeguard for `SDK/` (which prep-fixture never checks) and for
+non-strict local runs[^claude-md].
 
 ## Related
 

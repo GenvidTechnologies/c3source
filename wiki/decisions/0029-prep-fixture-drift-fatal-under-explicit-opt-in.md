@@ -21,7 +21,7 @@ sources:
 
 # ADR 0029 — prep-fixture treats gitlink drift as fatal only under an explicit PREP_FIXTURE_STRICT opt-in, which CI sets
 
-**Status:** accepted
+**Status:** partially superseded by [ADR 0030](/decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md) — under strict the guards exit 1 and an unverifiable pin is fatal, and publish.yml opts in; the flag, the drift exit and the default warning remain in effect
 **Date:** 2026-10-06
 **Issue:** [#90](https://github.com/GenvidTechnologies/c3source/issues/90)
 
