@@ -17,16 +17,22 @@
 // environment-dependent (#64).
 //
 // Guarded: if the submodule isn't checked out (or is a shallow/empty
-// checkout), or its directory isn't actually a git repository (e.g. a bare
-// extracted copy with no `.git`), this exits 0 with a stderr note instead of
+// checkout), or its directory isn't its own git repository (e.g. a bare
+// extracted copy with no `.git`, which `git rev-parse --show-prefix` reports
+// as nested inside c3source), this exits 0 with a stderr note instead of
 // failing, so it is safe to wire into `pretest` on any checkout (the
 // downstream test then self-skips on the missing fixture).
 //
+// Strict mode: when `PREP_FIXTURE_STRICT` is `1` or `true`, those two guards
+// are fatal instead (exit 1), as is a pinned gitlink that checkGitlinkPin
+// cannot establish (status "unknown"), since the fixture cannot be verified.
+// Every strict exit happens before anything is wiped.
+//
 // Drift check: if the checkout differs from the pinned gitlink, this warns by
-// default and continues. When `PREP_FIXTURE_STRICT` is `1` or `true` the drift
-// is fatal instead (exit 1, before anything is wiped). An unrecognized value
-// is also fatal, so a typo cannot silently disable the check. CI opts in via
-// node-gate's `extra-env` (#90, ADR 0029).
+// default and continues. In strict mode the drift is fatal too (exit 1, before
+// anything is wiped). An unrecognized value is also fatal, so a typo cannot
+// silently disable the check. CI opts in via node-gate's `extra-env` (#90,
+// ADR 0029, #93).
 //
 // Usage: node scripts/prep-fixture.mjs
 
@@ -35,7 +41,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { unzipSync } from "fflate";
-import { findGitlinkDrift, parseStrictFlag, STRICT_ENV } from "./gitlink-drift.mjs";
+import { checkGitlinkPin, parseStrictFlag, STRICT_ENV } from "./gitlink-drift.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceRepo = resolve(root, "construct3-sample");
@@ -54,17 +60,39 @@ if (strict === null) {
 
 // Guard: detect an absent/uninitialized submodule via its known root file.
 if (!existsSync(join(sourceDir, "project.c3proj"))) {
+	if (strict) {
+		console.error(
+			`[prep-fixture] ERROR: construct3-sample submodule not checked out; ${STRICT_ENV} is on, so the pinned fixture cannot be verified (run: git submodule update --init --recursive)`,
+		);
+		process.exit(1);
+	}
 	console.error(
 		"[prep-fixture] construct3-sample submodule not checked out; skipping (run: git submodule update --init --recursive)",
 	);
 	process.exit(0);
 }
 
-// Guard: confirm the submodule directory is actually a git repository before
-// shelling out to `git archive` against it.
+// Guard: confirm the submodule directory is its own git repository before
+// shelling out to `git archive` against it. `--git-dir` is not enough: with the
+// submodule's `.git` missing it walks up to c3source's own `.git`. `--show-prefix`
+// prints "" only at the top of a repository, and `construct3-sample/` when nested.
+let ownRepo = false;
 try {
-	execFileSync("git", ["-C", sourceRepo, "rev-parse", "--git-dir"], { stdio: "ignore" });
+	const prefix = execFileSync("git", ["-C", sourceRepo, "rev-parse", "--show-prefix"], {
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "ignore"],
+	});
+	ownRepo = prefix.trim() === "";
 } catch {
+	ownRepo = false;
+}
+if (!ownRepo) {
+	if (strict) {
+		console.error(
+			`[prep-fixture] ERROR: construct3-sample is not its own git repository; ${STRICT_ENV} is on, so the pinned fixture cannot be verified (run: git submodule update --init --recursive)`,
+		);
+		process.exit(1);
+	}
 	console.error(
 		"[prep-fixture] construct3-sample is not a git repository (no .git dir found); skipping (run: git submodule update --init --recursive)",
 	);
@@ -77,8 +105,15 @@ try {
 // The pin is read from the index, so a staged pin bump passes. A warning by
 // default, not a throw: deliberately testing an unpinned upstream commit is
 // legitimate.
-const drift = findGitlinkDrift(root, "construct3-sample");
+const pin = checkGitlinkPin(root, "construct3-sample");
+const drift = pin.status === "drift" ? pin : null;
 // Exits before the wipe below, so the existing fixture survives.
+if (pin.status === "unknown" && strict) {
+	console.error(
+		`[prep-fixture] ERROR: could not establish construct3-sample's pinned gitlink (${pin.reason}); ${STRICT_ENV} is on, so the fixture will not be materialized from an unverified checkout.`,
+	);
+	process.exit(1);
+}
 if (drift && strict) {
 	console.error(
 		`[prep-fixture] ERROR: construct3-sample is checked out at ${drift.head}, but c3source pins ${drift.pinned}; ` +

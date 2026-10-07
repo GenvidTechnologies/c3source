@@ -144,16 +144,77 @@ describe("prep-fixture strict mode (child process)", function () {
     expect(existsSync(c.sentinel)).to.equal(true);
   });
 
-  it("P6: strict leaves the not-checked-out guard unchanged", () => {
+  it("P6: strict + not checked out -> exit 1, says so, no 'skipping', fixture untouched", () => {
     const c = buildCase();
     rmSync(path.join(c.sub, "project", "project.c3proj"));
     const r = run(c, "1");
-    expect(r.status, r.stderr).to.equal(0);
-    expect(r.stderr).to.contain("submodule not checked out; skipping");
+    expect(r.status, r.stderr).to.equal(1);
+    expect(r.stderr).to.contain("not checked out");
+    expect(r.stderr).to.not.contain("skipping");
+    expect(existsSync(c.sentinel)).to.equal(true);
   });
 
   it("P7: ci.yml opts in with a PREP_FIXTURE_STRICT=1 line", () => {
     const ci = readFileSync(path.join(REPO, ".github", "workflows", "ci.yml"), "utf8");
     expect(ci).to.match(new RegExp("^\\s+" + STRICT_ENV + "=1\\s*$", "m"));
+  });
+
+  it("P8: off + not checked out -> the original note byte-for-byte, exit 0", () => {
+    const c = buildCase();
+    rmSync(path.join(c.sub, "project", "project.c3proj"));
+    const r = run(c, undefined);
+    expect(r.status, r.stderr).to.equal(0);
+    expect(r.stderr).to.equal(
+      "[prep-fixture] construct3-sample submodule not checked out; skipping (run: git submodule update --init --recursive)\n",
+    );
+  });
+
+  /** The superproject needs a commit, and the submodule loses its own .git, so git walks up to the superproject. */
+  function nestCase(): Case {
+    const c = buildCase();
+    writeFileSync(path.join(c.dir, "README.txt"), "super");
+    git(c.dir, "add", "README.txt");
+    git(c.dir, "commit", "-q", "-m", "super");
+    rmSync(path.join(c.sub, ".git"), { recursive: true, force: true });
+    return c;
+  }
+
+  it("P9: strict + submodule .git missing (nested in c3source) -> exit 1, fixture untouched", () => {
+    const c = nestCase();
+    const r = run(c, "1");
+    expect(r.status, r.stderr).to.equal(1);
+    expect(r.stderr).to.not.contain("skipping");
+    expect(r.stderr).to.not.contain("checked out at");
+    expect(existsSync(c.sentinel)).to.equal(true);
+  });
+
+  it("P10: off + submodule .git missing -> the original note byte-for-byte, exit 0, fixture untouched", () => {
+    const c = nestCase();
+    const r = run(c, undefined);
+    expect(r.status, r.stderr).to.equal(0);
+    expect(r.stderr).to.equal(
+      "[prep-fixture] construct3-sample is not a git repository (no .git dir found); skipping (run: git submodule update --init --recursive)\n",
+    );
+    expect(existsSync(c.sentinel)).to.equal(true);
+  });
+
+  it("P11: strict + gitlink not in the index -> exit 1, fixture untouched", () => {
+    const c = buildCase();
+    git(c.dir, "update-index", "--force-remove", "construct3-sample");
+    const r = run(c, "1");
+    expect(r.status, r.stderr).to.equal(1);
+    expect(r.stderr).to.contain("not registered in the index");
+    expect(r.stderr).to.not.contain("skipping");
+    expect(existsSync(c.sentinel)).to.equal(true);
+  });
+
+  it("P12: off + gitlink not in the index -> silent, fixture materialized", () => {
+    const c = buildCase();
+    git(c.dir, "update-index", "--force-remove", "construct3-sample");
+    const r = run(c, undefined);
+    expect(r.status, r.stderr).to.equal(0);
+    expect(r.stderr).to.equal("");
+    expect(existsSync(c.sentinel)).to.equal(false);
+    expect(existsSync(path.join(c.dir, "test", "fixtures", "canonical", "project.c3proj"))).to.equal(true);
   });
 });
