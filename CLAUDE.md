@@ -135,6 +135,10 @@ authored via `/gvt-dev:create-adr` and indexed in
 [`wiki/decisions/index.md`](wiki/decisions/index.md)): the ADR's **Compromise**
 section preserves the rejected-alternatives rationale a squashed PR body would
 otherwise lose, complementing — not replacing — the issue/PR record.
+`create-adr` is the on-demand path; **inside a `plan-task` run, dispatch
+`gvt-dev:tech-writer` directly** with the record number and a stage-only brief,
+because `create-adr` commits whatever is staged and would sweep in sibling
+tasks' files (gvt-dev #600).
 
 > **ADRs moved on 2026-08-20** from `docs/decisions/` to `wiki/decisions/`,
 > keeping their numbering and filenames. `.gvt-agent.json`'s
