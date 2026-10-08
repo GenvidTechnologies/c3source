@@ -67,6 +67,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   before wiping the existing fixture; an unrecognized value is an error. A
   staged pin bump is not drift. Development tooling only: `scripts/` is not in
   the npm tarball, so there is no change to the published package (#88, #90).
+- **Strict `prep-fixture` now fails when the `construct3-sample` pin cannot be
+  verified.** Under `PREP_FIXTURE_STRICT`, a missing submodule, a submodule that
+  is not its own git repository, or a pin that cannot be established (new
+  never-throwing `checkGitlinkPin`; `findGitlinkDrift` is now a wrapper over it)
+  exits 1 before the wipe instead of skipping. The `publish.yml` gate now checks
+  out submodules recursively and sets the same opt-in as `ci.yml`, so the release
+  gate grades the pinned fixture. Non-strict behaviour is unchanged, except that a
+  submodule with its `.git` removed now skips cleanly instead of crashing after
+  the wipe. Development tooling only (#93).
 - **All project documentation moved into an LLM-wiki.** `docs/` guides and the
   26 ADRs were migrated to `wiki/` (14 synthesized concept pages) and
   `wiki/decisions/` (the ADRs, numbering and filenames preserved), with verbatim

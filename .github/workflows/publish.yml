@@ -8,6 +8,13 @@ on:
 jobs:
   gate:
     uses: GenvidTechnologies/public-github-actions/.github/workflows/node-gate.yml@main
+    with:
+      # Same opt-in as ci.yml, so the release gate grades the pinned construct3-sample
+      # fixture (and the SDK/ submodule) instead of self-skipping, and fails when the pin
+      # cannot be verified (#93, ADR 0030).
+      submodules: recursive
+      extra-env: |
+        PREP_FIXTURE_STRICT=1
 
   publish:
     needs: gate

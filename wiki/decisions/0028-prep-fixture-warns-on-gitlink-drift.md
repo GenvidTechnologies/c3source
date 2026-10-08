@@ -17,7 +17,7 @@ sources:
 
 # ADR 0028 — prep-fixture warns (does not fail) when construct3-sample drifts from its pinned gitlink, comparing against the index
 
-**Status:** partially superseded by [ADR 0029](/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md) — drift is fatal when PREP_FIXTURE_STRICT is on; the index comparison and the default warning below remain in effect
+**Status:** partially superseded by [ADR 0029](/decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md) — drift is fatal when PREP_FIXTURE_STRICT is on; the index comparison and the default warning below remain in effect; [ADR 0030](/decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md) makes an unverifiable pin fatal under strict, but never-throws still holds
 **Date:** 2026-10-05
 **Issue:** [#88](https://github.com/GenvidTechnologies/c3source/issues/88)
 

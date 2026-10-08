@@ -29,8 +29,12 @@ without the workflow needing repo secrets exposed to untrusted code.
 
 Publishing is to the **public npm registry** as the scoped package
 `@genvidtech/c3source`. `.github/workflows/publish.yml` triggers on **git
-tags matching `v*.*.*`** (e.g. `v0.3.0`): it re-runs the gate, verifies the
-tag matches `package.json` `version`, then runs `npm publish --provenance
+tags matching `v*.*.*`** (e.g. `v0.3.0`): it re-runs the gate, which checks
+out submodules recursively and runs `prep-fixture` in strict mode
+(`PREP_FIXTURE_STRICT=1`, as `ci.yml` does; [ADR
+0030](/decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md)), so
+the release gate grades the pinned fixture rather than self-skipping; it then
+verifies the tag matches `package.json` `version`, then runs `npm publish --provenance
 --access public`[^claude-md].
 
 Authentication uses **npm OIDC trusted publishing** — short-lived

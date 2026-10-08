@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, it } from "mocha";
 import { expect } from "chai";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { findGitlinkDrift, parseStrictFlag, STRICT_ENV } from "../scripts/gitlink-drift.mjs";
+import { checkGitlinkPin, findGitlinkDrift, parseStrictFlag, STRICT_ENV } from "../scripts/gitlink-drift.mjs";
 
 const IDENTITY = ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"];
 
@@ -72,6 +72,85 @@ describe("findGitlinkDrift", () => {
     mkdirSync(plain);
     expect(() => git(plain, "rev-parse", "--git-dir")).to.throw();
     expect(findGitlinkDrift(plain, "sub")).to.equal(null);
+  });
+});
+
+describe("checkGitlinkPin", () => {
+  let tmp: string;
+  let superRoot: string;
+  let subRoot: string;
+  let pinnedSha: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(path.join(realpathSync.native(tmpdir()), "c3source-gitlink-pin-"));
+    superRoot = path.join(tmp, "super");
+    subRoot = path.join(superRoot, "sub");
+    mkdirSync(subRoot, { recursive: true });
+    git(subRoot, "init", "-q");
+    pinnedSha = commitFile(subRoot, "a.txt", "one");
+    git(superRoot, "init", "-q");
+    git(superRoot, "update-index", "--add", "--cacheinfo", `160000,${pinnedSha},sub`);
+    git(superRoot, "commit", "-m", "pin sub");
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  function expectUnknown(result: ReturnType<typeof checkGitlinkPin>): string {
+    expect(result.status).to.equal("unknown");
+    if (result.status !== "unknown") throw new Error("unreachable");
+    expect(typeof result.reason).to.equal("string");
+    expect(result.reason.length).to.be.greaterThan(0);
+    return result.reason;
+  }
+
+  it("G1: HEAD equals the index gitlink -> clean, pinned === head", () => {
+    const r = checkGitlinkPin(superRoot, "sub");
+    expect(r).to.deep.equal({ status: "clean", pinned: pinnedSha, head: pinnedSha });
+  });
+
+  it("G2: submodule HEAD ahead of the gitlink -> drift with differing SHAs", () => {
+    const newSha = commitFile(subRoot, "b.txt", "two");
+    const r = checkGitlinkPin(superRoot, "sub");
+    expect(r).to.deep.equal({ status: "drift", pinned: pinnedSha, head: newSha });
+    expect(pinnedSha).to.not.equal(newSha);
+  });
+
+  it("G3: subPath not registered in the index -> unknown", () => {
+    git(superRoot, "update-index", "--force-remove", "sub");
+    expect(expectUnknown(checkGitlinkPin(superRoot, "sub"))).to.equal("not registered in the index");
+  });
+
+  it("G4: entry is a regular file, not a gitlink -> unknown", () => {
+    writeFileSync(path.join(tmp, "blob.txt"), "x");
+    const sha = git(superRoot, "hash-object", "-w", path.join(tmp, "blob.txt"));
+    git(superRoot, "update-index", "--add", "--cacheinfo", `100644,${sha},sub`);
+    expect(expectUnknown(checkGitlinkPin(superRoot, "sub"))).to.match(/^not a gitlink/);
+  });
+
+  it("G5: conflicting index stages -> unknown", () => {
+    git(superRoot, "update-index", "--force-remove", "sub");
+    const info = [1, 2, 3].map((stage) => `160000 ${pinnedSha} ${stage}\tsub\n`).join("");
+    execFileSync("git", [...IDENTITY, "update-index", "--index-info"], {
+      cwd: superRoot,
+      input: info,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    expect(expectUnknown(checkGitlinkPin(superRoot, "sub"))).to.match(/conflicting index stages/);
+  });
+
+  it("G6: superRoot is not a git repository -> unknown, git failed", () => {
+    const plain = path.join(tmp, "plain");
+    mkdirSync(plain);
+    expect(expectUnknown(checkGitlinkPin(plain, "sub"))).to.match(/^git failed:/);
+  });
+
+  it("G7: submodule HEAD unborn -> unknown, git failed", () => {
+    rmSync(path.join(subRoot, ".git"), { recursive: true, force: true });
+    git(subRoot, "init", "-q");
+    expect(expectUnknown(checkGitlinkPin(superRoot, "sub"))).to.match(/^git failed:/);
   });
 });
 

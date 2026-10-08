@@ -17,6 +17,8 @@ the full maintenance schema.
 
 ## 2026-10-06
 
+* **Update**: decisions/0028-prep-fixture-warns-on-gitlink-drift.md, decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md, canonical-fixture.md and ci-and-publishing.md — status lines and prose now point to ADR 0030 for strict mode failing on an unverifiable pin and the publish gate opting in (#93).
+* **Creation**: decisions/0030-prep-fixture-strict-fails-on-unverifiable-pin.md, driven by issue #93.
 * **Update**: decisions/0028-prep-fixture-warns-on-gitlink-drift.md and canonical-fixture.md — status and prose now point to ADR 0029 for the strict-mode (CI-fatal) follow-through; canonical-fixture.md also cites `raw/issue-90-prep-fixture-strict-2026-10-06.md`.
 * **Creation**: decisions/0029-prep-fixture-drift-fatal-under-explicit-opt-in.md, driven by issue #90 (see the `raw/issue-90-prep-fixture-strict-2026-10-06.md` capture).
 
