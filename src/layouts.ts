@@ -211,8 +211,9 @@ export const C3_SECTION_ITEM_EXTENSION = ".json";
  * item named `""` reads as `missing` drift.
  *
  * Empty-stem exclusion: AUDITED against the C3 editor bundle at r379, r402 and r495
- * for layouts, event sheets, timelines, flowcharts and models3d; the
- * objectTypes/families name setters are not traced.
+ * for layouts, event sheets, timelines and flowcharts, and at r495 for models3d
+ * (absent from the earlier bundles); the objectTypes/families name setters are
+ * not traced.
  *
  * **Blast radius:** a real nameless item would become a stray plus `missing`
  * drift — a false negative in discovery, never a throw.
