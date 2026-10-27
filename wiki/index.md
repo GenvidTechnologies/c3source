@@ -15,7 +15,20 @@ keeps this list current: a new page is added here when it's created, and
 `lint` flags any page listed in **no** index — here, or in a
 subdirectory's own `index.md`. Each entry's description is the linked
 page's frontmatter `description`, so the index and the page can't drift.
-See `docs/wiki-schema.md` for the page format and maintenance rules.
+See [`schema.md`](schema.md) for the page format and maintenance rules.
+
+Outside the bundle, session context lives in `CLAUDE.md` (overview, the wiki
+routing table, commands, design-record conventions, CI and publishing),
+per-version release notes in `CHANGELOG.md` (Keep a Changelog; introduced at
+2.0.0, earlier entries backfilled from git history, and recording the
+`@genvid` to `@genvidtech` scope rename at 1.6.0), and the public usage overview
+in `README.md` (the only documentation file shipped in the npm tarball). The
+immutable provenance tier is `raw/` (see `raw/README.md`). These are named here
+as plain text, not links, because an out-of-bundle link is a lint finding.
+
+## Schema
+
+* [Wiki Maintenance Schema](schema.md) - The maintenance rules for this wiki — page format, create-vs-update lifecycle, raw/ immutability, staleness policy and the verb contract.
 
 ## Library
 
@@ -54,5 +67,5 @@ See `docs/wiki-schema.md` for the page format and maintenance rules.
 ## Process
 
 * [Development Workflow](development-workflow.md) - c3source's day-to-day working conventions — npm/Node, the four checks and the gate that chains them, mocha/chai/tsx test invocation, the hard rule against running Prettier, the file:line citation policy, and the ephemeral-work-doc / durable-record split.
-* [Issue Triage](issue-triage.md) - How c3source triages GitHub issues — the flat-label variant (default category labels plus triaged, no priority or area scheme), the double meaning of the question label and the rule it forces, the splitting/duplicate/dependency policies, and why the operational contract still lives at docs/issue-triage.md.
+* [Issue Triage](issue-triage.md) - How c3source triages GitHub issues — the flat-label variant (default category labels plus triaged, no priority or area scheme), the double meaning of the question label and the rule it forces, the splitting/duplicate/dependency policies, and the gh mutation recipes; this page is itself the operational contract read by /gvt-dev:triage-issues.
 * [CI & Publishing](ci-and-publishing.md) - c3source's CI runs the shared, secret-free node-gate reusable workflow on GitHub Actions; publishing to the public npm registry as @genvidtech/c3source is tag-triggered and uses OIDC trusted publishing with no long-lived token, and CHANGELOG.md must have Unreleased moved into a dated section before a tag is pushed.

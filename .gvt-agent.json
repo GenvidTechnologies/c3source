@@ -30,6 +30,8 @@
   },
   "features": {},
   "paths": {
-    "docs/decisions/": "wiki/decisions/"
+    "docs/decisions/": "wiki/decisions/",
+    "docs/TOC.md": "wiki/index.md",
+    "docs/issue-triage.md": "wiki/issue-triage.md"
   }
 }

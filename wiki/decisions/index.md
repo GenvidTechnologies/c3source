@@ -8,7 +8,7 @@ Each record states the situation *at its date* and is never retro-edited; a
 later change to the same decision is recorded as a new, superseding ADR
 rather than an edit to the old one, so `status`/`## Related` are how
 supersession is tracked, not `stale_after` (ADRs never go stale — see
-`docs/wiki-schema.md`'s decay policy).
+[`../schema.md`](../schema.md)'s decay policy).
 
 **Template.** The MADR-lite template is bundled in the `gvt-dev` plugin at
 `plugin/docs/decision-record.template.md`; `gvt-dev:tech-writer` fills it
