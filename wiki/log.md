@@ -12,8 +12,15 @@ means a new entry (and, if today isn't already the top group, a new
 insertion point moves from the bottom to the top, but prepending never
 touches a prior entry's text, so the append-only guarantee holds exactly as
 before. If a past entry itself needs correcting, add a new entry that says
-so; never edit or remove the old one in place. See `docs/wiki-schema.md` for
+so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
+
+## 2026-10-27
+
+* **Creation**: schema.md, moved with `git mv` from `docs/wiki-schema.md` and given OKF frontmatter (`type: convention`); driven by `raw/docs-wiki-schema-2026-10-27.md`. The "out-of-bundle link" example now names `../CHANGELOG.md`/`../README.md` instead of files under `docs/`.
+* **Update**: issue-triage.md — merged the operational contract (the eight contract sections and full `gh` mutation recipes) into the page, which is now the contract itself, resolved via `paths["docs/issue-triage.md"]`; removed the "why the contract still lives at docs/" section and the editing-workflow note; `type` is now `convention`; driven by `raw/docs-issue-triage-2026-10-01.md` (unchanged capture, byte-identical to the retired `docs/issue-triage.md`).
+* **Update**: index.md — added the Schema section, plain-text pointers to `CLAUDE.md`, `CHANGELOG.md` and `README.md` carried over from the retired `docs/TOC.md` (captured as `raw/docs-toc-2026-10-27.md`), and the new Issue Triage description.
+* **Deprecation**: `docs/` retired. `docs/TOC.md` is now `wiki/index.md`, `docs/wiki-schema.md` is `wiki/schema.md` and `docs/issue-triage.md` is `wiki/issue-triage.md`, via the `paths` overrides in `.gvt-agent.json` under gvt-dev 4.41.0 (open upstream: gvt-dev #374/#388).
 
 ## 2026-10-06
 

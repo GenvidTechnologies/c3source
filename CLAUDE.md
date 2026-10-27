@@ -26,10 +26,22 @@ examples behind this rule.
 
 **This repo's documentation lives in an LLM-wiki under `wiki/`, not in `docs/`.**
 Architecture, the C3 domain facts, the API surface, the fixture mechanism, and
-all 26 Architecture Decision Records were migrated there on 2026-08-20. `docs/`
-now holds only three files — `TOC.md`, `wiki-schema.md`, and `issue-triage.md` —
-each pinned to that path by plugin tooling until the plugin honours `paths`
-overrides (gvt-dev #374).
+all 26 Architecture Decision Records were migrated there on 2026-08-20. The
+last three files in `docs/` followed on 2026-10-27, once gvt-dev 4.41.0 honoured
+`paths` overrides, and **`docs/` no longer exists**: `docs/TOC.md` is now
+`wiki/index.md`, `docs/wiki-schema.md` is `wiki/schema.md`, and
+`docs/issue-triage.md` is `wiki/issue-triage.md`. `.gvt-agent.json` `paths`
+declares the first and third (and `docs/decisions/`); `maintain-wiki` finds the
+schema at `<wikiDir>/schema.md` by default.
+
+**Known cost.** The override is not yet honoured everywhere: several plugin
+agents (analyst, designer, planner, code-reviewer, condense-lessons,
+cleanup-initiative) say `docs/TOC.md` literally in their body prose and won't
+follow it (gvt-dev #374 / #388, open). The routing table below, pointing at
+`wiki/index.md`, is the mitigation — when dispatching one of those agents,
+name `wiki/index.md` in the brief. Also, `plan-task`'s issue-less acceptance
+fallback writes `docs/acceptance/` (gvt-dev #455), which would re-create
+`docs/`; relocate or discard that file rather than letting `docs/` return.
 
 Start at **[`wiki/index.md`](wiki/index.md)** — it lists every page with a
 one-line description. Direct routes:
@@ -50,12 +62,13 @@ one-line description. Direct routes:
 | Reusable patterns this repo has settled on | [`wiki/design-patterns.md`](wiki/design-patterns.md) |
 | How issues are triaged — labels, the `question` double meaning, duplicates | [`wiki/issue-triage.md`](wiki/issue-triage.md) |
 | **Why** a design is the way it is | [`wiki/decisions/index.md`](wiki/decisions/index.md) |
+| How the wiki itself is maintained — page format, lifecycle, staleness policy | [`wiki/schema.md`](wiki/schema.md) |
 
 Two rules when working with the wiki:
 
 - **`raw/` is immutable.** It holds verbatim captures of every source a wiki
   page was built from. Never edit a file there; re-capture it as a new file
-  instead. `docs/wiki-schema.md` is the binding maintenance schema.
+  instead. [`wiki/schema.md`](wiki/schema.md) is the binding maintenance schema.
 - **Never cite `file:line` in a wiki page.** These pages ship to three
   downstream repos, where a stale line offset misleads longer than it helps.
   Name the symbol — it is stable, and `grep` finds it. (Existing `file:line`
