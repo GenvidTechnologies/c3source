@@ -5,7 +5,7 @@ description: find_all_files_path is the single canonical recursive disk walk und
 tags: [traversal, layouts, filesystem, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -15,6 +15,10 @@ sources:
     resource: ../raw/docs-api-guide-2026-08-20.md
     title: "docs/api-guide.md (c3source API guide, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: issue-95-evidence
+    resource: ../raw/issue-95-empty-stem-evidence-2026-10-27.md
+    title: "Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)"
+    last_modified: 2026-10-27
 ---
 
 # Layout Traversal
@@ -131,6 +135,20 @@ and `findAllAddons` (`.c3addon`). Both already had a correct,
 section-specific item-hood rule of their own before item-hood was
 generalized[^api-guide].
 
+**An empty stem is not a section item.** `isSectionItemName` returns `false`
+for `.json` and for any path whose last segment is `.json`, whether called
+with a basename or a path (callers pass both: `construct3-chef` hands it full
+paths). The test is on the stem of the last path segment, with either
+separator, so `a.json`, ` .json` and `C:/x/layouts/a.json` stay items. Such a
+file is therefore a stray: `find_all_section_items_path` and the seven finders
+never return it, `detectStrayFiles` and `ManifestDrift.strays` do, and
+`walkDiskNameTree` never yields an empty name. The partition is unchanged,
+because `detectStrayFiles` is the exact complement of the predicate. A
+breaking change in behaviour, not signature (3.0.0); see [ADR
+0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain Facts
+— the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary)
+for the evidence, including the objectTypes and families gap[^issue-95-evidence].
+
 ### The 2.0.0 narrowing, and how to recover the old behaviour
 
 Narrowed in 2.0.0 — `find_all_layouts_path`/`find_all_objectTypes_path`
@@ -222,7 +240,9 @@ shallow walk previously skipped[^claude-md].
 - [Project Manifest](/project-manifest.md) — `C3_SECTION_FOLDERS`/`C3_ROOT_FILE_FOLDERS` and stray-file detection built on this axis structure.
 - [C3Project Handle](/c3project-handle.md) — the `findAll*` finders that wrap these primitives against a project root.
 - [Serialization Form](/serialization-form.md) — the minified-source exception, orthogonal to provenance.
+- [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — why `.json` is a stray, not an item.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide]: docs/api-guide.md (c3source API guide, 2026-08-20 capture)
+[^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 </content>

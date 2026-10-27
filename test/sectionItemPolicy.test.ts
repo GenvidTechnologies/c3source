@@ -254,3 +254,23 @@ describe("find_all_layouts_path / find_all_objectTypes_path never surface a stra
     expect(find_all_objectTypes_path(root)).to.not.deep.include(path.join(root, "README.md"));
   });
 });
+
+describe("isSectionItemName: an empty stem is not a section item (#95)", () => {
+  it("SI10: false for the bare basename .json", () => {
+    expect(isSectionItemName(".json")).to.equal(false);
+  });
+
+  it("SI11: false for any path whose last segment is .json, with either separator", () => {
+    expect(isSectionItemName("/.json")).to.equal(false);
+    expect(isSectionItemName("layouts/.json")).to.equal(false);
+    expect(isSectionItemName("C:/x/layouts/.json")).to.equal(false);
+    expect(isSectionItemName(["C:", "x", "layouts", ".json"].join("\\"))).to.equal(false);
+  });
+
+  it("SI12: survival — names with a non-empty stem stay true, however odd", () => {
+    expect(isSectionItemName("a.json")).to.equal(true);
+    expect(isSectionItemName(" .json")).to.equal(true);
+    expect(isSectionItemName("..json")).to.equal(true);
+    expect(isSectionItemName("C:/x/layouts/a.json")).to.equal(true);
+  });
+});

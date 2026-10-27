@@ -192,7 +192,7 @@ export function isScriptSourceName(name: string): boolean {
 export const C3_SECTION_ITEM_EXTENSION = ".json";
 
 /**
- * True if a bare basename is a C3 name-section item by extension alone.
+ * True if a bare basename is a C3 name-section item by its extension and a non-empty stem.
  * Tests item-hood only — provenance (is this file project source, or an
  * editor-local artifact like `.uistate.json`?) is {@link isEditorLocalPath}'s
  * job, and reachability (should the walk descend into this directory at all?)
@@ -204,9 +204,24 @@ export const C3_SECTION_ITEM_EXTENSION = ".json";
  * extensions but unverified for `.json`; matching case-insensitively here
  * would silently *widen* every name-section finder built on this predicate,
  * each of which relies on an exact match against {@link C3_SECTION_ITEM_EXTENSION}.
+ *
+ * An empty stem is not a section item: `.json`, and any path whose last segment
+ * is `.json`, return false, whether called with a basename or a path (callers
+ * pass both). Such a file is a stray (`detectStrayFiles`), and a declared
+ * item named `""` reads as `missing` drift.
+ *
+ * Empty-stem exclusion: AUDITED against the C3 editor bundle at r379, r402 and r495
+ * for layouts, event sheets, timelines and flowcharts, and at r495 for models3d
+ * (absent from the earlier bundles); the objectTypes/families name setters are
+ * not traced.
+ *
+ * **Blast radius:** a real nameless item would become a stray plus `missing`
+ * drift — a false negative in discovery, never a throw.
  */
 export function isSectionItemName(name: string): boolean {
-  return name.endsWith(C3_SECTION_ITEM_EXTENSION);
+  if (!name.endsWith(C3_SECTION_ITEM_EXTENSION)) return false;
+  const stem = name.slice(0, -C3_SECTION_ITEM_EXTENSION.length);
+  return stem !== "" && !stem.endsWith("/") && !stem.endsWith("\\");
 }
 
 /**

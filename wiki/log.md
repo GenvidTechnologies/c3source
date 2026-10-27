@@ -17,6 +17,10 @@ the full maintenance schema.
 
 ## 2026-10-27
 
+* **Update**: c3-domain-facts.md — rule 2 of "Three validation rules" now says a release-and-section confidence label claims every pair, with the models3d case; driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md` (a session retro on #95).
+* **Creation**: decisions/0031-empty-stem-is-not-a-section-item.md, driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md`; indexed in decisions/index.md. Records that `isSectionItemName` rejects an empty stem (3.0.0), and answers whether C3 loads a nameless `.json` item.
+* **Update**: c3-domain-facts.md — new section "Item-hood at the empty-stem boundary" with separate bundle and corpus evidence, and the `C3_SECTION_ITEM_EXTENSION` table row; the corpus figure was re-run and deduplicated (the inherited 12,672 was not reproduced and is not quoted); driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md`.
+* **Update**: layout-traversal.md (Axis 3) and project-manifest.md (Stray files) — the empty-stem rule, the `.json` stray, and a declared `""` reading as `missing` drift; driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md`.
 * **Creation**: schema.md, moved with `git mv` from `docs/wiki-schema.md` and given OKF frontmatter (`type: convention`); driven by `raw/docs-wiki-schema-2026-10-27.md`. The "out-of-bundle link" example now names `../CHANGELOG.md`/`../README.md` instead of files under `docs/`.
 * **Update**: issue-triage.md — merged the operational contract (the eight contract sections and full `gh` mutation recipes) into the page, which is now the contract itself, resolved via `paths["docs/issue-triage.md"]`; removed the "why the contract still lives at docs/" section and the editing-workflow note; `type` is now `convention`; driven by `raw/docs-issue-triage-2026-10-01.md` (unchanged capture, byte-identical to the retired `docs/issue-triage.md`).
 * **Update**: index.md — added the Schema section, plain-text pointers to `CLAUDE.md`, `CHANGELOG.md` and `README.md` carried over from the retired `docs/TOC.md` (captured as `raw/docs-toc-2026-10-27.md`), and the new Issue Triage description.

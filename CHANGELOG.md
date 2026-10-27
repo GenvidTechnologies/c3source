@@ -47,6 +47,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed — BREAKING
+
+- **`isSectionItemName` no longer treats an empty-stem basename or path (`.json`)
+  as a section item;** such files are now reported by
+  `detectStrayFiles`/`ManifestDrift.strays`, and a declared `""` reads as
+  `missing` drift
+  ([#95](https://github.com/GenvidTechnologies/c3source/issues/95)) — see
+  [ADR 0031](wiki/decisions/0031-empty-stem-is-not-a-section-item.md). The
+  change is in behaviour only, with no type or signature change, and it also
+  applies when the function is given a path whose last segment is `.json`.
+
 ## [2.1.0] - 2026-10-08
 
 ### Added

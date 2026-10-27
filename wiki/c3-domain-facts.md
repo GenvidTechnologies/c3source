@@ -5,7 +5,7 @@ description: c3source owns exported tables naming undocumented C3 platform facts
 tags: [domain-facts, c3-domain-facts, corpus-scan, editor-bundle, audit]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -19,6 +19,10 @@ sources:
     resource: ../raw/issue-86-file-entry-type-evidence-2026-10-01.md
     title: "Issue #86 file-entry type evidence (capture, 2026-10-01)"
     last_modified: 2026-10-01
+  - id: issue-95-evidence
+    resource: ../raw/issue-95-empty-stem-evidence-2026-10-27.md
+    title: "Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)"
+    last_modified: 2026-10-27
 ---
 
 # C3 Domain Facts
@@ -46,6 +50,12 @@ is validated*.
    Counts, releases, and the scan date live in this doc; JSDoc holds only
    the label and a pointer. A **release pin** (`r402`, `r437`) is the one
    exception — a fixed historical fact, not a rotting count[^claude-md].
+   A label scoped by releases *and* sections ("AUDITED at r379, r402 and r495
+   for layouts, event sheets, …") claims every release-and-section pair, so
+   check each pair against that release's own bundle. A section can be
+   younger than the oldest release named: models3d is absent from the r379
+   and r402 bundles, and a label that listed it at all three releases shipped
+   in JSDoc until a per-release grep caught it[^issue-95-evidence].
 3. **`scripts/scan-domain-facts.mjs` reports partitions; the maintainer
    produces the verdict.** It never concludes a table is correct —
    `scripts/*.mjs` is unlinted, untypechecked, untested, and not in CI, so a
@@ -127,7 +137,7 @@ fresh[^domain-fact-audit][^issue-86-evidence].
 | `C3_MINIFIED_SOURCE_SUFFIXES` | `isMinifiedSourcePath` | NO CONTRADICTIONS across 2,605 `.json` files | Cosmetic — write-form only |
 | `SCRIPT_SOURCE_EXTENSIONS` | `isScriptSourceName` | NO GAPS at value level; `.ts`→r433 bundle-pinned | Silent over/under-collection in script discovery, never a throw |
 | `SCRIPT_FILE_TYPE_EXTENSIONS` | — | NO GAPS; same corpus as above | Silent miss in manifest interpretation, never a throw — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS` |
-| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one) | Silent mis-partition between "section item" and "stray" |
+| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below) | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
 | `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, two tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
 
 The corpus is 14 Genvid-authored projects spanning 8 releases (`37900,
@@ -136,6 +146,46 @@ The corpus is 14 Genvid-authored projects spanning 8 releases (`37900,
 ~97% of all ACEs and ~99.5% of all image nodes in the entire corpus, so
 every other project is, on volume, a rounding error next to it. Scan **can
 find gaps; it can never prove completeness**[^domain-fact-audit].
+
+## Item-hood at the empty-stem boundary
+
+`isSectionItemName` accepts `*.json` and, since issue #95, only with a
+non-empty stem on the last path segment: `.json` is a stray, not an item
+([ADR 0031](/decisions/0031-empty-stem-is-not-a-section-item.md)). The
+question this section answers is whether C3 ever writes or loads a nameless
+item, so that a real one is never lost. The two evidence channels answer
+different halves of it and are reported separately, as the
+[two-provenance warning](#the-two-provenance-warning) requires.
+
+**Bundle evidence.** The editor's name validator begins `if(!d)return!1`, so
+it rejects the empty string before any other rule, at r379, r402 and r495. The
+name setters of layouts, event sheets, timelines and flowcharts call it and
+throw at all three releases, and models3d does at r495 (the section does not
+exist in the r379 and r402 bundles). The section loaders open
+`folder + <manifest item name> + ".json"` and never list the folder, so a
+`.json` no manifest item names is never opened. **Not traced:** the objectTypes
+and families name setters (their loaders were read, their setters were not
+found), and what the editor does with a manifest that declares `""`, which no
+one has run. The matched snippets are verbatim in the raw
+capture[^issue-95-evidence]. This evidence is not scanner-refreshable;
+re-verify it against `editor.construct.net/r{NNN}/`.
+
+**Corpus evidence.** Re-run 2026-10-27 on the 14 projects of the inventoried
+corpus (deduplicated by hand, see below): 2,282 declared items across the
+seven name sections, 0 of them declared as `""`, and 0 files whose basename is
+`.json` under any section root. `scripts/scan-domain-facts.mjs` agrees: 2,282
+section items and 0 strays across 8 releases, with `models3d` NOT EXERCISED.
+burbank holds 2,007 of the 2,282 items, so the other 13 projects add little
+volume. A zero here is an absence in these 14 projects only; a scan can
+find a case, never rule one out. The earlier figure of 12,672 declared
+items over about 14 projects, inherited from the issue's analysis, could not
+be reproduced by this count and is not quoted. Method: the depth-4 `find` for `project.c3proj` under the maintainer
+checkout directory returned 18 manifests; four were dropped as copies
+(`bb-backup/previews/burbank`, `bb-backup/previews/construct3-poc`,
+`google/burbank`, and the `construct3-sample` submodule inside c3source), which
+leaves the 14. A deeper `find` returns 38 manifests, mostly backups and
+test-fixture copies; they were not added. Dedupe by project identity, not by
+`uniqueId`: the cloned addon samples share one.
 
 ## EXTENSION_FILE_TYPES: the writer-direction fact
 
@@ -274,6 +324,7 @@ update this doc's **numbers** — never the JSDoc labels.
 ## Related
 
 - [ADR 0027 — File-entry type as a writer-direction domain fact](/decisions/0027-file-entry-type-writer-fact.md) — why `EXTENSION_FILE_TYPES` is an open table with an accessor and two tiers.
+- [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — the decision behind the empty-stem boundary above.
 - [Project Manifest](/project-manifest.md) — where `EXTENSION_FILE_TYPES` sits beside its reading-direction siblings.
 - [Reference Integrity](/reference-integrity.md) — `C3_PSEUDO_OBJECT_CLASSES` and the functions-object defect this convention's rules were built to catch.
 - [Layout Traversal](/layout-traversal.md) — `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`, one of the tables audited here.
@@ -283,3 +334,4 @@ update this doc's **numbers** — never the JSDoc labels.
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^domain-fact-audit]: docs/domain-fact-audit.md (c3source C3 domain-fact audit, 2026-08-20 capture)
 [^issue-86-evidence]: Issue #86 file-entry type evidence (capture, 2026-10-01)
+[^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)

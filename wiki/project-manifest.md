@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-05T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -15,6 +15,10 @@ sources:
     resource: ../raw/docs-api-guide-manifest-2026-08-20.md
     title: "docs/api-guide-manifest.md (c3source API guide, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: issue-95-evidence
+    resource: ../raw/issue-95-empty-stem-evidence-2026-10-27.md
+    title: "Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)"
+    last_modified: 2026-10-27
 ---
 
 # Project Manifest
@@ -282,13 +286,30 @@ policy, applied with a one-line filter over the result — c3source reports
 every non-item file and filters nothing itself[^api-guide-manifest]. See
 [ADR 0025](/decisions/0025-section-item-hood-and-stray-files.md).
 
+**An empty-stem file is a stray.** A file named exactly `.json` under a name
+section (at any depth) fails `isSectionItemName`, so it is reported in
+`strays` and never as an item: `walkDiskNameTree` does not yield an empty
+name, and drift does not report `untracked ""`. If the manifest also declares
+an item named `""`, the declared name finds nothing on disk and reads as
+`missing ""` drift: the section is not in sync (`inSync` is `false`), and the
+`.json` shows up in `strays` alongside. That `inSync` change comes from the
+`missing` entry, not from the stray, so "a stray is never drift" still holds.
+Manifest validation is unchanged: `validateProjectManifest` and
+`collectManifestIssues` add no rule against `""`, so strict `parseProjectManifest`
+still accepts such a manifest, because what the editor does with a declared
+`""` has not been observed. See [ADR
+0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain
+Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary)[^issue-95-evidence].
+
 ## Related
 
 - [Layout Traversal](/layout-traversal.md) — the item-hood axis (`isSectionItemName`) that defines what counts as a section item vs. a stray.
 - [Module Architecture](/module-architecture.md) — where `manifest` sits in the module DAG, as one of three mutually-independent siblings above `layouts`.
 - [C3Project Handle](/c3project-handle.md) — the root-bound handle wrapping `manifest()`, drift detection, and the write surface.
 - [Serialization Form](/serialization-form.md) — the on-disk write form `writeProjectManifest` reproduces.
+- [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — why a `.json` file is a stray and a declared `""` reads as `missing`.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide-manifest]: docs/api-guide-manifest.md (c3source API guide, 2026-08-20 capture)
+[^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 </content>
