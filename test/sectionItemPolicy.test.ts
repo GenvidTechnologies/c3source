@@ -261,6 +261,7 @@ describe("isSectionItemName: an empty stem is not a section item (#95)", () => {
   });
 
   it("SI11: false for any path whose last segment is .json, with either separator", () => {
+    expect(isSectionItemName("/.json")).to.equal(false);
     expect(isSectionItemName("layouts/.json")).to.equal(false);
     expect(isSectionItemName("C:/x/layouts/.json")).to.equal(false);
     expect(isSectionItemName(["C:", "x", "layouts", ".json"].join("\\"))).to.equal(false);

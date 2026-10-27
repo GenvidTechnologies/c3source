@@ -349,7 +349,7 @@ describe("an empty-stem .json is a stray, not an item (#95)", () => {
     }
   });
 
-  it("SF13 (R3): per section, .json and sub/.json are strays and never items; items ∪ strays is every non-editor-local file", () => {
+  it("SF13 (R3): .json and sub/.json are strays, never items; items ∪ strays = all non-editor-local files", () => {
     root = mkdtempSync(path.join(tmpdir(), "c3source-strays-sf13-"));
     for (const folder of Object.values(C3_SECTION_FOLDERS)) {
       write(root, `${folder}/A.json`, "{}");
@@ -385,20 +385,22 @@ describe("an empty-stem .json is a stray, not an item (#95)", () => {
     }
   });
 
-  it("SF14 (R4): walkDiskNameTree never yields an empty name; drift reports no untracked \"\" and lists the .json as a stray", () => {
+  it('SF14 (R4): the walk never yields "", and drift has no untracked "" but lists .json as a stray', () => {
     root = mkdtempSync(path.join(tmpdir(), "c3source-strays-sf14-"));
     write(root, "layouts/.json", "{}");
+    write(root, "layouts/A.json", "{}");
 
-    expect(walkDiskNameTree(path.join(root, "layouts")).filter((e) => e.name === "")).to.deep.equal([]);
+    const walked = walkDiskNameTree(path.join(root, "layouts")).map((e) => e.name);
+    expect(walked, "positive control: a named item is yielded").to.deep.equal(["A"]);
 
     const drift = detectManifestDrift(root, minimalManifest());
     const untracked = drift.sections.flatMap((s) => s.entries).filter((e) => e.kind === "untracked");
+    expect(untracked.map((e) => e.name), "positive control: A is untracked").to.include("A");
     expect(untracked.filter((e) => e.name === "")).to.deep.equal([]);
-    expect(drift.strays, JSON.stringify(drift.strays)).to.not.be.undefined;
-    expect(drift.strays!.map((s) => s.name)).to.include(".json");
+    expect(drift.strays!.map((s) => s.name), JSON.stringify(drift.strays)).to.include(".json");
   });
 
-  it("SF15 (R4): a declared \"\" with a disk .json is missing \"\" plus a stray, not in sync; manifest validation is unchanged", () => {
+  it('SF15 (R4): declared "" plus disk .json is missing "" and a stray, not in sync; validation unchanged', () => {
     root = mkdtempSync(path.join(tmpdir(), "c3source-strays-sf15-"));
     write(root, "layouts/.json", "{}");
     const manifest = minimalManifest({ layouts: { items: [""], subfolders: [] } });
