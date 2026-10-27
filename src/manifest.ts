@@ -679,6 +679,8 @@ export function walkManifestFileTree(
  * with its section-root-relative subfolder path.
  * `path` segments are relative to `diskFolder` (the section root), never absolute.
  * Skips editor-local entries via `isEditorLocalPath`. Returns [] if `diskFolder` absent.
+ * Never yields an empty name: an empty-stem `.json` is not a section item
+ * (`isSectionItemName`), so it is a stray, not an entry here.
  * Uses `readdirSync`/`statSync` directly (NOT `find_all_files_path`) to preserve path context.
  */
 export function walkDiskNameTree(
@@ -1295,7 +1297,8 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
 /**
  * A file found under a name-section root that is neither a section item
  * ({@link isSectionItemName}) nor editor-local ({@link isEditorLocalPath}) —
- * e.g. `layouts/Level1.dsl.txt`, `objectTypes/tiles/notes.md`. See ADR 0025.
+ * e.g. `layouts/Level1.dsl.txt`, `objectTypes/tiles/notes.md`, or an
+ * empty-stem `layouts/.json`. See ADR 0025.
  *
  * This is deliberately NOT drift: a name section keys its items on `<name>`
  * derived from `<name>.json` (see {@link C3_SECTION_ITEM_EXTENSION}), so a

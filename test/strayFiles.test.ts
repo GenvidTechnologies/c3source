@@ -11,6 +11,8 @@ import {
   isEditorLocalPath,
   writeC3JsonFile,
   openProject,
+  walkDiskNameTree,
+  validateProjectManifest,
   C3_SECTION_FOLDERS,
   type StrayFile,
   type C3ProjectManifest,
@@ -334,6 +336,79 @@ describe("detectManifestDrift: strays wiring (#76 Task 5)", () => {
     expect(openProject(withoutStrays).detectStrayFiles()).to.deep.equal([]);
     expect(detectManifestDrift(withoutStrays).strays).to.equal(undefined);
     expect(openProject(withoutStrays).detectManifestDrift().strays).to.equal(undefined);
+  });
+});
+
+describe("an empty-stem .json is a stray, not an item (#95)", () => {
+  let root: string | undefined;
+
+  afterEach(() => {
+    if (root) {
+      rmSync(root, { recursive: true, force: true });
+      root = undefined;
+    }
+  });
+
+  it("SF13 (R3): per section, .json and sub/.json are strays and never items; items ∪ strays is every non-editor-local file", () => {
+    root = mkdtempSync(path.join(tmpdir(), "c3source-strays-sf13-"));
+    for (const folder of Object.values(C3_SECTION_FOLDERS)) {
+      write(root, `${folder}/A.json`, "{}");
+      write(root, `${folder}/.json`, "{}");
+      write(root, `${folder}/sub/B.json`, "{}");
+      write(root, `${folder}/sub/.json`, "{}");
+      write(root, `${folder}/readme.md`, "x");
+      write(root, `${folder}/C.uistate.json`, "{}");
+    }
+
+    const strays = detectStrayFiles(root);
+    const relOf = (dir: string, abs: string): string => path.relative(dir, abs).split(path.sep).join("/");
+
+    for (const [section, folder] of Object.entries(C3_SECTION_FOLDERS)) {
+      const dir = path.join(root, folder);
+      const itemRels = find_all_section_items_path(dir)
+        .map((p) => relOf(dir, p))
+        .sort();
+      const strayRels = strays
+        .filter((s) => s.section === section)
+        .map((s) => [...s.diskPath, s.name].join("/"))
+        .sort();
+      const allRels = find_all_files_path(dir, (f) => !isEditorLocalPath(f))
+        .map((p) => relOf(dir, p))
+        .sort();
+
+      expect(strayRels, `${section}: strays`).to.include(".json");
+      expect(strayRels, `${section}: strays`).to.include("sub/.json");
+      expect(itemRels, `${section}: items`).to.not.include(".json");
+      expect(itemRels, `${section}: items`).to.not.include("sub/.json");
+      expect(itemRels.filter((b) => strayRels.includes(b)), `${section}: items/strays overlap`).to.deep.equal([]);
+      expect([...itemRels, ...strayRels].sort(), section).to.deep.equal(allRels);
+    }
+  });
+
+  it("SF14 (R4): walkDiskNameTree never yields an empty name; drift reports no untracked \"\" and lists the .json as a stray", () => {
+    root = mkdtempSync(path.join(tmpdir(), "c3source-strays-sf14-"));
+    write(root, "layouts/.json", "{}");
+
+    expect(walkDiskNameTree(path.join(root, "layouts")).filter((e) => e.name === "")).to.deep.equal([]);
+
+    const drift = detectManifestDrift(root, minimalManifest());
+    const untracked = drift.sections.flatMap((s) => s.entries).filter((e) => e.kind === "untracked");
+    expect(untracked.filter((e) => e.name === "")).to.deep.equal([]);
+    expect(drift.strays, JSON.stringify(drift.strays)).to.not.be.undefined;
+    expect(drift.strays!.map((s) => s.name)).to.include(".json");
+  });
+
+  it("SF15 (R4): a declared \"\" with a disk .json is missing \"\" plus a stray, not in sync; manifest validation is unchanged", () => {
+    root = mkdtempSync(path.join(tmpdir(), "c3source-strays-sf15-"));
+    write(root, "layouts/.json", "{}");
+    const manifest = minimalManifest({ layouts: { items: [""], subfolders: [] } });
+
+    const drift = detectManifestDrift(root, manifest);
+    const missing = drift.sections.flatMap((s) => s.entries).filter((e) => e.kind === "missing");
+    expect(missing.map((e) => e.name), JSON.stringify(drift)).to.include("");
+    expect(drift.strays!.map((s) => s.name)).to.include(".json");
+    expect(drift.inSync).to.equal(false);
+    expect(validateProjectManifest(manifest)).to.deep.equal([]);
   });
 });
 
