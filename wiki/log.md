@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-10-27
 
+* **Update**: c3-domain-facts.md — rule 2 of "Three validation rules" now says a release-and-section confidence label claims every pair, with the models3d case; driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md` (a session retro on #95).
 * **Creation**: decisions/0031-empty-stem-is-not-a-section-item.md, driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md`; indexed in decisions/index.md. Records that `isSectionItemName` rejects an empty stem (3.0.0), and answers whether C3 loads a nameless `.json` item.
 * **Update**: c3-domain-facts.md — new section "Item-hood at the empty-stem boundary" with separate bundle and corpus evidence, and the `C3_SECTION_ITEM_EXTENSION` table row; the corpus figure was re-run and deduplicated (the inherited 12,672 was not reproduced and is not quoted); driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md`.
 * **Update**: layout-traversal.md (Axis 3) and project-manifest.md (Stray files) — the empty-stem rule, the `.json` stray, and a declared `""` reading as `missing` drift; driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md`.

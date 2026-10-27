@@ -50,6 +50,12 @@ is validated*.
    Counts, releases, and the scan date live in this doc; JSDoc holds only
    the label and a pointer. A **release pin** (`r402`, `r437`) is the one
    exception — a fixed historical fact, not a rotting count[^claude-md].
+   A label scoped by releases *and* sections ("AUDITED at r379, r402 and r495
+   for layouts, event sheets, …") claims every release-and-section pair, so
+   check each pair against that release's own bundle. A section can be
+   younger than the oldest release named: models3d is absent from the r379
+   and r402 bundles, and a label that listed it at all three releases shipped
+   in JSDoc until a per-release grep caught it[^issue-95-evidence].
 3. **`scripts/scan-domain-facts.mjs` reports partitions; the maintainer
    produces the verdict.** It never concludes a table is correct —
    `scripts/*.mjs` is unlinted, untypechecked, untested, and not in CI, so a
