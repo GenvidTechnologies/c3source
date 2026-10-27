@@ -185,7 +185,7 @@ first.
   durable record is the issue or PR, not the commit (see **Design records &
   branches** above).
 - End the message with:
-  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 
 For a multi-line body, write the message to a temp file and pass it with `git
 commit -F <file>` — building it inline is what the shell mangles.
