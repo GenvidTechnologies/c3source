@@ -43,6 +43,8 @@ Two gaps stay open and are stated here rather than closed by assumption. **The o
 
 ## Decision
 
+The issue offered two options: keep `true` and document it, or narrow the predicate. The design labelled the narrowing **Option A** (chosen), the keep-and-document option **Option B**, and a deferral of A to a later major **Option C**; the Compromise section uses those labels.
+
 **`isSectionItemName` returns `false` for an empty stem, on a basename and on a path.** The body keeps the case-sensitive `.json` test and adds a stem check on the last path segment:
 
 ```ts
@@ -72,7 +74,7 @@ The alternatives, with the reason each was not chosen:
 - **Adopt C3's full name validity inside the predicate (narrowing further than the empty stem).** Rejected because it is a different fact with a different shape and would break ADR 0025's one-fact, one-predicate axes. The validator has many rules, some operating-system flavoured, and runs on the name after normalisation, so the validated name is not the on-disk basename. If full name validity is ever wanted, it belongs in its own table and predicate.
 - **The issue's length-only formula, `name.length > ext.length && name.endsWith(ext)`.** Rejected because `construct3-chef` passes full paths (`scaffoldPlan.ts` `isSectionItemName(outPath)`, `sourceIo.ts` `isSectionItemName(abs)`; checked by grep), and `C:/x/layouts/.json` would stay `true` under it.
 
-**Accepted costs.** A real nameless item, if C3 ever wrote one, would become a stray plus `missing` drift: a false negative in discovery, never a throw. The editor evidence says it does not, for the sections traced. `diffNameMaps` keying by name, which collapses same-named items in different folders, is a pre-existing and separate defect and is not addressed here. Consumers get downstream heads-ups: `c3-domain-manager`'s `listInertOverrides` reason text for an override key `.json` is now cosmetically wrong, and `construct3-chef`'s `scaffoldPlan` basename guard becomes redundant but harmless.
+**Accepted costs.** A real nameless item, if C3 ever wrote one, would become a stray plus `missing` drift: a false negative in discovery, never a throw. The editor evidence says it does not, for the sections traced. The narrowing stops at the empty stem on purpose, so some names C3's validator rejects stay items: `..json` (stem `.`, a leading `.` the validator refuses at every traced release) is pinned as an item by SI12, as the cost of not adopting full name validity. `diffNameMaps` keying by name, which collapses same-named items in different folders, is a pre-existing and separate defect and is not addressed here. Consumers get downstream heads-ups: `c3-domain-manager`'s `listInertOverrides` reason text for an override key `.json` is now cosmetically wrong; `construct3-chef`'s `scaffoldPlan` basename guard becomes redundant but harmless; and `construct3-chef`'s `sourceIo` object-type walk, which filters on `isSectionItemName(abs)`, now skips an `objectTypes/.json` it used to process.
 
 ## Consequences
 

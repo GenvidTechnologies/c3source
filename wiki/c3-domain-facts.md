@@ -171,9 +171,9 @@ seven name sections, 0 of them declared as `""`, and 0 files whose basename is
 section items and 0 strays across 8 releases, with `models3d` NOT EXERCISED.
 burbank holds 2,007 of the 2,282 items, so the other 13 projects add little
 volume. A zero here is an absence in these 14 projects only; a scan can
-find a case, never rule one out. The earlier figure of 12,672 declared items over about 14 projects, inherited from
-the issue's analysis, could not be reproduced by this count and is not
-quoted. Method: the depth-4 `find` for `project.c3proj` under the maintainer
+find a case, never rule one out. The earlier figure of 12,672 declared
+items over about 14 projects, inherited from the issue's analysis, could not
+be reproduced by this count and is not quoted. Method: the depth-4 `find` for `project.c3proj` under the maintainer
 checkout directory returned 18 manifests; four were dropped as copies
 (`bb-backup/previews/burbank`, `bb-backup/previews/construct3-poc`,
 `google/burbank`, and the `construct3-sample` submodule inside c3source), which
