@@ -666,7 +666,7 @@ export function walkManifestFileTree(
 }
 
 /** How a folder's path segment came about in {@link walkManifestFolders}. */
-type ManifestFolderOrigin = "root" | "named" | "transitions-container" | "transparent";
+export type ManifestFolderOrigin = "root" | "named" | "transitions-container" | "transparent";
 
 /** One folder reached by {@link walkManifestFolders}. */
 interface FolderVisit<F extends C3NameFolder | C3FileFolder> {
@@ -717,6 +717,47 @@ function unnamedSegmentFor(section: string): string | undefined {
 /** Map key for a manifest/disk path. */
 function pathKey(path: ReadonlyArray<ManifestPathSegment>): string {
   return formatManifestPath(path);
+}
+
+/** One folder returned by {@link resolveManifestFolders}. */
+export interface ResolvedManifestFolder<F extends C3NameFolder | C3FileFolder = C3NameFolder> {
+  /** The live folder object from the walked tree; callers may mutate it. */
+  folder: F;
+  /** The folder's parent in the manifest tree, or null for the section root. */
+  parent: F | null;
+  /** How the folder's drift-path segment came about. */
+  origin: ManifestFolderOrigin;
+}
+
+/**
+ * Resolve a drift `manifestPath` back to the manifest folder(s) that declare it: the inverse of the
+ * drift path model.
+ *
+ * Returns EVERY folder whose drift path equals `manifestPath`, in manifest pre-order (a folder before
+ * its descendants, siblings in manifest order), and `[]` when nothing matches. It never picks one
+ * match for the caller.
+ *
+ * Several folders can share one path. In the `timelines` section a named `"transitions"` folder and the
+ * nameless transitions container both have the path `["transitions"]`, so both are returned, told
+ * apart by `origin` (`"named"` vs `"transitions-container"`). A transparent nameless folder shares its
+ * parent's path, so it is returned alongside that parent (and alongside any of its own direct children
+ * whose path equals it).
+ *
+ * The result order is pre-order, NOT level-order. construct3-chef's local `foldersAt` walks level by
+ * level, so `[0]` can differ between the two when a transparent folder and a direct child share a path.
+ *
+ * `section` is {@link SectionDrift.section} verbatim. `"timelines"` enables the nameless-container
+ * segment; any other key, including `"rootFileFolders.<cat>"`, makes every nameless folder transparent.
+ */
+export function resolveManifestFolders<F extends C3NameFolder | C3FileFolder>(
+  sectionFolder: F,
+  manifestPath: readonly ManifestPathSegment[],
+  section: string,
+): ResolvedManifestFolder<F>[] {
+  const key = pathKey(manifestPath);
+  return walkManifestFolders(sectionFolder, [], unnamedSegmentFor(section))
+    .filter((v) => pathKey(v.path) === key)
+    .map((v) => ({ folder: v.folder, parent: v.parent, origin: v.origin }));
 }
 
 // ─── Path-preserving disk tree walks ─────────────────────────────────────────
