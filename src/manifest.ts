@@ -1342,6 +1342,24 @@ function stripExt(fileName: string): string {
  * try/catch so such a failure degrades gracefully to "images section omitted".
  */
 export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
+  const lists = imageDriftLists(projectDir);
+  if (lists === null) return null;
+
+  const entries = diffNameMaps(lists.expected, lists.actual);
+
+  return { section: "images", folder: IMAGES_FOLDER, entries };
+}
+
+/** The expected (derived from object types) and actual (on-disk `images/`) name lists that
+ *  {@link detectImageDrift} diffs. Every `path` is `[]` (`images/` is flat). */
+interface ImageDriftLists {
+  expected: Array<{ name: string; path: ManifestPathSegment[] }>;
+  actual: Array<{ name: string; path: ManifestPathSegment[] }>;
+}
+
+/** Build the lists {@link detectImageDrift} diffs; `null` if `images/` is absent. May throw
+ *  (see {@link deriveExpectedImages}). */
+function imageDriftLists(projectDir: string): ImageDriftLists | null {
   const imagesDir = path.join(projectDir, IMAGES_FOLDER);
   if (!existsSync(imagesDir)) return null;
 
@@ -1367,12 +1385,10 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
       : (actualNameByStem.get(e.stem) ?? `${e.stem}${C3_LEGACY_IMAGE_EXTENSION}`),
   );
 
-  const entries = diffNameMaps(
-    expectedNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
-    actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
-  );
-
-  return { section: "images", folder: IMAGES_FOLDER, entries };
+  return {
+    expected: expectedNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
+    actual: actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
+  };
 }
 
 // ─── Stray files ───────────────────────────────────────────────────────────
