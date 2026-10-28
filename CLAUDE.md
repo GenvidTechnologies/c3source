@@ -162,7 +162,10 @@ tasks' files (gvt-dev #600).
 
 Never cite an unpushed local branch or commit hash in external communication
 (issue/PR comments) — link to something the reader can actually open, or push
-first.
+first. **The same goes for durable docs inside the repo** (`raw/` captures,
+ADRs, wiki pages, `CHANGELOG.md`): cite only commits already on `main`, and
+describe branch state in words. Branches are squash-merged, so a branch commit
+hash dangles the moment the PR merges.
 
 ## Commit Format
 
