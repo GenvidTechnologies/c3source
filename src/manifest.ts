@@ -122,6 +122,33 @@ export interface DriftDegradation {
   message: string;
 }
 
+/**
+ * An item name that occurs more than once in a section, reported by {@link ManifestDrift.duplicates}.
+ *
+ * What counts as a duplicate depends on the section's scope:
+ * - the seven name sections (`layouts`, `objectTypes`, ...): more than one occurrence of the name
+ *   anywhere in the section, on either side (manifest or disk), whatever folder it sits in;
+ * - `rootFileFolders.<cat>` and `images`: two occurrences of the name in the same folder (the same
+ *   path), on either side. The same file name in different folders is legitimate and not reported.
+ * Comparison is case-sensitive.
+ *
+ * **Advisory**: a duplicate is never drift and never affects {@link ManifestDrift.inSync}.
+ *
+ * **UNVALIDATED**: the uniqueness scope per section and the case sensitivity were inferred, not
+ * confirmed against the C3 editor.
+ */
+export interface DuplicateName {
+  /** The section, e.g. `"layouts"`, `"rootFileFolders.script"`, `"images"`. */
+  section: string;
+  /** The section's on-disk folder, e.g. `"layouts"`, `"scripts"`, `"images"`. */
+  folder: string;
+  name: string;
+  /** Every declared occurrence, sorted by path key. */
+  manifestPaths: ManifestPathSegment[][];
+  /** Every on-disk occurrence, sorted by path key. */
+  diskPaths: ManifestPathSegment[][];
+}
+
 /** Result of detectManifestDrift. */
 export interface ManifestDrift {
   sections: SectionDrift[];
@@ -145,6 +172,13 @@ export interface ManifestDrift {
    * is byte-identical to a pre-2.0.0 one.
    */
   strays?: StrayFile[];
+  /**
+   * Item names repeated within a section (see {@link DuplicateName} for the per-section scope).
+   * **Advisory, never drift**: never counted by {@link ManifestDrift.inSync}. Present only when
+   * non-empty — same convention as {@link ManifestDrift.degraded} and {@link ManifestDrift.strays}.
+   * Ordered by the walk order of sections, then by name.
+   */
+  duplicates?: DuplicateName[];
 }
 
 // ─── Private guards ───────────────────────────────────────────────────────────
@@ -899,6 +933,37 @@ export function diffNameMaps(
 }
 
 /**
+ * Report the names repeated on either side of a section. `scope` "section": any name occurring more
+ * than once anywhere; "folder": a name occurring twice at the same path. Case-sensitive. Names are
+ * ordered with plain `<`/`>`, as are each side's paths (by path key).
+ */
+function collectDuplicateNames(
+  section: string,
+  folder: string,
+  scope: "section" | "folder",
+  manifestItems: Array<{ name: string; path: ManifestPathSegment[] }>,
+  diskItems: Array<{ name: string; path: ManifestPathSegment[] }>,
+): DuplicateName[] {
+  const mByName = groupPathsByName(manifestItems);
+  const dByName = groupPathsByName(diskItems);
+  const byKey = (x: ManifestPathSegment[], y: ManifestPathSegment[]): number => {
+    const kx = pathKey(x);
+    const ky = pathKey(y);
+    return kx < ky ? -1 : kx > ky ? 1 : 0;
+  };
+  const repeats = (paths: ManifestPathSegment[][]): boolean =>
+    scope === "section" ? paths.length > 1 : new Set(paths.map(pathKey)).size < paths.length;
+  const names = [...new Set([...mByName.keys(), ...dByName.keys()])].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+  const out: DuplicateName[] = [];
+  for (const name of names) {
+    const manifestPaths = [...(mByName.get(name) ?? [])].sort(byKey);
+    const diskPaths = [...(dByName.get(name) ?? [])].sort(byKey);
+    if (repeats(manifestPaths) || repeats(diskPaths)) out.push({ section, folder, name, manifestPaths, diskPaths });
+  }
+  return out;
+}
+
+/**
  * Collect every subfolder path (segment chains of names) declared in a manifest name-folder tree.
  * `unnamedSubfolderName` mirrors {@link walkManifestNameTree}: a nameless direct child of the
  * section root adopts that name (the `timelines/transitions` exception); not propagated into
@@ -974,6 +1039,7 @@ function diffFolderPaths(
 export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
   const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
   const sections: SectionDrift[] = [];
+  const duplicates: DuplicateName[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
     // timelines exception: the unnamed top-level subfolder is the on-disk transitions/ ("Eases") dir.
@@ -987,6 +1053,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     );
     const entries = sortDriftEntries([...itemEntries, ...folderEntries]);
     if (entries.length) sections.push({ section, folder: folderName, entries });
+    duplicates.push(...collectDuplicateNames(section, folderName, "section", declared, onDisk));
   }
   const rff = m.rootFileFolders;
   if (rff)
@@ -998,13 +1065,18 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
         : walkDiskFileTree(path.join(projectDir, folderName), []);
       const entries = diffNameMaps(declared, onDisk);
       if (entries.length) sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, entries });
+      duplicates.push(...collectDuplicateNames(`rootFileFolders.${cat}`, folderName, "folder", declared, onDisk));
     }
   const containerEntries = detectContainerDrift(m);
   if (containerEntries.length) sections.push({ section: "containers", folder: "", entries: containerEntries });
   let degraded: DriftDegradation[] | undefined;
   try {
-    const imagesDrift = detectImageDrift(projectDir, m);
-    if (imagesDrift && imagesDrift.entries.length) sections.push(imagesDrift);
+    const lists = imageDriftLists(projectDir);
+    if (lists) {
+      const entries = diffNameMaps(lists.expected, lists.actual);
+      if (entries.length) sections.push({ section: "images", folder: IMAGES_FOLDER, entries });
+      duplicates.push(...collectDuplicateNames("images", IMAGES_FOLDER, "folder", lists.expected, lists.actual));
+    }
   } catch (err) {
     // Best-effort: never fail core drift on image derivation — but never hide the
     // failure either. The section is omitted AND the reason is reported (#68).
@@ -1019,6 +1091,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     inSync: sections.length === 0,
     ...(degraded ? { degraded } : {}),
     ...(strayFiles.length ? { strays: strayFiles } : {}),
+    ...(duplicates.length ? { duplicates } : {}),
   };
 }
 

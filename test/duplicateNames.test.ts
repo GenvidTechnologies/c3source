@@ -3,13 +3,14 @@ import { expect } from "chai";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
+  detectImageDrift,
   detectManifestDrift,
   writeC3JsonFile,
   type C3FileFolder,
   type C3NameFolder,
   type DriftEntry,
 } from "../src/c3source.js";
-import { makeTempProject } from "./fixtureHelpers.js";
+import { makeTempImageProject, makeTempProject } from "./fixtureHelpers.js";
 
 describe("same item name at more than one path (#101)", () => {
   const tempRoots: string[] = [];
@@ -84,6 +85,72 @@ describe("same item name at more than one path (#101)", () => {
 
   const a = (items: string[]): C3NameFolder => nameFolder(items, [], "a");
   const b = (items: string[]): C3NameFolder => nameFolder(items, [], "b");
+
+  it("T101-1: the same layout name in two folders, declared and on disk, is in sync and reported as a duplicate", () => {
+    const layouts = nameFolder([], [a(["X"]), b(["X"])]);
+    const dir = project(["layouts/a/X.json", "layouts/b/X.json"]);
+    const drift = detectManifestDrift(dir, manifestOf(layouts));
+    expect(drift.inSync).to.equal(true);
+    expect(drift.sections).to.deep.equal([]);
+    expect(drift.duplicates).to.deep.equal([
+      { section: "layouts", folder: "layouts", name: "X", manifestPaths: [["a"], ["b"]], diskPaths: [["a"], ["b"]] },
+    ]);
+  });
+
+  it("T101-6: the same layout name twice in one manifest folder is reported as a duplicate", () => {
+    const dir = project(["layouts/a/X.json"]);
+    const drift = detectManifestDrift(dir, manifestOf(nameFolder([], [a(["X", "X"])])));
+    expect(drift.inSync).to.equal(true);
+    expect(drift.duplicates).to.deep.equal([
+      { section: "layouts", folder: "layouts", name: "X", manifestPaths: [["a"], ["a"]], diskPaths: [["a"]] },
+    ]);
+  });
+
+  it("T101-9: the same script name twice in one folder is reported as a duplicate", () => {
+    const scripts = fileFolder([], [fileFolder(["x.ts", "x.ts"], [], "a")]);
+    const dir = project(["scripts/a/x.ts"]);
+    const drift = detectManifestDrift(dir, manifestOf(empty(), scripts));
+    expect(drift.duplicates).to.deep.equal([
+      {
+        section: "rootFileFolders.script",
+        folder: "scripts",
+        name: "x.ts",
+        manifestPaths: [["a"], ["a"]],
+        diskPaths: [["a"]],
+      },
+    ]);
+  });
+
+  it("T101-11: two animation frames deriving one image name are reported as a duplicate, not as drift", () => {
+    const png = { fileType: "image/png" };
+    const anims = (name: string): Record<string, unknown> => ({
+      items: [{ name, frames: [png] }],
+      subfolders: [],
+    });
+    const objectTypes = [
+      { name: "A-B", animations: anims("C") },
+      { name: "A", animations: anims("B-C") },
+    ];
+    const present = makeTempImageProject(objectTypes, ["a-b-c-000.png"]);
+    tempRoots.push(present);
+    expect(detectImageDrift(present)?.entries).to.deep.equal([]);
+    expect(detectManifestDrift(present, manifestOf(empty())).duplicates).to.deep.equal([
+      { section: "images", folder: "images", name: "a-b-c-000.png", manifestPaths: [[], []], diskPaths: [[]] },
+    ]);
+
+    const absent = makeTempImageProject(objectTypes, []);
+    tempRoots.push(absent);
+    expect(detectImageDrift(absent)?.entries).to.deep.equal([
+      { kind: "missing", name: "a-b-c-000.png", manifestPath: [] },
+    ]);
+  });
+
+  it("T101-12: a project with no repeated names has no duplicates key", () => {
+    const dir = project(["layouts/a/X.json", "layouts/b/Y.json"]);
+    const drift = detectManifestDrift(dir, manifestOf(nameFolder([], [a(["X"]), b(["Y"])])));
+    expect(drift.inSync).to.equal(true);
+    expect("duplicates" in drift).to.equal(false);
+  });
 
   it("T101-2: a name declared at one path but on disk at two reports the extra one untracked", () => {
     expect(layoutsEntries(["layouts/a/X.json", "layouts/b/X.json"], nameFolder([], [a(["X"]), b([])]))).to.deep.equal([
