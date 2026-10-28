@@ -834,42 +834,66 @@ const DRIFT_KIND_ORDER: Record<DriftKind, number> = {
   "dangling-ref": 5,
 };
 
-/** Sort drift entries deterministically by kind then name (in place; returns the array). */
+/**
+ * Sort drift entries deterministically (in place; returns the array): kind, then name, then
+ * manifestPath, then diskPath. The path tiebreaks use plain `<`/`>` so the order is locale-independent.
+ */
 function sortDriftEntries(entries: DriftEntry[]): DriftEntry[] {
-  entries.sort((a, b) => DRIFT_KIND_ORDER[a.kind] - DRIFT_KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
+  const cmp = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
+  entries.sort(
+    (a, b) =>
+      DRIFT_KIND_ORDER[a.kind] - DRIFT_KIND_ORDER[b.kind] ||
+      a.name.localeCompare(b.name) ||
+      cmp(pathKey(a.manifestPath ?? []), pathKey(b.manifestPath ?? [])) ||
+      cmp(pathKey(a.diskPath ?? []), pathKey(b.diskPath ?? [])),
+  );
   return entries;
+}
+
+/** Group name→path lists by name, keeping every occurrence. */
+function groupPathsByName(
+  items: Array<{ name: string; path: ManifestPathSegment[] }>,
+): Map<string, ManifestPathSegment[][]> {
+  const byName = new Map<string, ManifestPathSegment[][]>();
+  for (const { name, path: p } of items) {
+    const paths = byName.get(name);
+    if (paths) paths.push(p);
+    else byName.set(name, [p]);
+  }
+  return byName;
 }
 
 /**
  * Diff two name→path lists and return structured DriftEntry records.
- * Per-category name uniqueness (a C3 invariant) means the maps have no collisions.
- * - name in manifest only → missing
- * - name in disk only → untracked
- * - name in both, paths differ → moved (carries both manifestPath and diskPath)
- * - name in both, same path → no entry
- * Results are sorted deterministically by kind then name.
+ * A name can repeat at several paths (it is only unique per folder), so occurrences are compared by
+ * name AND path:
+ * - name occurring exactly once on each side, paths differ → moved (carries both manifestPath and diskPath)
+ * - name occurring exactly once on each side, same path → no entry
+ * - otherwise, each manifest path with no equal disk path → missing; each disk path with no equal
+ *   manifest path → untracked (repeats of an identical path collapse)
+ * Results are sorted deterministically by kind, then name, then path.
  */
 export function diffNameMaps(
   manifestItems: Array<{ name: string; path: ManifestPathSegment[] }>,
   diskItems: Array<{ name: string; path: ManifestPathSegment[] }>,
 ): DriftEntry[] {
-  const mMap = new Map<string, ManifestPathSegment[]>();
-  for (const { name, path: p } of manifestItems) mMap.set(name, p);
-  const dMap = new Map<string, ManifestPathSegment[]>();
-  for (const { name, path: p } of diskItems) dMap.set(name, p);
+  const mByName = groupPathsByName(manifestItems);
+  const dByName = groupPathsByName(diskItems);
 
   const entries: DriftEntry[] = [];
-  for (const [name, mPath] of mMap) {
-    const dPath = dMap.get(name);
-    if (dPath === undefined) {
-      entries.push({ kind: "missing", name, manifestPath: mPath });
-    } else if (formatManifestPath(mPath) !== formatManifestPath(dPath)) {
-      entries.push({ kind: "moved", name, manifestPath: mPath, diskPath: dPath });
+  for (const name of new Set([...mByName.keys(), ...dByName.keys()])) {
+    const mPaths = mByName.get(name) ?? [];
+    const dPaths = dByName.get(name) ?? [];
+    if (mPaths.length === 1 && dPaths.length === 1) {
+      if (pathKey(mPaths[0]) !== pathKey(dPaths[0])) {
+        entries.push({ kind: "moved", name, manifestPath: mPaths[0], diskPath: dPaths[0] });
+      }
+      continue;
     }
-    // same path → no entry
-  }
-  for (const [name, dPath] of dMap) {
-    if (!mMap.has(name)) entries.push({ kind: "untracked", name, diskPath: dPath });
+    const mKeys = new Map(mPaths.map((p) => [pathKey(p), p]));
+    const dKeys = new Map(dPaths.map((p) => [pathKey(p), p]));
+    for (const [key, p] of mKeys) if (!dKeys.has(key)) entries.push({ kind: "missing", name, manifestPath: p });
+    for (const [key, p] of dKeys) if (!mKeys.has(key)) entries.push({ kind: "untracked", name, diskPath: p });
   }
   return sortDriftEntries(entries);
 }
