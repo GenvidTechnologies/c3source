@@ -642,14 +642,9 @@ export function walkManifestNameTree(
   unnamedSubfolderName?: string,
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const name of Array.isArray(folder.items) ? folder.items : []) out.push({ name, path: basePath });
-  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
-    // Nameless subfolder contributes no segment, UNLESS unnamedSubfolderName names it
-    // (the timelines/transitions exception). Not propagated → top-level children only.
-    const effectiveName = sub.name ?? unnamedSubfolderName;
-    const childPath = effectiveName !== undefined ? [...basePath, effectiveName] : basePath;
-    out.push(...walkManifestNameTree(sub, childPath));
-  }
+  for (const visit of walkManifestFolders(folder, basePath, unnamedSubfolderName))
+    for (const name of Array.isArray(visit.folder.items) ? visit.folder.items : [])
+      out.push({ name, path: visit.path });
   return out;
 }
 
@@ -664,12 +659,64 @@ export function walkManifestFileTree(
   basePath: ManifestPathSegment[] = [],
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const entry of Array.isArray(folder.items) ? folder.items : []) out.push({ name: entry.name, path: basePath });
-  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
-    const childPath = sub.name !== undefined ? [...basePath, sub.name] : basePath;
-    out.push(...walkManifestFileTree(sub, childPath));
-  }
+  for (const visit of walkManifestFolders(folder, basePath))
+    for (const entry of Array.isArray(visit.folder.items) ? visit.folder.items : [])
+      out.push({ name: entry.name, path: visit.path });
   return out;
+}
+
+/** How a folder's path segment came about in {@link walkManifestFolders}. */
+type ManifestFolderOrigin = "root" | "named" | "transitions-container" | "transparent";
+
+/** One folder reached by {@link walkManifestFolders}. */
+interface FolderVisit<F extends C3NameFolder | C3FileFolder> {
+  folder: F;
+  parent: F | null;
+  path: ManifestPathSegment[];
+  origin: ManifestFolderOrigin;
+}
+
+/**
+ * The one folder-segment rule shared by every manifest walk. Visits come in manifest pre-order.
+ * - The root has origin "root" and path `basePath` (its own `name` is never a segment).
+ * - A named folder contributes its name (origin "named").
+ * - A nameless DIRECT child of the walked root contributes `unnamedSubfolderName` when given
+ *   (origin "transitions-container"); it is not propagated deeper.
+ * - Every other nameless folder is transparent: same path as its parent.
+ */
+function walkManifestFolders<F extends C3NameFolder | C3FileFolder>(
+  root: F,
+  basePath: ManifestPathSegment[] = [],
+  unnamedSubfolderName?: string,
+): FolderVisit<F>[] {
+  const out: FolderVisit<F>[] = [{ folder: root, parent: null, path: basePath, origin: "root" }];
+  const descend = (parent: F, parentPath: ManifestPathSegment[], isRoot: boolean): void => {
+    for (const sub of (Array.isArray(parent.subfolders) ? parent.subfolders : []) as F[]) {
+      let path = parentPath;
+      let origin: ManifestFolderOrigin = "transparent";
+      if (sub.name !== undefined) {
+        path = [...parentPath, sub.name];
+        origin = "named";
+      } else if (isRoot && unnamedSubfolderName !== undefined) {
+        path = [...parentPath, unnamedSubfolderName];
+        origin = "transitions-container";
+      }
+      out.push({ folder: sub, parent, path, origin });
+      descend(sub, path, false);
+    }
+  };
+  descend(root, basePath, true);
+  return out;
+}
+
+/** The segment C3 gives a section's unnamed top-level subfolder, if that section has one. */
+function unnamedSegmentFor(section: string): string | undefined {
+  return section === "timelines" ? TIMELINE_TRANSITIONS_FOLDER : undefined;
+}
+
+/** Map key for a manifest/disk path. */
+function pathKey(path: ReadonlyArray<ManifestPathSegment>): string {
+  return formatManifestPath(path);
 }
 
 // ─── Path-preserving disk tree walks ─────────────────────────────────────────
@@ -791,16 +838,10 @@ function collectManifestFolderPaths(
   folder: C3NameFolder,
   base: ManifestPathSegment[] = [],
   unnamedSubfolderName?: string,
-): ManifestPathSegment[][] {
-  const out: ManifestPathSegment[][] = [];
-  for (const sub of folder.subfolders) {
-    // Nameless subfolder contributes no path, UNLESS unnamedSubfolderName names it.
-    const effectiveName = sub.name ?? unnamedSubfolderName;
-    const childPath = effectiveName !== undefined ? [...base, effectiveName] : base;
-    if (effectiveName !== undefined) out.push(childPath);
-    out.push(...collectManifestFolderPaths(sub, childPath));
-  }
-  return out;
+): Array<{ path: ManifestPathSegment[]; origin: ManifestFolderOrigin }> {
+  return walkManifestFolders(folder, base, unnamedSubfolderName)
+    .filter((v) => v.origin === "named" || v.origin === "transitions-container")
+    .map((v) => ({ path: v.path, origin: v.origin }));
 }
 
 /** Collect every subdirectory path (segment chains, section-root-relative) on disk, editor-local filtered. */
@@ -824,16 +865,17 @@ function collectDiskFolderPaths(dir: string, base: ManifestPathSegment[] = []): 
  * disk-only). A subfolder present on both sides yields no entry (folders are keyed by
  * their full path, so there is no folder "move"). `name` is the leaf subfolder name.
  */
-function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: ManifestPathSegment[][]): DriftEntry[] {
-  const mSet = new Set(manifestPaths.map(formatManifestPath));
-  const dSet = new Set(diskPaths.map(formatManifestPath));
+function diffFolderPaths(
+  manifestFolders: Array<{ path: ManifestPathSegment[]; origin: ManifestFolderOrigin }>,
+  diskPaths: ManifestPathSegment[][],
+): DriftEntry[] {
+  const mSet = new Set(manifestFolders.map((f) => pathKey(f.path)));
+  const dSet = new Set(diskPaths.map(pathKey));
   const entries: DriftEntry[] = [];
-  for (const p of manifestPaths)
-    if (!dSet.has(formatManifestPath(p)))
-      entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
+  for (const { path: p } of manifestFolders)
+    if (!dSet.has(pathKey(p))) entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
   for (const p of diskPaths)
-    if (!mSet.has(formatManifestPath(p)))
-      entries.push({ kind: "folder-untracked", name: p[p.length - 1], diskPath: p });
+    if (!mSet.has(pathKey(p))) entries.push({ kind: "folder-untracked", name: p[p.length - 1], diskPath: p });
   return entries;
 }
 
@@ -856,7 +898,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
     // timelines exception: the unnamed top-level subfolder is the on-disk transitions/ ("Eases") dir.
-    const unnamed = section === "timelines" ? TIMELINE_TRANSITIONS_FOLDER : undefined;
+    const unnamed = unnamedSegmentFor(section);
     const declared = sectionFolder ? walkManifestNameTree(sectionFolder, [], unnamed) : [];
     const onDisk = walkDiskNameTree(path.join(projectDir, folderName));
     const itemEntries = diffNameMaps(declared, onDisk);
