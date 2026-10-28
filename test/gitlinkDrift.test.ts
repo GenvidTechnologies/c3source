@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, it } from "mocha";
+import { after, afterEach, before, beforeEach, describe, it } from "mocha";
 import { expect } from "chai";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { checkGitlinkPin, findGitlinkDrift, parseStrictFlag, STRICT_ENV } from "../scripts/gitlink-drift.mjs";
@@ -19,22 +19,43 @@ function commitFile(repo: string, name: string, body: string): string {
   return git(repo, "rev-parse", "HEAD");
 }
 
-describe("findGitlinkDrift", () => {
+// Builds root/super with a pinned root/super/sub gitlink; returns the pinned SHA.
+function buildSuperproject(root: string): string {
+  const superRoot = path.join(root, "super");
+  const subRoot = path.join(superRoot, "sub");
+  mkdirSync(subRoot, { recursive: true });
+  git(subRoot, "init", "-q");
+  const pinnedSha = commitFile(subRoot, "a.txt", "one");
+  git(superRoot, "init", "-q");
+  git(superRoot, "update-index", "--add", "--cacheinfo", `160000,${pinnedSha},sub`);
+  git(superRoot, "commit", "-m", "pin sub");
+  return pinnedSha;
+}
+
+describe("findGitlinkDrift", function () {
+  // The hermetic superproject costs several synchronous git spawns; build it once and copy per test (#102).
+  this.timeout(20000);
+
+  let template: string;
   let tmp: string;
   let superRoot: string;
   let subRoot: string;
   let pinnedSha: string;
 
+  before(function () {
+    template = mkdtempSync(path.join(tmpdir(), "c3source-gitlink-tpl-"));
+    pinnedSha = buildSuperproject(template);
+  });
+
+  after(() => {
+    rmSync(template, { recursive: true, force: true });
+  });
+
   beforeEach(() => {
     tmp = mkdtempSync(path.join(tmpdir(), "c3source-gitlink-"));
+    cpSync(template, tmp, { recursive: true });
     superRoot = path.join(tmp, "super");
     subRoot = path.join(superRoot, "sub");
-    mkdirSync(subRoot, { recursive: true });
-    git(subRoot, "init", "-q");
-    pinnedSha = commitFile(subRoot, "a.txt", "one");
-    git(superRoot, "init", "-q");
-    git(superRoot, "update-index", "--add", "--cacheinfo", `160000,${pinnedSha},sub`);
-    git(superRoot, "commit", "-m", "pin sub");
   });
 
   afterEach(() => {
@@ -75,22 +96,30 @@ describe("findGitlinkDrift", () => {
   });
 });
 
-describe("checkGitlinkPin", () => {
+describe("checkGitlinkPin", function () {
+  // The hermetic superproject costs several synchronous git spawns; build it once and copy per test (#102).
+  this.timeout(20000);
+
+  let template: string;
   let tmp: string;
   let superRoot: string;
   let subRoot: string;
   let pinnedSha: string;
 
+  before(function () {
+    template = mkdtempSync(path.join(realpathSync.native(tmpdir()), "c3source-gitlink-pin-tpl-"));
+    pinnedSha = buildSuperproject(template);
+  });
+
+  after(() => {
+    rmSync(template, { recursive: true, force: true });
+  });
+
   beforeEach(() => {
     tmp = mkdtempSync(path.join(realpathSync.native(tmpdir()), "c3source-gitlink-pin-"));
+    cpSync(template, tmp, { recursive: true });
     superRoot = path.join(tmp, "super");
     subRoot = path.join(superRoot, "sub");
-    mkdirSync(subRoot, { recursive: true });
-    git(subRoot, "init", "-q");
-    pinnedSha = commitFile(subRoot, "a.txt", "one");
-    git(superRoot, "init", "-q");
-    git(superRoot, "update-index", "--add", "--cacheinfo", `160000,${pinnedSha},sub`);
-    git(superRoot, "commit", "-m", "pin sub");
   });
 
   afterEach(() => {
