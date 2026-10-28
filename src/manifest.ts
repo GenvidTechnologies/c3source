@@ -15,7 +15,9 @@ export interface C3NameFolder {
   items: string[];
   subfolders: C3NameFolder[];
   /** Organizational subfolder name (matches the on-disk subdirectory). Absent on the
-   *  section root and on degenerate empty subfolders C3 serializes without a name. */
+   *  section root and on degenerate empty subfolders C3 serializes without a name. A nameless
+   *  direct child of `timelines` is the transitions container ({@link TIMELINE_TRANSITIONS_FOLDER});
+   *  drift never reports it `folder-missing`, and {@link resolveManifestFolders} maps a path back. */
   name?: string;
 }
 
@@ -120,6 +122,37 @@ export interface DriftDegradation {
   message: string;
 }
 
+/**
+ * An item name that occurs more than once in a section, reported by {@link ManifestDrift.duplicates}.
+ *
+ * What counts as a duplicate depends on the section's scope:
+ * - the seven name sections (`layouts`, `objectTypes`, ...): more than one occurrence of the name
+ *   anywhere in the section, on either side (manifest or disk), whatever folder it sits in;
+ * - `rootFileFolders.<cat>` and `images`: two occurrences of the name in the same folder (the same
+ *   path), on either side. The same file name in different folders is legitimate and not reported.
+ *   For `images`, the declared side is derived from object-type animation names
+ *   (`deriveExpectedImages`), not listed in the manifest. A repeat there is therefore a derivation
+ *   collision, such as type `A-B` / anim `C` vs type `A` / anim `B-C`. It is fixed by renaming an
+ *   object type or animation, not by editing the manifest.
+ * Comparison is case-sensitive.
+ *
+ * **Advisory**: a duplicate is never drift and never affects {@link ManifestDrift.inSync}.
+ *
+ * **UNVALIDATED**: the uniqueness scope per section and the case sensitivity were inferred, not
+ * confirmed against the C3 editor.
+ */
+export interface DuplicateName {
+  /** The section, e.g. `"layouts"`, `"rootFileFolders.script"`, `"images"`. */
+  section: string;
+  /** The section's on-disk folder, e.g. `"layouts"`, `"scripts"`, `"images"`. */
+  folder: string;
+  name: string;
+  /** Every declared occurrence, sorted by path key. */
+  manifestPaths: ManifestPathSegment[][];
+  /** Every on-disk occurrence, sorted by path key. */
+  diskPaths: ManifestPathSegment[][];
+}
+
 /** Result of detectManifestDrift. */
 export interface ManifestDrift {
   sections: SectionDrift[];
@@ -143,6 +176,13 @@ export interface ManifestDrift {
    * is byte-identical to a pre-2.0.0 one.
    */
   strays?: StrayFile[];
+  /**
+   * Item names repeated within a section (see {@link DuplicateName} for the per-section scope).
+   * **Advisory, never drift**: never counted by {@link ManifestDrift.inSync}. Present only when
+   * non-empty — same convention as {@link ManifestDrift.degraded} and {@link ManifestDrift.strays}.
+   * Ordered by the walk order of sections, then by name.
+   */
+  duplicates?: DuplicateName[];
 }
 
 // ─── Private guards ───────────────────────────────────────────────────────────
@@ -434,6 +474,9 @@ export const C3_SECTION_FOLDERS = {
  * timeline-with-transitions project round-trips without false drift (#28). Exported so the
  * C3 domain fact is owned here (cf. {@link EVENTVAR_REFERENCE_ACES}) rather than re-hardcoded
  * downstream. The container can itself hold ordinary named subfolders (e.g. "Other Eases").
+ * C3 always saves the container, but the directory exists only while it holds something, so
+ * drift never reports it `folder-missing`; {@link resolveManifestFolders} maps a path back to
+ * its declaring folders.
  */
 export const TIMELINE_TRANSITIONS_FOLDER = "transitions";
 
@@ -642,14 +685,9 @@ export function walkManifestNameTree(
   unnamedSubfolderName?: string,
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const name of Array.isArray(folder.items) ? folder.items : []) out.push({ name, path: basePath });
-  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
-    // Nameless subfolder contributes no segment, UNLESS unnamedSubfolderName names it
-    // (the timelines/transitions exception). Not propagated → top-level children only.
-    const effectiveName = sub.name ?? unnamedSubfolderName;
-    const childPath = effectiveName !== undefined ? [...basePath, effectiveName] : basePath;
-    out.push(...walkManifestNameTree(sub, childPath));
-  }
+  for (const visit of walkManifestFolders(folder, basePath, unnamedSubfolderName))
+    for (const name of Array.isArray(visit.folder.items) ? visit.folder.items : [])
+      out.push({ name, path: visit.path });
   return out;
 }
 
@@ -664,12 +702,112 @@ export function walkManifestFileTree(
   basePath: ManifestPathSegment[] = [],
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
-  for (const entry of Array.isArray(folder.items) ? folder.items : []) out.push({ name: entry.name, path: basePath });
-  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
-    const childPath = sub.name !== undefined ? [...basePath, sub.name] : basePath;
-    out.push(...walkManifestFileTree(sub, childPath));
-  }
+  for (const visit of walkManifestFolders(folder, basePath))
+    for (const entry of Array.isArray(visit.folder.items) ? visit.folder.items : [])
+      out.push({ name: entry.name, path: visit.path });
   return out;
+}
+
+/**
+ * How a folder's drift-path segment came about: `"root"` is the section root (no segment of its own),
+ * `"named"` a folder contributing its own name, `"transitions-container"` the nameless direct child
+ * of the `timelines` root that C3 maps to `transitions`, and `"transparent"` any other nameless
+ * folder, which shares its parent's path.
+ */
+export type ManifestFolderOrigin = "root" | "named" | "transitions-container" | "transparent";
+
+/** One folder reached by the manifest folder walk. */
+interface FolderVisit<F extends C3NameFolder | C3FileFolder> {
+  folder: F;
+  parent: F | null;
+  path: ManifestPathSegment[];
+  origin: ManifestFolderOrigin;
+}
+
+/**
+ * The one folder-segment rule shared by every manifest walk. Visits come in manifest pre-order.
+ * - The root has origin "root" and path `basePath` (its own `name` is never a segment).
+ * - A named folder contributes its name (origin "named").
+ * - A nameless DIRECT child of the walked root contributes `unnamedSubfolderName` when given
+ *   (origin "transitions-container"); it is not propagated deeper.
+ * - Every other nameless folder is transparent: same path as its parent.
+ */
+function walkManifestFolders<F extends C3NameFolder | C3FileFolder>(
+  root: F,
+  basePath: ManifestPathSegment[] = [],
+  unnamedSubfolderName?: string,
+): FolderVisit<F>[] {
+  const out: FolderVisit<F>[] = [{ folder: root, parent: null, path: basePath, origin: "root" }];
+  const descend = (parent: F, parentPath: ManifestPathSegment[], isRoot: boolean): void => {
+    for (const sub of (Array.isArray(parent.subfolders) ? parent.subfolders : []) as F[]) {
+      let path = parentPath;
+      let origin: ManifestFolderOrigin = "transparent";
+      if (sub.name !== undefined) {
+        path = [...parentPath, sub.name];
+        origin = "named";
+      } else if (isRoot && unnamedSubfolderName !== undefined) {
+        path = [...parentPath, unnamedSubfolderName];
+        origin = "transitions-container";
+      }
+      out.push({ folder: sub, parent, path, origin });
+      descend(sub, path, false);
+    }
+  };
+  descend(root, basePath, true);
+  return out;
+}
+
+/** The segment C3 gives a section's unnamed top-level subfolder, if that section has one. */
+function unnamedSegmentFor(section: string): string | undefined {
+  return section === "timelines" ? TIMELINE_TRANSITIONS_FOLDER : undefined;
+}
+
+/** Map key for a manifest/disk path. */
+function pathKey(path: ReadonlyArray<ManifestPathSegment>): string {
+  return formatManifestPath(path);
+}
+
+/** One folder returned by {@link resolveManifestFolders}. */
+export interface ResolvedManifestFolder<F extends C3NameFolder | C3FileFolder = C3NameFolder> {
+  /** The live folder object from the walked tree; callers may mutate it. */
+  folder: F;
+  /** The folder's parent in the manifest tree, or null for the section root. */
+  parent: F | null;
+  /** How the folder's drift-path segment came about. */
+  origin: ManifestFolderOrigin;
+}
+
+/**
+ * Resolve a drift `manifestPath` back to the manifest folder(s) that declare it: the inverse of the
+ * drift path model.
+ *
+ * Returns EVERY folder whose drift path equals `manifestPath`, in manifest pre-order (a folder before
+ * its descendants, siblings in manifest order), and `[]` when nothing matches. It never picks one
+ * match for the caller.
+ *
+ * Several folders can share one path. In the `timelines` section a named `"transitions"` folder and the
+ * nameless transitions container both have the path `["transitions"]`, so both are returned, told
+ * apart by `origin` (`"named"` vs `"transitions-container"`). A transparent nameless folder shares its
+ * parent's path, so it is returned alongside that parent (and alongside any of its own direct children
+ * whose path equals it).
+ *
+ * The result order is pre-order, NOT level-order. construct3-chef's local `foldersAt` walks level by
+ * level, so `[0]` can differ between the two when a transparent folder and a direct child share a path.
+ *
+ * `section` is {@link SectionDrift.section} verbatim: a manifest section key such as `"timelines"`.
+ * `"timelines"` enables the nameless-container segment; any other key, including
+ * `"rootFileFolders.<cat>"`, makes every nameless folder transparent. An unknown key (a typo like
+ * `"Timelines"`) gets no container segment, so `["transitions"]` resolves to `[]` for it.
+ */
+export function resolveManifestFolders<F extends C3NameFolder | C3FileFolder>(
+  sectionFolder: F,
+  manifestPath: readonly ManifestPathSegment[],
+  section: string,
+): ResolvedManifestFolder<F>[] {
+  const key = pathKey(manifestPath);
+  return walkManifestFolders(sectionFolder, [], unnamedSegmentFor(section))
+    .filter((v) => pathKey(v.path) === key)
+    .map((v) => ({ folder: v.folder, parent: v.parent, origin: v.origin }));
 }
 
 // ─── Path-preserving disk tree walks ─────────────────────────────────────────
@@ -741,66 +879,116 @@ const DRIFT_KIND_ORDER: Record<DriftKind, number> = {
   "dangling-ref": 5,
 };
 
-/** Sort drift entries deterministically by kind then name (in place; returns the array). */
+/**
+ * Sort drift entries deterministically (in place; returns the array): kind, then name, then
+ * manifestPath, then diskPath. The path tiebreaks use plain `<`/`>` so the order is locale-independent.
+ */
 function sortDriftEntries(entries: DriftEntry[]): DriftEntry[] {
-  entries.sort((a, b) => DRIFT_KIND_ORDER[a.kind] - DRIFT_KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
+  const cmp = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
+  entries.sort(
+    (a, b) =>
+      DRIFT_KIND_ORDER[a.kind] - DRIFT_KIND_ORDER[b.kind] ||
+      a.name.localeCompare(b.name) ||
+      cmp(pathKey(a.manifestPath ?? []), pathKey(b.manifestPath ?? [])) ||
+      cmp(pathKey(a.diskPath ?? []), pathKey(b.diskPath ?? [])),
+  );
   return entries;
+}
+
+/** Group name→path lists by name, keeping every occurrence. */
+function groupPathsByName(
+  items: Array<{ name: string; path: ManifestPathSegment[] }>,
+): Map<string, ManifestPathSegment[][]> {
+  const byName = new Map<string, ManifestPathSegment[][]>();
+  for (const { name, path: p } of items) {
+    const paths = byName.get(name);
+    if (paths) paths.push(p);
+    else byName.set(name, [p]);
+  }
+  return byName;
 }
 
 /**
  * Diff two name→path lists and return structured DriftEntry records.
- * Per-category name uniqueness (a C3 invariant) means the maps have no collisions.
- * - name in manifest only → missing
- * - name in disk only → untracked
- * - name in both, paths differ → moved (carries both manifestPath and diskPath)
- * - name in both, same path → no entry
- * Results are sorted deterministically by kind then name.
+ * A name can repeat at several paths (it is only unique per folder), so occurrences are compared by
+ * name AND path:
+ * - name occurring exactly once on each side, paths differ → moved (carries both manifestPath and diskPath)
+ * - name occurring exactly once on each side, same path → no entry
+ * - otherwise, each manifest path with no equal disk path → missing; each disk path with no equal
+ *   manifest path → untracked (repeats of an identical path collapse)
+ * Results are sorted deterministically by kind, then name, then path.
  */
 export function diffNameMaps(
   manifestItems: Array<{ name: string; path: ManifestPathSegment[] }>,
   diskItems: Array<{ name: string; path: ManifestPathSegment[] }>,
 ): DriftEntry[] {
-  const mMap = new Map<string, ManifestPathSegment[]>();
-  for (const { name, path: p } of manifestItems) mMap.set(name, p);
-  const dMap = new Map<string, ManifestPathSegment[]>();
-  for (const { name, path: p } of diskItems) dMap.set(name, p);
+  const mByName = groupPathsByName(manifestItems);
+  const dByName = groupPathsByName(diskItems);
 
   const entries: DriftEntry[] = [];
-  for (const [name, mPath] of mMap) {
-    const dPath = dMap.get(name);
-    if (dPath === undefined) {
-      entries.push({ kind: "missing", name, manifestPath: mPath });
-    } else if (formatManifestPath(mPath) !== formatManifestPath(dPath)) {
-      entries.push({ kind: "moved", name, manifestPath: mPath, diskPath: dPath });
+  for (const name of new Set([...mByName.keys(), ...dByName.keys()])) {
+    const mPaths = mByName.get(name) ?? [];
+    const dPaths = dByName.get(name) ?? [];
+    if (mPaths.length === 1 && dPaths.length === 1) {
+      if (pathKey(mPaths[0]) !== pathKey(dPaths[0])) {
+        entries.push({ kind: "moved", name, manifestPath: mPaths[0], diskPath: dPaths[0] });
+      }
+      continue;
     }
-    // same path → no entry
-  }
-  for (const [name, dPath] of dMap) {
-    if (!mMap.has(name)) entries.push({ kind: "untracked", name, diskPath: dPath });
+    const mKeys = new Map(mPaths.map((p) => [pathKey(p), p]));
+    const dKeys = new Map(dPaths.map((p) => [pathKey(p), p]));
+    for (const [key, p] of mKeys) if (!dKeys.has(key)) entries.push({ kind: "missing", name, manifestPath: p });
+    for (const [key, p] of dKeys) if (!mKeys.has(key)) entries.push({ kind: "untracked", name, diskPath: p });
   }
   return sortDriftEntries(entries);
+}
+
+/**
+ * Report the names repeated on either side of a section. `scope` "section": any name occurring more
+ * than once anywhere; "folder": a name occurring twice at the same path. Case-sensitive. Names are
+ * ordered with plain `<`/`>`, as are each side's paths (by path key).
+ */
+function collectDuplicateNames(
+  section: string,
+  folder: string,
+  scope: "section" | "folder",
+  manifestItems: Array<{ name: string; path: ManifestPathSegment[] }>,
+  diskItems: Array<{ name: string; path: ManifestPathSegment[] }>,
+): DuplicateName[] {
+  const mByName = groupPathsByName(manifestItems);
+  const dByName = groupPathsByName(diskItems);
+  const byKey = (x: ManifestPathSegment[], y: ManifestPathSegment[]): number => {
+    const kx = pathKey(x);
+    const ky = pathKey(y);
+    return kx < ky ? -1 : kx > ky ? 1 : 0;
+  };
+  const repeats = (paths: ManifestPathSegment[][]): boolean =>
+    scope === "section" ? paths.length > 1 : new Set(paths.map(pathKey)).size < paths.length;
+  const names = [...new Set([...mByName.keys(), ...dByName.keys()])].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+  const out: DuplicateName[] = [];
+  for (const name of names) {
+    const manifestPaths = [...(mByName.get(name) ?? [])].sort(byKey);
+    const diskPaths = [...(dByName.get(name) ?? [])].sort(byKey);
+    if (repeats(manifestPaths) || repeats(diskPaths)) out.push({ section, folder, name, manifestPaths, diskPaths });
+  }
+  return out;
 }
 
 /**
  * Collect every subfolder path (segment chains of names) declared in a manifest name-folder tree.
  * `unnamedSubfolderName` mirrors {@link walkManifestNameTree}: a nameless direct child of the
  * section root adopts that name (the `timelines/transitions` exception); not propagated into
- * recursion, so it applies to top-level children only.
+ * recursion, so it applies to top-level children only. Returns `{path, origin}` for the named folders
+ * and the transitions container (origin `"named"` or `"transitions-container"`).
  */
 function collectManifestFolderPaths(
   folder: C3NameFolder,
   base: ManifestPathSegment[] = [],
   unnamedSubfolderName?: string,
-): ManifestPathSegment[][] {
-  const out: ManifestPathSegment[][] = [];
-  for (const sub of folder.subfolders) {
-    // Nameless subfolder contributes no path, UNLESS unnamedSubfolderName names it.
-    const effectiveName = sub.name ?? unnamedSubfolderName;
-    const childPath = effectiveName !== undefined ? [...base, effectiveName] : base;
-    if (effectiveName !== undefined) out.push(childPath);
-    out.push(...collectManifestFolderPaths(sub, childPath));
-  }
-  return out;
+): Array<{ path: ManifestPathSegment[]; origin: ManifestFolderOrigin }> {
+  return walkManifestFolders(folder, base, unnamedSubfolderName)
+    .filter((v) => v.origin === "named" || v.origin === "transitions-container")
+    .map((v) => ({ path: v.path, origin: v.origin }));
 }
 
 /** Collect every subdirectory path (segment chains, section-root-relative) on disk, editor-local filtered. */
@@ -823,17 +1011,29 @@ function collectDiskFolderPaths(dir: string, base: ManifestPathSegment[] = []): 
  * folder-level drift entries (folder-missing for manifest-only, folder-untracked for
  * disk-only). A subfolder present on both sides yields no entry (folders are keyed by
  * their full path, so there is no folder "move"). `name` is the leaf subfolder name.
+ * The transitions container's `folder-missing` is skipped (its directory is absent while empty), and
+ * each manifest path is reported once even if declared by several folders.
  */
-function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: ManifestPathSegment[][]): DriftEntry[] {
-  const mSet = new Set(manifestPaths.map(formatManifestPath));
-  const dSet = new Set(diskPaths.map(formatManifestPath));
+function diffFolderPaths(
+  manifestFolders: Array<{ path: ManifestPathSegment[]; origin: ManifestFolderOrigin }>,
+  diskPaths: ManifestPathSegment[][],
+): DriftEntry[] {
+  const mSet = new Set(manifestFolders.map((f) => pathKey(f.path)));
+  const dSet = new Set(diskPaths.map(pathKey));
   const entries: DriftEntry[] = [];
-  for (const p of manifestPaths)
-    if (!dSet.has(formatManifestPath(p)))
-      entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
+  const reported = new Set<string>();
+  for (const { path: p, origin } of manifestFolders) {
+    // C3 always saves the timelines transitions container, but its directory is absent while the
+    // container is empty. Keyed on origin, not the path string: a user-NAMED "transitions" folder
+    // must still be reported when its directory is missing.
+    if (origin === "transitions-container") continue;
+    const key = pathKey(p);
+    if (dSet.has(key) || reported.has(key)) continue;
+    reported.add(key);
+    entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
+  }
   for (const p of diskPaths)
-    if (!mSet.has(formatManifestPath(p)))
-      entries.push({ kind: "folder-untracked", name: p[p.length - 1], diskPath: p });
+    if (!mSet.has(pathKey(p))) entries.push({ kind: "folder-untracked", name: p[p.length - 1], diskPath: p });
   return entries;
 }
 
@@ -849,14 +1049,18 @@ function diffFolderPaths(manifestPaths: ManifestPathSegment[][], diskPaths: Mani
  * is reported via {@link ManifestDrift.degraded} — never silently swallowed — with the
  * "images" section simply absent from {@link ManifestDrift.sections}. A degradation never
  * flips {@link ManifestDrift.inSync}, which stays `sections.length === 0` (#68).
+ *
+ * The result also carries the advisory {@link ManifestDrift.duplicates}: item names occurring more
+ * than once in a section. They never count as drift and never affect `inSync`.
  */
 export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
   const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
   const sections: SectionDrift[] = [];
+  const duplicates: DuplicateName[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
     // timelines exception: the unnamed top-level subfolder is the on-disk transitions/ ("Eases") dir.
-    const unnamed = section === "timelines" ? TIMELINE_TRANSITIONS_FOLDER : undefined;
+    const unnamed = unnamedSegmentFor(section);
     const declared = sectionFolder ? walkManifestNameTree(sectionFolder, [], unnamed) : [];
     const onDisk = walkDiskNameTree(path.join(projectDir, folderName));
     const itemEntries = diffNameMaps(declared, onDisk);
@@ -866,6 +1070,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     );
     const entries = sortDriftEntries([...itemEntries, ...folderEntries]);
     if (entries.length) sections.push({ section, folder: folderName, entries });
+    duplicates.push(...collectDuplicateNames(section, folderName, "section", declared, onDisk));
   }
   const rff = m.rootFileFolders;
   if (rff)
@@ -877,13 +1082,18 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
         : walkDiskFileTree(path.join(projectDir, folderName), []);
       const entries = diffNameMaps(declared, onDisk);
       if (entries.length) sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, entries });
+      duplicates.push(...collectDuplicateNames(`rootFileFolders.${cat}`, folderName, "folder", declared, onDisk));
     }
   const containerEntries = detectContainerDrift(m);
   if (containerEntries.length) sections.push({ section: "containers", folder: "", entries: containerEntries });
   let degraded: DriftDegradation[] | undefined;
   try {
-    const imagesDrift = detectImageDrift(projectDir, m);
-    if (imagesDrift && imagesDrift.entries.length) sections.push(imagesDrift);
+    const lists = imageDriftLists(projectDir);
+    if (lists) {
+      const entries = diffNameMaps(lists.expected, lists.actual);
+      if (entries.length) sections.push({ section: "images", folder: IMAGES_FOLDER, entries });
+      duplicates.push(...collectDuplicateNames("images", IMAGES_FOLDER, "folder", lists.expected, lists.actual));
+    }
   } catch (err) {
     // Best-effort: never fail core drift on image derivation — but never hide the
     // failure either. The section is omitted AND the reason is reported (#68).
@@ -898,6 +1108,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     inSync: sections.length === 0,
     ...(degraded ? { degraded } : {}),
     ...(strayFiles.length ? { strays: strayFiles } : {}),
+    ...(duplicates.length ? { duplicates } : {}),
   };
 }
 
@@ -1259,6 +1470,24 @@ function stripExt(fileName: string): string {
  * try/catch so such a failure degrades gracefully to "images section omitted".
  */
 export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
+  const lists = imageDriftLists(projectDir);
+  if (lists === null) return null;
+
+  const entries = diffNameMaps(lists.expected, lists.actual);
+
+  return { section: "images", folder: IMAGES_FOLDER, entries };
+}
+
+/** The expected (derived from object types) and actual (on-disk `images/`) name lists that
+ *  {@link detectImageDrift} diffs. Every `path` is `[]` (`images/` is flat). */
+interface ImageDriftLists {
+  expected: Array<{ name: string; path: ManifestPathSegment[] }>;
+  actual: Array<{ name: string; path: ManifestPathSegment[] }>;
+}
+
+/** Build the lists {@link detectImageDrift} diffs; `null` if `images/` is absent. May throw
+ *  (see {@link deriveExpectedImages}). */
+function imageDriftLists(projectDir: string): ImageDriftLists | null {
   const imagesDir = path.join(projectDir, IMAGES_FOLDER);
   if (!existsSync(imagesDir)) return null;
 
@@ -1284,12 +1513,10 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
       : (actualNameByStem.get(e.stem) ?? `${e.stem}${C3_LEGACY_IMAGE_EXTENSION}`),
   );
 
-  const entries = diffNameMaps(
-    expectedNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
-    actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
-  );
-
-  return { section: "images", folder: IMAGES_FOLDER, entries };
+  return {
+    expected: expectedNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
+    actual: actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
+  };
 }
 
 // ─── Stray files ───────────────────────────────────────────────────────────

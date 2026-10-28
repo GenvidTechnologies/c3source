@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-28T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -19,6 +19,10 @@ sources:
     resource: ../raw/issue-95-empty-stem-evidence-2026-10-27.md
     title: "Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)"
     last_modified: 2026-10-27
+  - id: issue-97-101-evidence
+    resource: ../raw/issue-97-101-drift-evidence-2026-10-28.md
+    title: "Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)"
+    last_modified: 2026-10-28
 ---
 
 # Project Manifest
@@ -136,7 +140,7 @@ fields (filenames like `"main.ts"`)[^api-guide-manifest].
 
 `detectManifestDrift(projectDir, manifest?)` compares declared membership
 against on-disk source (editor-local files filtered via `isEditorLocalPath`)
-and returns `ManifestDrift: {sections, inSync, degraded?, strays?}`. Each
+and returns `ManifestDrift: {sections, inSync, degraded?, strays?, duplicates?}`. Each
 `SectionDrift` carries `entries: DriftEntry[]` — a structured list where
 every entry has a `kind` (`missing` | `untracked` | `moved` |
 `folder-missing` | `folder-untracked` | `dangling-ref`) and path-segment
@@ -159,9 +163,32 @@ only** — so an undeclared generated subtree like `scripts/ts-defs/` is
 never visited, without needing an explicit exclusion for it[^claude-md][^api-guide-manifest].
 
 `diffNameMaps` is the diff engine underneath `detectManifestDrift`: it
-builds `name → path` maps per side and emits `missing`/`untracked`/`moved`
-entries — a **same-name/different-path leaf is a move, not a delete-plus-add**,
-exploiting per-category name uniqueness, a real C3 invariant[^claude-md].
+groups the paths of each name per side and keys on **name plus path**, so the
+result no longer depends on walk order. `moved` is reported only for a name
+that occurs **exactly once on each side** with different paths — a move, not a
+delete-plus-add. Any other shape (a name repeated on either side) is diffed per
+path: each manifest path with no equal disk path is `missing`, each disk path
+with no equal manifest path is `untracked`. Entries carry a total sort
+tiebreak (kind, then name, then path). Name uniqueness is **not assumed**: the
+traced editor name setters (layouts, event sheets, timelines, flowcharts and
+models3d) refuse a repeat, but the objectTypes and families setters are
+untraced, hand-written trees and bad merges produce repeats, and the same file
+name in different `rootFileFolders` folders is
+legitimate[^issue-97-101-evidence]. See [ADR
+0033](/decisions/0033-drift-keys-on-name-and-path.md) and [C3 Domain Facts —
+item-name uniqueness](/c3-domain-facts.md#item-name-uniqueness-scope).
+
+### Duplicate names are advisory
+
+`ManifestDrift.duplicates?: DuplicateName[]` reports a name repeated within a
+section (`DuplicateName`: `section`, `folder`, `name`, `manifestPaths`,
+`diskPaths`, both path lists sorted). The scope differs by section: in the
+seven name sections a name occurring more than once anywhere in the section, on
+either side, is a duplicate; in `rootFileFolders.<cat>` and `images` only two
+occurrences in the **same folder** count. Comparison is case-sensitive. Like
+`degraded` and `strays`, the field is omitted when empty and **never counted
+by `inSync`** — a duplicate is advisory, not drift. The per-section scope and
+the case sensitivity are **UNVALIDATED**[^issue-97-101-evidence].
 
 ### Containers drift
 
@@ -181,13 +208,42 @@ the editor) as an **unnamed** subfolder under `timelines` in `project.c3proj`
 — a `{items, subfolders}` node with no `name` key. This is the **one place**
 a nameless manifest subfolder is meaningful, not degenerate[^claude-md].
 `TIMELINE_TRANSITIONS_FOLDER` (`"transitions"`) is the exported C3 domain
-fact naming it; the manifest walks `walkManifestNameTree`/
+fact naming it (see [C3 Domain Facts — the transitions
+container](/c3-domain-facts.md#the-timelines-transitions-container)); the manifest walks `walkManifestNameTree`/
 `collectManifestFolderPaths` take an optional `unnamedSubfolderName` that
 names a nameless **top-level** subfolder (not propagated into recursion — a
 direct child of the section root only, matching C3, where transitions is
 always a direct child). `detectManifestDrift` passes it for
 `section === "timelines"` so a timeline-with-transitions project round-trips
 without false `moved`/`folder-*` drift (issue #28)[^claude-md].
+
+**No `folder-missing` for the container.** C3 always saves the container,
+but its `timelines/transitions/` directory is absent while the container is
+empty, so reporting it `folder-missing` would be a false positive on a healthy
+project (issue #97). The suppression is keyed on the folder's **origin**
+(`"transitions-container"`), not on the path string `["transitions"]`: a
+user-**named** `transitions` subfolder shares that path but has origin
+`"named"`, and is still reported when its directory is missing. Items inside
+the container are unaffected — a listed item with no file is still `missing`.
+See [ADR 0032](/decisions/0032-transitions-container-never-folder-missing.md)[^issue-97-101-evidence].
+
+### Resolving a drift path back to its folders
+
+`resolveManifestFolders(sectionFolder, manifestPath, section)` is the inverse
+of the drift path model: it maps a `manifestPath` back to the live manifest
+folder object(s) that declare it, returning `ResolvedManifestFolder[]`
+(`{folder, parent, origin}`; `parent` is `null` for the section root;
+`origin` is a `ManifestFolderOrigin`: `"root"`, `"named"`,
+`"transitions-container"` or `"transparent"`). It returns **every** match, in
+manifest **pre-order**, and `[]` when nothing matches — it never picks one for
+the caller. Several folders can share a path: in `timelines` a named
+`"transitions"` folder and the nameless container both have
+`["transitions"]`, told apart by `origin`; a transparent nameless folder
+shares its parent's path. The order is pre-order, **not** the level-order of
+construct3-chef's local `foldersAt`, so `[0]` can differ between the two when a
+transparent folder and a direct child share a path. `section` is
+`SectionDrift.section` verbatim; only `"timelines"` enables the container
+segment[^issue-97-101-evidence].
 
 **The model itself stays faithful** — the subfolder stays unnamed; the
 synthetic name lives only in the drift comparison, never written back. But
@@ -307,9 +363,12 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 - [Module Architecture](/module-architecture.md) — where `manifest` sits in the module DAG, as one of three mutually-independent siblings above `layouts`.
 - [C3Project Handle](/c3project-handle.md) — the root-bound handle wrapping `manifest()`, drift detection, and the write surface.
 - [Serialization Form](/serialization-form.md) — the on-disk write form `writeProjectManifest` reproduces.
+- [ADR 0032 — The transitions container is never folder-missing](/decisions/0032-transitions-container-never-folder-missing.md) — why suppression is keyed on folder origin.
+- [ADR 0033 — Drift keys on name and path](/decisions/0033-drift-keys-on-name-and-path.md) — why `moved` needs a name unique on both sides, and why `duplicates` is advisory.
 - [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — why a `.json` file is a stray and a declared `""` reads as `missing`.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide-manifest]: docs/api-guide-manifest.md (c3source API guide, 2026-08-20 capture)
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
+[^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
 </content>

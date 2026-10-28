@@ -47,6 +47,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **`resolveManifestFolders(sectionFolder, manifestPath, section)`**, with the
+  `ManifestFolderOrigin` and `ResolvedManifestFolder` types: the inverse of drift
+  path derivation. It maps a drift entry's manifest path back to every folder that
+  declares it, in pre-order, so a caller can tell the timelines transitions
+  container from a user-named `transitions` folder
+  ([#97](https://github.com/GenvidTechnologies/c3source/issues/97)) — see
+  [ADR 0032](wiki/decisions/0032-transitions-container-never-folder-missing.md).
+- **`ManifestDrift.duplicates`** (and the `DuplicateName` type): an advisory list
+  of item names repeated within a section, which is omitted when empty and never
+  counted by `inSync`. Name sections report a repeat anywhere in the section, and
+  `rootFileFolders` and `images` report a repeat within one folder. The scope and
+  case sensitivity are unvalidated against the editor
+  ([#101](https://github.com/GenvidTechnologies/c3source/issues/101)) — see
+  [ADR 0033](wiki/decisions/0033-drift-keys-on-name-and-path.md).
+
 ### Changed — BREAKING
 
 - **`isSectionItemName` no longer treats an empty-stem basename or path (`.json`)
@@ -57,6 +74,25 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   [ADR 0031](wiki/decisions/0031-empty-stem-is-not-a-section-item.md). The
   change is in behaviour only, with no type or signature change, and it also
   applies when the function is given a path whose last segment is `.json`.
+
+### Fixed
+
+- **`detectManifestDrift` no longer reports `folder-missing` for the nameless
+  timelines transitions container** when `timelines/transitions/` is absent,
+  which is how C3 saves an empty container, so that alone no longer makes
+  `inSync` false. The check is keyed on the folder's origin, so a
+  user-named `transitions` folder with no directory is still reported, and a
+  path declared twice is reported once
+  ([#97](https://github.com/GenvidTechnologies/c3source/issues/97)) — see
+  [ADR 0032](wiki/decisions/0032-transitions-container-never-folder-missing.md).
+- **Drift keys on item name and path, so a name repeated in several folders no
+  longer depends on walk order.** `diffNameMaps` previously kept the last path
+  seen for each name, giving a spurious `moved` or hiding a real
+  `missing`/`untracked`. `moved` is now reported only for a name that occurs
+  exactly once on each side; any other name is diffed per path. Entries sort by
+  kind, name, then path
+  ([#101](https://github.com/GenvidTechnologies/c3source/issues/101)) — see
+  [ADR 0033](wiki/decisions/0033-drift-keys-on-name-and-path.md).
 
 ## [2.1.0] - 2026-10-08
 

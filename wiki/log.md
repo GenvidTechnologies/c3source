@@ -15,6 +15,13 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-10-28
+
+* **Update**: design-patterns.md — under "Testing: real-export ground truth + inline legibility", added the mutation-checked-tests note (assert a looked-up result exists before dereferencing it) and pointed it at the promoted `scripts/mutate.mjs` harness; driven by the #97/#101 mutation run, where M97-b failed by `TypeError` (recorded on issue #97).
+* **Update**: project-manifest.md — documented `resolveManifestFolders`, the transitions-container `folder-missing` suppression, name-plus-path keying in `diffNameMaps`, and the advisory `ManifestDrift.duplicates?`; removed the false "name uniqueness is a C3 invariant" claim; driven by `raw/issue-97-101-drift-evidence-2026-10-28.md` (issues #97, #101; ADRs 0032, 0033).
+* **Update**: c3-domain-facts.md — added the `TIMELINE_TRANSITIONS_FOLDER` inventory row and the sections "The timelines transitions container" and "Item-name uniqueness scope" (scope and case sensitivity marked UNVALIDATED); driven by `raw/issue-97-101-drift-evidence-2026-10-28.md` and `raw/issue-95-empty-stem-evidence-2026-10-27.md`.
+* **Update**: design-patterns.md — reworked the name→path drift pattern to key on name plus path; added the advisory-report-fields and origin-keyed-suppression pattern; driven by `raw/issue-97-101-drift-evidence-2026-10-28.md`.
+
 ## 2026-10-27
 
 * **Update**: c3-domain-facts.md — rule 2 of "Three validation rules" now says a release-and-section confidence label claims every pair, with the models3d case; driven by `raw/issue-95-empty-stem-evidence-2026-10-27.md` (a session retro on #95).

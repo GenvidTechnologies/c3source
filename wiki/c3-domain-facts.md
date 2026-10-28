@@ -5,7 +5,7 @@ description: c3source owns exported tables naming undocumented C3 platform facts
 tags: [domain-facts, c3-domain-facts, corpus-scan, editor-bundle, audit]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-28T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -23,6 +23,10 @@ sources:
     resource: ../raw/issue-95-empty-stem-evidence-2026-10-27.md
     title: "Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)"
     last_modified: 2026-10-27
+  - id: issue-97-101-evidence
+    resource: ../raw/issue-97-101-drift-evidence-2026-10-28.md
+    title: "Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)"
+    last_modified: 2026-10-28
 ---
 
 # C3 Domain Facts
@@ -119,7 +123,9 @@ point of use[^claude-md].
 
 ## Per-table inventory and confidence labels
 
-Ten exported tables have been corpus-scanned as of this capture. The first
+Ten exported tables have been corpus-scanned as of this capture, and one
+further domain-fact constant, `TIMELINE_TRANSITIONS_FOLDER`, was corpus-validated
+on 2026-10-28 for issue #97. The first
 six were scanned 2026-08-04 for issue #68; `SCRIPT_SOURCE_EXTENSIONS`/
 `SCRIPT_FILE_TYPE_EXTENSIONS` were added 2026-08-10 for issue #73/#74;
 `C3_SECTION_ITEM_EXTENSION` was added 2026-08-11 for issue #76;
@@ -138,6 +144,7 @@ fresh[^domain-fact-audit][^issue-86-evidence].
 | `SCRIPT_SOURCE_EXTENSIONS` | `isScriptSourceName` | NO GAPS at value level; `.ts`→r433 bundle-pinned | Silent over/under-collection in script discovery, never a throw |
 | `SCRIPT_FILE_TYPE_EXTENSIONS` | — | NO GAPS; same corpus as above | Silent miss in manifest interpretation, never a throw — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS` |
 | `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below) | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
+| `TIMELINE_TRANSITIONS_FOLDER` | — | CORPUS-VALIDATED by the 2026-10-28 raw capture: out of 24 unique manifests, 14 have an empty transitions container and no `timelines/transitions/` dir, 8 have a non-empty container with the dir (below) | A false `folder-missing` on every healthy timeline project, or a sync tool that deletes the container |
 | `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, two tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
 
 The corpus is 14 Genvid-authored projects spanning 8 releases (`37900,
@@ -186,6 +193,58 @@ checkout directory returned 18 manifests; four were dropped as copies
 leaves the 14. A deeper `find` returns 38 manifests, mostly backups and
 test-fixture copies; they were not added. Dedupe by project identity, not by
 `uniqueId`: the cloned addon samples share one.
+
+## The timelines transitions container
+
+C3 serializes the `transitions/` directory of timelines (shown as "Eases" in
+the editor) as a **nameless** direct child of `timelines` in
+`project.c3proj`; `TIMELINE_TRANSITIONS_FOLDER` (`"transitions"`) names it.
+The question is when its directory exists. **Corpus evidence**, scanned
+2026-10-28 over 24 unique manifests (31 found, deduplicated by sha256 of the
+manifest bytes): 22 of the 24 have a nameless direct child of `timelines`, the
+other 2 are chef addon-validate fixtures with no container; the pre-fix
+survey (releases r379–r476) found exactly one per editor-saved manifest. Of
+the 22, **14** have an empty container and no
+`timelines/transitions/` directory, and **8** have a non-empty container with
+the directory present. No manifest has two nameless containers or a named
+`"transitions"` subfolder[^issue-97-101-evidence]. So an empty container with no
+directory is the normal healthy state, which is why `detectManifestDrift`
+never reports it `folder-missing` ([ADR
+0032](/decisions/0032-transitions-container-never-folder-missing.md)). **Not
+established:** no manifest in the corpus has a container with items but no
+directory, so that shape is unobserved. This is a corpus scan, not an editor-bundle trace; nothing here was
+fetched from `editor.construct.net`. See also [Project Manifest — the timeline
+`transitions/` exception](/project-manifest.md#the-timeline-transitions-exception).
+
+## Item-name uniqueness scope
+
+Drift detection must decide how far a name's uniqueness reaches, because
+`moved` is only sound for a name that is unique on both sides ([ADR
+0033](/decisions/0033-drift-keys-on-name-and-path.md)). **What the editor
+enforces:** the name setters of layouts, event sheets, timelines and flowcharts
+throw `<kind> name '…' already used` when the new name is already taken in that
+section, at r379, r402 and r495; models3d does so at r495. The setters traced
+are those listed in the [empty-stem
+capture](#item-hood-at-the-empty-stem-boundary)[^issue-95-evidence]. The
+objectTypes and families setters were **not traced**. Nothing was traced for
+`rootFileFolders` or `images`.
+
+**What the drift code assumes**, per scope:
+
+- **Name sections** (the seven): a name should occur once in the whole section,
+  on each side, whatever folder it sits in. A repeat is reported in
+  `ManifestDrift.duplicates`.
+- **`rootFileFolders.<cat>` and `images`**: a name should occur once **per
+  folder**; the same file name in different folders is legitimate and is not
+  reported.
+- **Case**: names compare case-sensitively. A case-insensitive editor rule would
+  make `A` and `a` collide without being reported.
+
+**Status: UNVALIDATED.** The scope per section and the case sensitivity were
+inferred from the setters' behaviour and from real file layouts, not confirmed
+against the editor or the corpus; the post-fix scan found no duplicate
+name in the scanned manifests, which is an absence in those projects only. Hand-written trees and bad merges can
+still produce a repeat, since the setters guard only editor-side edits[^issue-97-101-evidence].
 
 ## EXTENSION_FILE_TYPES: the writer-direction fact
 
@@ -325,6 +384,8 @@ update this doc's **numbers** — never the JSDoc labels.
 
 - [ADR 0027 — File-entry type as a writer-direction domain fact](/decisions/0027-file-entry-type-writer-fact.md) — why `EXTENSION_FILE_TYPES` is an open table with an accessor and two tiers.
 - [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — the decision behind the empty-stem boundary above.
+- [ADR 0032 — The transitions container is never folder-missing](/decisions/0032-transitions-container-never-folder-missing.md) — the decision behind the container fact above.
+- [ADR 0033 — Drift keys on name and path](/decisions/0033-drift-keys-on-name-and-path.md) — the decision behind the uniqueness scope above.
 - [Project Manifest](/project-manifest.md) — where `EXTENSION_FILE_TYPES` sits beside its reading-direction siblings.
 - [Reference Integrity](/reference-integrity.md) — `C3_PSEUDO_OBJECT_CLASSES` and the functions-object defect this convention's rules were built to catch.
 - [Layout Traversal](/layout-traversal.md) — `EDITOR_LOCAL_EXCLUSIONS`/`isEditorLocalPath`, one of the tables audited here.
@@ -335,3 +396,4 @@ update this doc's **numbers** — never the JSDoc labels.
 [^domain-fact-audit]: docs/domain-fact-audit.md (c3source C3 domain-fact audit, 2026-08-20 capture)
 [^issue-86-evidence]: Issue #86 file-entry type evidence (capture, 2026-10-01)
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
+[^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
