@@ -422,6 +422,16 @@ the source, not just the directory — a non-recursive submodule checkout
 leaves the directory present-but-empty, so a bare `existsSync` false-positives
 and the gated tests then *fail* instead of skipping.
 
+**Mutation-checked tests: assert a looked-up result exists before reading it.**
+A test that does `drift.sections.find((s) => s.section === "timelines")!.entries`
+does catch a mutation that drops the section, but it fails with a `TypeError`
+rather than an `AssertionError`, so the failure looks like a broken test rather
+than a caught regression. Write `expect(sec, "timelines section").to.exist`
+first, or deep-equal the whole `sections` array. `scripts/mutate.mjs` is the
+harness these checks are run with: each anchor must match exactly once, a no-op
+control runs first, and the file is restored byte-exact and verified with
+`git diff --quiet`.
+
 Assertions whose expected values must stay legible — above all the
 event-counter agreement test — use **small inline fixtures** where the
 expected numbers are obvious (`Outer=1, Inner=2, …`), not a large real
