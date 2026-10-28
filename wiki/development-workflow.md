@@ -11,6 +11,13 @@ sources:
     resource: ../raw/claude-md-2026-08-20.md
     title: "CLAUDE.md (c3source project instructions, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: issue-102
+    resource: ../raw/issue-102-gitlinkdrift-hook-timeouts-2026-10-28.md
+    title: "Issue #102 gitlinkDrift hook timeouts: measurements and the adopted fix (2026-10-28 capture)"
+    last_modified: 2026-10-28
+  - id: issue-102-upstream
+    resource: https://github.com/GenvidTechnologies/c3source/issues/102
+    title: "GenvidTechnologies/c3source#102"
 ---
 
 # Development Workflow
@@ -53,6 +60,14 @@ Tests use **mocha + chai** with **tsx** for on-the-fly TS execution — no
 build step needed. `test/setup.ts` is a mocha root hook that silences
 `console.log` and `console.debug` during runs (warn/error pass through), so
 library code may log freely[^claude-md].
+
+### Tests that spawn `git`
+
+A fixture built from several synchronous `git` spawns is slow and load-sensitive. `test/gitlinkDrift.test.ts` builds a hermetic superproject with seven of them; building it took about 0.9–1.3 s on an idle Windows machine, and under load a per-test `beforeEach` build intermittently exceeded mocha's 5000 ms default (issue #102)[^issue-102]. Pattern to follow:
+
+- Build the fixture **once** in `before()` into a template dir; `cpSync(template, tmp, { recursive: true })` in `beforeEach` (about 0.2–0.5 s); remove the template in `after()`. Copy per test, not per describe, whenever tests mutate the tree.
+- Give the describe `this.timeout(20000)`. That needs a `function ()` callback (an arrow has no mocha `this`), and the call must come **before** the hooks and `it`s are registered, because mocha copies the suite timeout into each at registration.
+- Raise the timeout per describe, never globally: the `--timeout 5000` default in the `test` script stays.
 
 ## Formatting
 
@@ -142,3 +157,4 @@ actually open, or push first[^claude-md].
 - [Design Patterns](/design-patterns.md) — the reusable engineering patterns this workflow's tests and tooling are built on.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
+[^issue-102]: Issue #102 gitlinkDrift hook timeouts: measurements and the adopted fix (2026-10-28 capture)
