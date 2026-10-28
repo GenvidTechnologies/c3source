@@ -5,12 +5,16 @@ description: Reusable engineering patterns c3source has settled on — single-so
 tags: [design-patterns, traversal, validation, testing, drift]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-10-05T21:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-28T12:00:00Z }
 sources:
   - id: docs-design-patterns
     resource: ../raw/docs-design-patterns-2026-08-20.md
     title: "docs/design-patterns.md (c3source design patterns, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: issue-97-101-evidence
+    resource: ../raw/issue-97-101-drift-evidence-2026-10-28.md
+    title: "Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)"
+    last_modified: 2026-10-28
 ---
 
 # Design Patterns
@@ -182,30 +186,50 @@ worth checking both whenever a dual-use predicate changes.
 
 **Problem.** Detecting manifest-vs-disk drift for name-folder sections
 (layouts, objectTypes, eventSheets, families) needs to distinguish a
-genuine add/remove from a same-item relocation — and doing that correctly
-depends on an invariant that must hold, not be assumed: **leaf names are
-unique within each section** (a C3 guarantee — no two layouts share a name,
-and so on within each category).
+genuine add/remove from a same-item relocation. A name is **not** guaranteed
+unique: the editor's setters refuse a repeat, but hand-written trees and bad
+merges produce one, and a file name legitimately recurs across
+`rootFileFolders` folders. A last-writer-wins `name → path` map made the result
+depend on walk order.
 
 **Shape.** `walkManifestNameTree(folder)` and `walkDiskNameTree(dir)` each
 return `Array<{name, path}>`, where `path` is the chain of ancestor
-subfolder names. `diffNameMaps(manifestItems, diskItems)` converts each
-list into a `Map<name, path>` and computes three outcomes: manifest-only →
-`missing`, disk-only → `untracked`, same name/different path → `moved`. The
-`moved` case exploits name uniqueness directly — a sync tool can apply it
-as a relocation rather than delete+add, because there is no ambiguity about
-which manifest entry matches which disk file. Folder-level drift is diffed
-separately (`folder-missing`/`folder-untracked`) and merged in, sorted
-deterministically by kind then name. `formatManifestPath(segments)` renders
-a path array for display, kept separate from the raw segments for the same
-reason `walkSids`/`formatSidPath` are — the traversal should not dictate
-the rendering.
+subfolder names. `diffNameMaps(manifestItems, diskItems)` groups the paths of
+each name per side and keys on **name plus path**. `moved` is reported only
+for a name that occurs exactly once on each side with different paths;
+otherwise drift is per-path `missing`/`untracked`. Folder-level drift is diffed
+separately (`folder-missing`/`folder-untracked`) and merged in, with a total
+sort tiebreak (kind, name, path) so output is deterministic.
+`formatManifestPath(segments)` renders a path array for display, kept separate
+from the raw segments for the same reason `walkSids`/`formatSidPath` are — the
+traversal should not dictate the rendering.
 
-**Trade-off.** This only works because of the name-uniqueness invariant; a
-C3 domain that ever permitted duplicate leaf names within a section would
-break the `moved` inference silently (a two-item swap could misreport as
-one `moved` and mask a real delete+add). The pattern is sound specifically
-because it leans on a guarantee c3source did not have to invent.
+**Trade-off.** A repeated name loses the `moved` inference, which is the safe
+direction: a two-item swap can no longer masquerade as one `moved`. The repeat
+itself is surfaced by the advisory `duplicates` field (next pattern). See [ADR
+0033](/decisions/0033-drift-keys-on-name-and-path.md)[^issue-97-101-evidence].
+
+## Advisory report fields, and suppressions keyed on origin
+
+**Problem.** Some findings are worth telling a caller but are not drift:
+a degraded sub-detector, a stray file, a repeated item name. Folding them into
+`sections` would flip `inSync` and break callers that gate on it; dropping
+them hides real information.
+
+**Shape.** Each is an optional field on `ManifestDrift` — `degraded`, `strays`,
+and `duplicates` — **omitted when empty** (so a clean project's result is
+byte-identical to an older one) and **never counted by `inSync`**. Adding one is
+additive, never a new `DriftKind`.
+
+A related rule applies when a finding must be suppressed: key the suppression on
+a folder's **structural origin** (`ManifestFolderOrigin`, e.g.
+`"transitions-container"`), not on its path string. The nameless transitions
+container and a user-named `transitions` folder share the path
+`["transitions"]`; only the first is exempt from `folder-missing`
+([ADR 0032](/decisions/0032-transitions-container-never-folder-missing.md))[^issue-97-101-evidence].
+
+**Trade-off.** Callers must read the advisory fields deliberately; `inSync` alone
+no longer means "nothing to report".
 
 ## Declared-subfolder recursion for file-folder walks
 
@@ -414,3 +438,4 @@ suite deliberately uses both, for different kinds of claim.
 - [C3 Domain Facts](/c3-domain-facts.md) — the evidence-bearing-verdict convention for audit tooling.
 
 [^docs-design-patterns]: docs/design-patterns.md (c3source design patterns, 2026-08-20 capture)
+[^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
