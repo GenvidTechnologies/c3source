@@ -152,3 +152,134 @@ describe("resolveManifestFolders (manifest path -> declaring folders)", () => {
     expect(resolveManifestFolders(root, ["Named", "Deeper"], "timelines")).to.deep.equal([]);
   });
 });
+
+describe("timelines transitions container drift (#97)", () => {
+  const tempRoots: string[] = [];
+  afterEach(() => {
+    for (const root of tempRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  const empty = (): C3NameFolder => folder([]);
+
+  /** Build a tmpdir project with the given timelines/layouts folders and on-disk files/dirs (rel paths; a trailing `/` is a directory). */
+  function project(timelines: C3NameFolder, onDisk: string[], layouts: C3NameFolder = empty()): string {
+    const dir = makeTempProject({
+      name: "t97",
+      runtime: "c3",
+      projectFormatVersion: 1,
+      savedWithRelease: 1,
+      objectTypes: empty(),
+      layouts,
+      eventSheets: empty(),
+      timelines,
+      flowcharts: empty(),
+      families: empty(),
+      models3d: empty(),
+      containers: [],
+    });
+    tempRoots.push(dir);
+    for (const rel of onDisk) {
+      const full = path.join(dir, rel);
+      if (rel.endsWith("/")) mkdirSync(full, { recursive: true });
+      else {
+        mkdirSync(path.dirname(full), { recursive: true });
+        writeC3JsonFile(full, {});
+      }
+    }
+    return dir;
+  }
+
+  const drift = (dir: string, manifest: C3NameFolder, layouts: C3NameFolder = empty()) =>
+    detectManifestDrift(dir, {
+      name: "t97",
+      runtime: "c3",
+      projectFormatVersion: 1,
+      savedWithRelease: 1,
+      objectTypes: empty(),
+      layouts,
+      eventSheets: empty(),
+      timelines: manifest,
+      flowcharts: empty(),
+      families: empty(),
+      models3d: empty(),
+      containers: [],
+    } as never);
+
+  const gcore = (): C3NameFolder => folder(["Timeline"], [folder([])]);
+
+  it("T97-1: an empty container with no transitions directory is in sync", () => {
+    const tl = gcore();
+    const d = drift(project(tl, ["timelines/Timeline.json"]), tl);
+    expect(d.sections).to.deep.equal([]);
+  });
+
+  it("T97-2: a container with no timelines directory at all reports no timelines section", () => {
+    const tl = folder([], [folder([])]);
+    const d = drift(project(tl, []), tl);
+    expect(d.sections.find((s) => s.section === "timelines")).to.equal(undefined);
+  });
+
+  it("T97-3: a container listing Ease1 with no file reports only the missing item", () => {
+    const tl = folder([], [folder(["Ease1"])]);
+    const d = drift(project(tl, []), tl);
+    expect(d.sections.find((s) => s.section === "timelines")!.entries).to.deep.equal([
+      { kind: "missing", name: "Ease1", manifestPath: ["transitions"] },
+    ]);
+  });
+
+  it("T97-4: a named folder under the container with no directories reports folder-missing for it only", () => {
+    const tl = folder([], [folder([], [folder([], [], "Other")])]);
+    const d = drift(project(tl, []), tl);
+    expect(d.sections.find((s) => s.section === "timelines")!.entries).to.deep.equal([
+      { kind: "folder-missing", name: "Other", manifestPath: ["transitions", "Other"] },
+    ]);
+  });
+
+  it("T97-5: the gcore fragment plus an empty transitions directory is in sync", () => {
+    const tl = gcore();
+    const d = drift(project(tl, ["timelines/Timeline.json", "timelines/transitions/"]), tl);
+    expect(d.inSync).to.equal(true);
+  });
+
+  it("T97-6: with no container, transitions on disk is untracked", () => {
+    const tl = folder([]);
+    const withFile = drift(project(tl, ["timelines/transitions/E.json"]), tl);
+    expect(withFile.sections.find((s) => s.section === "timelines")!.entries).to.deep.equal([
+      { kind: "untracked", name: "E", diskPath: ["transitions"] },
+      { kind: "folder-untracked", name: "transitions", diskPath: ["transitions"] },
+    ]);
+    const emptyDir = drift(project(tl, ["timelines/transitions/"]), tl);
+    expect(emptyDir.sections.find((s) => s.section === "timelines")!.entries).to.deep.equal([
+      { kind: "folder-untracked", name: "transitions", diskPath: ["transitions"] },
+    ]);
+  });
+
+  it("T97-7: a nameless subfolder under layouts is transparent and never drifts", () => {
+    const tl = folder([]);
+    const emptyChild = folder([], [folder([])]);
+    expect(drift(project(tl, [], emptyChild), tl, emptyChild).inSync).to.equal(true);
+    const holding = folder([], [folder(["L"])]);
+    expect(drift(project(tl, ["layouts/L.json"], holding), tl, holding).inSync).to.equal(true);
+  });
+
+  it("T97-8: a user-named transitions folder with no directory is still folder-missing", () => {
+    const tl = folder([], [folder([], [], "transitions")]);
+    const d = drift(project(tl, []), tl);
+    expect(d.sections.find((s) => s.section === "timelines")!.entries).to.deep.equal([
+      { kind: "folder-missing", name: "transitions", manifestPath: ["transitions"] },
+    ]);
+  });
+
+  it("T97-9: a named transitions folder plus the container reports exactly one folder-missing", () => {
+    const tl = folder([], [folder([], [], "transitions"), folder([])]);
+    const d = drift(project(tl, []), tl);
+    expect(d.sections.find((s) => s.section === "timelines")!.entries).to.deep.equal([
+      { kind: "folder-missing", name: "transitions", manifestPath: ["transitions"] },
+    ]);
+  });
+
+  it("T97-10: two nameless direct children of timelines are in sync", () => {
+    const tl = folder([], [folder([]), folder([])]);
+    expect(drift(project(tl, []), tl).inSync).to.equal(true);
+  });
+});

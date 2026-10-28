@@ -15,7 +15,9 @@ export interface C3NameFolder {
   items: string[];
   subfolders: C3NameFolder[];
   /** Organizational subfolder name (matches the on-disk subdirectory). Absent on the
-   *  section root and on degenerate empty subfolders C3 serializes without a name. */
+   *  section root and on degenerate empty subfolders C3 serializes without a name. A nameless
+   *  direct child of `timelines` is the transitions container ({@link TIMELINE_TRANSITIONS_FOLDER});
+   *  drift never reports it `folder-missing`, and {@link resolveManifestFolders} maps a path back. */
   name?: string;
 }
 
@@ -434,6 +436,9 @@ export const C3_SECTION_FOLDERS = {
  * timeline-with-transitions project round-trips without false drift (#28). Exported so the
  * C3 domain fact is owned here (cf. {@link EVENTVAR_REFERENCE_ACES}) rather than re-hardcoded
  * downstream. The container can itself hold ordinary named subfolders (e.g. "Other Eases").
+ * C3 always saves the container, but the directory exists only while it holds something, so
+ * drift never reports it `folder-missing`; {@link resolveManifestFolders} maps a path back to
+ * its declaring folders.
  */
 export const TIMELINE_TRANSITIONS_FOLDER = "transitions";
 
@@ -913,8 +918,17 @@ function diffFolderPaths(
   const mSet = new Set(manifestFolders.map((f) => pathKey(f.path)));
   const dSet = new Set(diskPaths.map(pathKey));
   const entries: DriftEntry[] = [];
-  for (const { path: p } of manifestFolders)
-    if (!dSet.has(pathKey(p))) entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
+  const reported = new Set<string>();
+  for (const { path: p, origin } of manifestFolders) {
+    // C3 always saves the timelines transitions container, but its directory is absent while the
+    // container is empty. Keyed on origin, not the path string: a user-NAMED "transitions" folder
+    // must still be reported when its directory is missing.
+    if (origin === "transitions-container") continue;
+    const key = pathKey(p);
+    if (dSet.has(key) || reported.has(key)) continue;
+    reported.add(key);
+    entries.push({ kind: "folder-missing", name: p[p.length - 1], manifestPath: p });
+  }
   for (const p of diskPaths)
     if (!mSet.has(pathKey(p))) entries.push({ kind: "folder-untracked", name: p[p.length - 1], diskPath: p });
   return entries;
