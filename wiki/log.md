@@ -100,16 +100,3 @@ the full maintenance schema.
 * **Creation**: c3project-handle.md, driven by `raw/claude-md-2026-08-20.md` and `raw/docs-api-guide-project-2026-08-20.md`.
 * **Creation**: event-sheet-extraction.md, driven by `raw/claude-md-2026-08-20.md` and `raw/docs-api-guide-extraction-2026-08-20.md`.
 * **Creation**: serialization-form.md, driven by `raw/claude-md-2026-08-20.md`.
-
-<!-- Example — two date groups, newest first, illustrating the ordering.
-     Replace with your first real ingest entry, or delete once the log has
-     one of its own.
-
-## 2026-08-03
-
-* **Update**: example-topic.md — added X, driven by `raw/example-source.md`.
-
-## 2026-08-01
-
-* **Creation**: example-topic.md, driven by `raw/example-source.md`.
--->
