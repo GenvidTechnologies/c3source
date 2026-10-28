@@ -27,6 +27,10 @@ sources:
     resource: ../raw/issue-97-101-drift-evidence-2026-10-28.md
     title: "Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)"
     last_modified: 2026-10-28
+  - id: issue-100-evidence
+    resource: ../raw/issue-100-empty-name-live-editor-2026-10-28.md
+    title: "Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)"
+    last_modified: 2026-10-28
 ---
 
 # C3 Domain Facts
@@ -143,7 +147,7 @@ fresh[^domain-fact-audit][^issue-86-evidence].
 | `C3_MINIFIED_SOURCE_SUFFIXES` | `isMinifiedSourcePath` | NO CONTRADICTIONS across 2,605 `.json` files | Cosmetic — write-form only |
 | `SCRIPT_SOURCE_EXTENSIONS` | `isScriptSourceName` | NO GAPS at value level; `.ts`→r433 bundle-pinned | Silent over/under-collection in script discovery, never a throw |
 | `SCRIPT_FILE_TYPE_EXTENSIONS` | — | NO GAPS; same corpus as above | Silent miss in manifest interpretation, never a throw — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS` |
-| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below) | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
+| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED in the bundle; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below). Declared `""`: LIVE-EDITOR r506.3, a separate channel from the bundle — refused for layouts/eventSheets/timelines/families, renamed for objectTypes, loaded for flowcharts; models3d not tested[^issue-100-evidence] | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
 | `TIMELINE_TRANSITIONS_FOLDER` | — | CORPUS-VALIDATED by the 2026-10-28 raw capture: out of 24 unique manifests, 14 have an empty transitions container and no `timelines/transitions/` dir, 8 have a non-empty container with the dir (below) | A false `folder-missing` on every healthy timeline project, or a sync tool that deletes the container |
 | `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, two tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
 
@@ -172,10 +176,38 @@ exist in the r379 and r402 bundles). The section loaders open
 `folder + <manifest item name> + ".json"` and never list the folder, so a
 `.json` no manifest item names is never opened. **Not traced:** the objectTypes
 and families name setters (their loaders were read, their setters were not
-found), and what the editor does with a manifest that declares `""`, which no
-one has run. The matched snippets are verbatim in the raw
-capture[^issue-95-evidence]. This evidence is not scanner-refreshable;
+found), and what the editor does with a manifest that declares `""`, which the
+bundle capture left as a live-editor question. The matched snippets are verbatim
+in the raw capture[^issue-95-evidence]. This evidence is not scanner-refreshable;
 re-verify it against `editor.construct.net/r{NNN}/`.
+
+**Live-editor evidence.** Issue #100 answers that last gap by running the
+editor, a different channel from the bundle, so the two are not merged. Copies
+of the `construct3-sample` project, each declaring one root-level item named
+`""` in one section, were opened in Construct 3 r506.3 (eventSheets also at
+r495.2). "Crashed" means a crash dialog and an editor restart; "failed" means an
+error dialog and a console error, with the editor left as it was
+before[^issue-100-evidence]:
+
+- layouts and eventSheets **crashed** (`invalid layout name ''`, `invalid event
+  sheet name ''`; eventSheets at both releases).
+- timelines and families **failed** to open (`invalid timeline name ''`,
+  `invalid name`).
+- objectTypes **opened** with no visible new object type. The disk state after
+  a save suggests the item was renamed to `Text3`; that rename is an inference,
+  as no editor code was read. The save then rewrote the manifest with `Text3`
+  but deleted `objectTypes/.json` and wrote no `Text3.json`, so the project no
+  longer opened.
+- flowcharts **opened** and, after a save, wrote the project back with the
+  nameless flowchart still declared and `flowcharts/.json` unchanged; it
+  re-opened. So `""` is loadable there even though the bundle's name setter
+  rejects it.
+- models3d was not tested (empty in the sample).
+
+The editor therefore refuses a declared `""` in most sections, but not in
+flowcharts, and in objectTypes it silently corrupts the project. A rule
+rejecting a declared `""` in every name section is proposed in #106 and is not
+yet shipped; it would be deliberately stricter than the editor for flowcharts.
 
 **Corpus evidence.** Re-run 2026-10-27 on the 14 projects of the inventoried
 corpus (deduplicated by hand, see below): 2,282 declared items across the
@@ -352,7 +384,9 @@ used to confirm `extractScriptsFromSheet`'s `scopeVars` claim; see [C3
 local-variable scoping](/event-sheet-extraction.md) for the traced result.
 Unlike the corpus/bundle-derived tables, this evidence is **not
 scanner-refreshable at all** — re-verifying it means repeating the manual
-experiment[^domain-fact-audit].
+experiment[^domain-fact-audit]. Issue #100's run of a declared empty item
+name in each section is the second use of the channel (see [Item-hood at the
+empty-stem boundary](#item-hood-at-the-empty-stem-boundary))[^issue-100-evidence].
 
 ## How to re-run
 
@@ -397,3 +431,4 @@ update this doc's **numbers** — never the JSDoc labels.
 [^issue-86-evidence]: Issue #86 file-entry type evidence (capture, 2026-10-01)
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 [^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
+[^issue-100-evidence]: Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)

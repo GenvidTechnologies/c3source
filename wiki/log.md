@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-10-28
 
+* **Update**: c3-domain-facts.md (live-editor result per section for a declared empty item name, the `C3_SECTION_ITEM_EXTENSION` inventory row, the live-editor channel) and project-manifest.md (the "Manifest validation is unchanged" paragraph, still true, now pointing at the proposed rule in #106); driven by `raw/issue-100-empty-name-live-editor-2026-10-28.md` (issue #100).
 * **Update**: development-workflow.md — added the subsection "Tests that spawn `git`" (build the fixture once into a template, `cpSync` per test, per-describe `this.timeout`); driven by `raw/issue-102-gitlinkdrift-hook-timeouts-2026-10-28.md` (issue #102).
 * **Update**: design-patterns.md — under "Testing: real-export ground truth + inline legibility", added the mutation-checked-tests note (assert a looked-up result exists before dereferencing it) and pointed it at the promoted `scripts/mutate.mjs` harness; driven by the #97/#101 mutation run, where M97-b failed by `TypeError` (recorded on issue #97).
 * **Update**: project-manifest.md — documented `resolveManifestFolders`, the transitions-container `folder-missing` suppression, name-plus-path keying in `diffNameMaps`, and the advisory `ManifestDrift.duplicates?`; removed the false "name uniqueness is a C3 invariant" claim; driven by `raw/issue-97-101-drift-evidence-2026-10-28.md` (issues #97, #101; ADRs 0032, 0033).
