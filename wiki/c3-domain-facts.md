@@ -1,7 +1,7 @@
 ---
 type: reference
 title: C3 Domain Facts
-description: c3source owns exported tables naming undocumented C3 platform facts, each carrying a confidence label paired with its blast radius, validated via two evidence channels — a corpus scan of real projects and C3's own editor bundle — that answer different questions and must never be conflated when a table's findings mix both provenances.
+description: c3source owns exported tables naming undocumented C3 platform facts, each carrying a confidence label paired with its blast radius, validated via two evidence channels — a corpus scan of real projects and C3's own editor bundle — that answer different questions and must never be conflated when a table's findings mix both provenances, plus live editor runs for the questions neither channel can settle.
 tags: [domain-facts, c3-domain-facts, corpus-scan, editor-bundle, audit]
 status: stable
 stale_after: 2027-02-20
@@ -147,7 +147,7 @@ fresh[^domain-fact-audit][^issue-86-evidence].
 | `C3_MINIFIED_SOURCE_SUFFIXES` | `isMinifiedSourcePath` | NO CONTRADICTIONS across 2,605 `.json` files | Cosmetic — write-form only |
 | `SCRIPT_SOURCE_EXTENSIONS` | `isScriptSourceName` | NO GAPS at value level; `.ts`→r433 bundle-pinned | Silent over/under-collection in script discovery, never a throw |
 | `SCRIPT_FILE_TYPE_EXTENSIONS` | — | NO GAPS; same corpus as above | Silent miss in manifest interpretation, never a throw — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS` |
-| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED in the bundle; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below). Declared `""`: LIVE-EDITOR r506.3, a separate channel from the bundle — refused for layouts/eventSheets/timelines/families, renamed for objectTypes, loaded for flowcharts; models3d not tested[^issue-100-evidence] | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
+| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED in the bundle; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below). Declared `""`: LIVE-EDITOR r506.3, a separate channel from the bundle — open crashed for layouts/eventSheets and failed for timelines/families; objectTypes opened and a save wrote `Text3` in its place; flowcharts loaded the nameless item; models3d not tested[^issue-100-evidence] | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
 | `TIMELINE_TRANSITIONS_FOLDER` | — | CORPUS-VALIDATED by the 2026-10-28 raw capture: out of 24 unique manifests, 14 have an empty transitions container and no `timelines/transitions/` dir, 8 have a non-empty container with the dir (below) | A false `folder-missing` on every healthy timeline project, or a sync tool that deletes the container |
 | `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, two tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
 
@@ -193,21 +193,31 @@ before[^issue-100-evidence]:
   sheet name ''`; eventSheets at both releases).
 - timelines and families **failed** to open (`invalid timeline name ''`,
   `invalid name`).
-- objectTypes **opened** with no visible new object type. The disk state after
-  a save suggests the item was renamed to `Text3`; that rename is an inference,
-  as no editor code was read. The save then rewrote the manifest with `Text3`
-  but deleted `objectTypes/.json` and wrote no `Text3.json`, so the project no
-  longer opened.
-- flowcharts **opened** and, after a save, wrote the project back with the
-  nameless flowchart still declared and `flowcharts/.json` unchanged; it
-  re-opened. So `""` is loadable there even though the bundle's name setter
-  rejects it.
+- objectTypes **opened** with no visible new object type. After a save (forced
+  by a change and its revert, since nothing was dirty) the manifest read
+  `Text3` where `""` had been, `objectTypes/.json` was deleted and no
+  `Text3.json` was written, and re-opening failed with an error about `Text3`.
+  That the editor renamed the item to `Text3` on load is an inference from that
+  disk state, as no editor code was read.
+- flowcharts **opened** with a nameless flowchart. After a save forced the same
+  way, which rewrote the whole project at r506.3, the manifest still declared
+  `""` and `flowcharts/.json` was unchanged, and it re-opened with the nameless
+  flowchart. So at r506.3 `""` is loadable there, although the bundle's
+  flowchart name setter rejects it at the releases traced above.
 - models3d was not tested (empty in the sample).
 
-The editor therefore refuses a declared `""` in most sections, but not in
-flowcharts, and in objectTypes it silently corrupts the project. A rule
-rejecting a declared `""` in every name section is proposed in #106 and is not
-yet shipped; it would be deliberately stricter than the editor for flowcharts.
+The save failure is not specific to `""`. A control copy whose new object type
+and family had names containing spaces (r495.2) opened with those names
+silently stripped of their spaces. Its save deleted both items' files and wrote
+none under the new names, and the project no longer opened. A second control
+with space-free names opened with all six items but was not saved, so a save
+of a valid new name is untested[^issue-100-evidence].
+
+So the editor's open crashes or fails on a declared `""` in four sections, keeps
+it in flowcharts, and in objectTypes swaps it for another name, which a save
+then loses. A rule rejecting a declared `""` in every name section is proposed
+in #106, a breaking change intended for 3.0.0, and is not yet shipped; it would
+be deliberately stricter than the editor for flowcharts.
 
 **Corpus evidence.** Re-run 2026-10-27 on the 14 projects of the inventoried
 corpus (deduplicated by hand, see below): 2,282 declared items across the

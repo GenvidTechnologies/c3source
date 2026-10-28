@@ -358,10 +358,12 @@ Manifest validation is unchanged: `validateProjectManifest` and
 `collectManifestIssues` add no rule against `""`, so strict `parseProjectManifest`
 still accepts such a manifest, and a declared `""` still reads as `missing ""`
 drift plus a stray `.json`. A live editor run (#100) has since found that the
-editor refuses a declared `""` in most sections (layouts, event sheets,
-timelines, families), renames it in objectTypes and then corrupts the project
-on save, and loads it in flowcharts[^issue-100-evidence]. A rule rejecting it
-in every name section is proposed in #106 and is not yet shipped. See [ADR
+editor's open crashes (layouts, event sheets) or fails (timelines, families)
+on a declared `""`, loads it in flowcharts, and in objectTypes opens without it
+and saves `Text3` in its place without writing that item's
+file[^issue-100-evidence]. A rule rejecting it in every name section is
+proposed in #106, a breaking change intended for 3.0.0, and is not yet shipped.
+See [ADR
 0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain
 Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary)[^issue-95-evidence].
 
