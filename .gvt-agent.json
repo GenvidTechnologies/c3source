@@ -32,6 +32,8 @@
   "paths": {
     "docs/decisions/": "wiki/decisions/",
     "docs/TOC.md": "wiki/index.md",
-    "docs/issue-triage.md": "wiki/issue-triage.md"
+    "docs/issue-triage.md": "wiki/issue-triage.md",
+    "docs/architecture.md": "wiki/module-architecture.md",
+    "docs/design-patterns.md": "wiki/design-patterns.md"
   }
 }
