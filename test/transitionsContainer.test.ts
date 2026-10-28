@@ -3,6 +3,7 @@ import { expect } from "chai";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
+  C3_SECTION_FOLDERS,
   detectManifestDrift,
   resolveManifestFolders,
   walkManifestNameTree,
@@ -114,13 +115,15 @@ describe("resolveManifestFolders (manifest path -> declaring folders)", () => {
     expect(entries.map((e) => e.kind).sort()).to.deep.equal(["folder-missing", "missing", "moved", "untracked"]);
 
     for (const section of drift.sections) {
+      if (!(section.section in C3_SECTION_FOLDERS)) continue; // containers, images: not manifest name folders
       const sectionFolder = manifest[section.section as keyof typeof manifest] as C3NameFolder;
       for (const e of section.entries) {
         if (e.kind === "untracked") continue; // no declaring folder
         const resolved = resolveManifestFolders(sectionFolder, e.manifestPath ?? [], section.section);
         if (e.kind === "folder-missing") {
+          const leaf = e.manifestPath![e.manifestPath!.length - 1];
           expect(
-            resolved.some((r) => r.origin === "named"),
+            resolved.some((r) => r.origin === "named" && r.folder.name === leaf),
             `${e.kind} ${e.name}`,
           ).to.equal(true);
         } else {
@@ -161,7 +164,10 @@ describe("timelines transitions container drift (#97)", () => {
 
   const empty = (): C3NameFolder => folder([]);
 
-  /** Build a tmpdir project with the given timelines/layouts folders and on-disk files/dirs (rel paths; a trailing `/` is a directory). */
+  /**
+   * Build a tmpdir project with the given timelines/layouts folders and on-disk files/dirs
+   * (rel paths; a trailing `/` is a directory).
+   */
   function project(timelines: C3NameFolder, onDisk: string[], layouts: C3NameFolder = empty()): string {
     const dir = makeTempProject({
       name: "t97",
@@ -281,5 +287,13 @@ describe("timelines transitions container drift (#97)", () => {
   it("T97-10: two nameless direct children of timelines are in sync", () => {
     const tl = folder([], [folder([]), folder([])]);
     expect(drift(project(tl, []), tl).inSync).to.equal(true);
+  });
+
+  it("T97-11: two named siblings with the same name and no directory report one folder-missing", () => {
+    const tl = folder([], [folder([], [], "Dup"), folder([], [], "Dup"), folder([])]);
+    const d = drift(project(tl, []), tl);
+    expect(d.sections.find((s) => s.section === "timelines")!.entries).to.deep.equal([
+      { kind: "folder-missing", name: "Dup", manifestPath: ["Dup"] },
+    ]);
   });
 });

@@ -130,6 +130,10 @@ export interface DriftDegradation {
  *   anywhere in the section, on either side (manifest or disk), whatever folder it sits in;
  * - `rootFileFolders.<cat>` and `images`: two occurrences of the name in the same folder (the same
  *   path), on either side. The same file name in different folders is legitimate and not reported.
+ *   For `images`, the declared side is derived from object-type animation names
+ *   (`deriveExpectedImages`), not listed in the manifest. A repeat there is therefore a derivation
+ *   collision, such as type `A-B` / anim `C` vs type `A` / anim `B-C`. It is fixed by renaming an
+ *   object type or animation, not by editing the manifest.
  * Comparison is case-sensitive.
  *
  * **Advisory**: a duplicate is never drift and never affects {@link ManifestDrift.inSync}.
@@ -704,10 +708,15 @@ export function walkManifestFileTree(
   return out;
 }
 
-/** How a folder's path segment came about in {@link walkManifestFolders}. */
+/**
+ * How a folder's drift-path segment came about: `"root"` is the section root (no segment of its own),
+ * `"named"` a folder contributing its own name, `"transitions-container"` the nameless direct child
+ * of the `timelines` root that C3 maps to `transitions`, and `"transparent"` any other nameless
+ * folder, which shares its parent's path.
+ */
 export type ManifestFolderOrigin = "root" | "named" | "transitions-container" | "transparent";
 
-/** One folder reached by {@link walkManifestFolders}. */
+/** One folder reached by the manifest folder walk. */
 interface FolderVisit<F extends C3NameFolder | C3FileFolder> {
   folder: F;
   parent: F | null;
@@ -785,8 +794,10 @@ export interface ResolvedManifestFolder<F extends C3NameFolder | C3FileFolder = 
  * The result order is pre-order, NOT level-order. construct3-chef's local `foldersAt` walks level by
  * level, so `[0]` can differ between the two when a transparent folder and a direct child share a path.
  *
- * `section` is {@link SectionDrift.section} verbatim. `"timelines"` enables the nameless-container
- * segment; any other key, including `"rootFileFolders.<cat>"`, makes every nameless folder transparent.
+ * `section` is {@link SectionDrift.section} verbatim: a manifest section key such as `"timelines"`.
+ * `"timelines"` enables the nameless-container segment; any other key, including
+ * `"rootFileFolders.<cat>"`, makes every nameless folder transparent. An unknown key (a typo like
+ * `"Timelines"`) gets no container segment, so `["transitions"]` resolves to `[]` for it.
  */
 export function resolveManifestFolders<F extends C3NameFolder | C3FileFolder>(
   sectionFolder: F,
@@ -967,7 +978,8 @@ function collectDuplicateNames(
  * Collect every subfolder path (segment chains of names) declared in a manifest name-folder tree.
  * `unnamedSubfolderName` mirrors {@link walkManifestNameTree}: a nameless direct child of the
  * section root adopts that name (the `timelines/transitions` exception); not propagated into
- * recursion, so it applies to top-level children only.
+ * recursion, so it applies to top-level children only. Returns `{path, origin}` for the named folders
+ * and the transitions container (origin `"named"` or `"transitions-container"`).
  */
 function collectManifestFolderPaths(
   folder: C3NameFolder,
@@ -999,6 +1011,8 @@ function collectDiskFolderPaths(dir: string, base: ManifestPathSegment[] = []): 
  * folder-level drift entries (folder-missing for manifest-only, folder-untracked for
  * disk-only). A subfolder present on both sides yields no entry (folders are keyed by
  * their full path, so there is no folder "move"). `name` is the leaf subfolder name.
+ * The transitions container's `folder-missing` is skipped (its directory is absent while empty), and
+ * each manifest path is reported once even if declared by several folders.
  */
 function diffFolderPaths(
   manifestFolders: Array<{ path: ManifestPathSegment[]; origin: ManifestFolderOrigin }>,
@@ -1035,6 +1049,9 @@ function diffFolderPaths(
  * is reported via {@link ManifestDrift.degraded} — never silently swallowed — with the
  * "images" section simply absent from {@link ManifestDrift.sections}. A degradation never
  * flips {@link ManifestDrift.inSync}, which stays `sections.length === 0` (#68).
+ *
+ * The result also carries the advisory {@link ManifestDrift.duplicates}: item names occurring more
+ * than once in a section. They never count as drift and never affect `inSync`.
  */
 export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
   const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));

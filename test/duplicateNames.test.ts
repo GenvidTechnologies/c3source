@@ -86,7 +86,7 @@ describe("same item name at more than one path (#101)", () => {
   const a = (items: string[]): C3NameFolder => nameFolder(items, [], "a");
   const b = (items: string[]): C3NameFolder => nameFolder(items, [], "b");
 
-  it("T101-1: the same layout name in two folders, declared and on disk, is in sync and reported as a duplicate", () => {
+  it("T101-1: the same layout name in two folders, declared and on disk, is in sync and a duplicate", () => {
     const layouts = nameFolder([], [a(["X"]), b(["X"])]);
     const dir = project(["layouts/a/X.json", "layouts/b/X.json"]);
     const drift = detectManifestDrift(dir, manifestOf(layouts));
@@ -150,6 +150,14 @@ describe("same item name at more than one path (#101)", () => {
     const drift = detectManifestDrift(dir, manifestOf(nameFolder([], [a(["X"]), b(["Y"])])));
     expect(drift.inSync).to.equal(true);
     expect("duplicates" in drift).to.equal(false);
+  });
+
+  it("T101-13: a name repeated only on disk is reported in duplicates", () => {
+    const dir = project(["layouts/a/X.json", "layouts/b/X.json"]);
+    const drift = detectManifestDrift(dir, manifestOf(nameFolder([], [a(["X"]), b([])])));
+    expect(drift.duplicates).to.deep.equal([
+      { section: "layouts", folder: "layouts", name: "X", manifestPaths: [["a"]], diskPaths: [["a"], ["b"]] },
+    ]);
   });
 
   it("T101-2: a name declared at one path but on disk at two reports the extra one untracked", () => {
