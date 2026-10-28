@@ -2,7 +2,7 @@
 
 **Captured:** 2026-10-28
 **For:** GenvidTechnologies/c3source#97 (the `timelines` transitions container is falsely reported `folder-missing`) and #101 (`diffNameMaps` is last-writer-wins on duplicate item names)
-**Source:** probe results and a corpus scan of `project.c3proj` files, run through `detectManifestDrift` from this repo's `src/`. Pre-fix results are from `main` at 5b71bd6. Post-fix results are from the working branch at commit 09edb93, after both fixes.
+**Source:** probe results and a corpus scan of `project.c3proj` files, run through `detectManifestDrift` from this repo's `src/`. Pre-fix results are from `main` at 5b71bd6. Post-fix results are from the #97/#101 fix branch after both code fixes, before the docs commits; the drift code is the code the fix PR merges.
 **Nature:** a corpus scan plus probe results, not an editor-bundle capture. Nothing here was fetched from `editor.construct.net`. The corpus is the dev machine's `C:\repos` tree, searched to depth <= 4 for `project.c3proj`. Several roots are copies of each other (the `bb-backup/previews` mirrors, and the canonical fixture, which is a copy of `construct3-sample/project`), which is why the post-fix scan dedupes by sha256 of the manifest bytes. **Do not quote any figure from a non-deduplicated count.** The only deduplicated figures are the post-fix ones below (24 unique of 31 found).
 
 ---
@@ -72,7 +72,7 @@ Observed on `main` during planning by the orchestrator, using the `burbank-drift
 
 ---
 
-## Post-fix corpus scan (branch commit 09edb93)
+## Post-fix corpus scan (after both fixes)
 
 The script ran against the real `src/` (`file:///C:/repos/c3source/src/c3source.ts`) after both fixes. It dedupes manifests by sha256 of the `project.c3proj` bytes, so a mirrored project is counted once.
 
@@ -206,7 +206,7 @@ for (const r of ["C:/repos/burbank", "C:/repos/bb-backup/previews/burbank"]) {
 }
 ```
 
-### Output: `burbank-drift-postfix.txt` (branch commit 09edb93)
+### Output: `burbank-drift-postfix.txt` (after both fixes)
 
 The script itself truncates each section's entry JSON to 600 characters (`.slice(0, 600)`), so the 264-entry `images` list for `bb-backup/previews/burbank` is already cut off in the output below; it is unrelated stale preview drift, not part of #97 or #101. The output is otherwise verbatim.
 

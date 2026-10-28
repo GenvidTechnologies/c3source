@@ -79,8 +79,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - **`detectManifestDrift` no longer reports `folder-missing` for the nameless
   timelines transitions container** when `timelines/transitions/` is absent,
-  which is how C3 saves an empty container. A project with an empty container now
-  reads `inSync: true`. The check is keyed on the folder's origin, so a
+  which is how C3 saves an empty container, so that alone no longer makes
+  `inSync` false. The check is keyed on the folder's origin, so a
   user-named `transitions` folder with no directory is still reported, and a
   path declared twice is reported once
   ([#97](https://github.com/GenvidTechnologies/c3source/issues/97)) — see

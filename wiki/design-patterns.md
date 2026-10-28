@@ -187,8 +187,9 @@ worth checking both whenever a dual-use predicate changes.
 **Problem.** Detecting manifest-vs-disk drift for name-folder sections
 (layouts, objectTypes, eventSheets, families) needs to distinguish a
 genuine add/remove from a same-item relocation. A name is **not** guaranteed
-unique: the editor's setters refuse a repeat, but hand-written trees and bad
-merges produce one, and a file name legitimately recurs across
+unique: the traced editor setters refuse a repeat (not every section's setter
+is traced), but hand-written trees and bad merges produce one, and a file name
+legitimately recurs across
 `rootFileFolders` folders. A last-writer-wins `name → path` map made the result
 depend on walk order.
 

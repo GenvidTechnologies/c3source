@@ -58,7 +58,7 @@ The constraint behind every option below: the origin has to travel with each dec
 - **Option C: post-filter in `detectManifestDrift`.** Drop `folder-missing ["transitions"]` entries from the `timelines` section after the diff. Rejected: by then the entry is only a path and a kind, so the filter would have to test the path string, and that silences a user-named `transitions` folder, the exact case `construct3-chef#333` describes. Origin is only known inside the walk.
 - **Suppress by path string inside `diffFolderPaths`.** The same objection as Option C, one layer earlier.
 
-**Accepted costs.** The suppression is a domain claim: the container's directory is absent while the container is empty. The corpus supports it (14 of 14 empty, 8 of 8 non-empty), but it is a count over local projects, not an editor trace. A container that is non-empty on disk yet whose directory is missing is not reported either, because the suppression does not look at disk state. That is a missed `folder-missing`, not a false one; it would show as `missing` item drift for the items the container holds.
+**Accepted costs.** The suppression is a domain claim: the container's directory is absent while the container is empty. The corpus supports it (14 of 14 empty, 8 of 8 non-empty), but it is a count over local projects, not an editor trace. A container that declares items while its directory is absent is not reported `folder-missing` either, because the suppression does not look at disk state; the corpus has no such case. That is a missed `folder-missing`, not a false one; it would show as `missing` item drift for the items the container holds.
 
 ## Consequences
 

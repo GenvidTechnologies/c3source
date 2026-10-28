@@ -170,8 +170,10 @@ delete-plus-add. Any other shape (a name repeated on either side) is diffed per
 path: each manifest path with no equal disk path is `missing`, each disk path
 with no equal manifest path is `untracked`. Entries carry a total sort
 tiebreak (kind, then name, then path). Name uniqueness is **not assumed**: the
-editor's name setters refuse a repeat, but hand-written trees and bad merges
-produce one, and the same file name in different `rootFileFolders` folders is
+traced editor name setters (layouts, event sheets, timelines, flowcharts and
+models3d) refuse a repeat, but the objectTypes and families setters are
+untraced, hand-written trees and bad merges produce repeats, and the same file
+name in different `rootFileFolders` folders is
 legitimate[^issue-97-101-evidence]. See [ADR
 0033](/decisions/0033-drift-keys-on-name-and-path.md) and [C3 Domain Facts —
 item-name uniqueness](/c3-domain-facts.md#item-name-uniqueness-scope).
