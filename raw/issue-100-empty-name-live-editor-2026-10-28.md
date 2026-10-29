@@ -21,7 +21,7 @@
   - family: from `TextFamily` (variables, behaviours, effects emptied, members `["Text"]`).
 - `models3d` is empty in the sample and was not tested.
 - `control` adds the same six copies under valid names `Zz Control <section>` (with spaces). `control-2` (built later with `--control-only control-2`) adds them as `ZzControlLayouts`, `ZzControlEventSheets`, `ZzControlTimelines`, `ZzControlFlowcharts`, `ZzControlObjectTypes`, `ZzControlFamilies` (no spaces).
-- The copies were first built under the scratchpad directory in AppData. The maintainer reported: "C3 cannot open "system files", i.e. files under AppData." They were moved to `C:\Users\FabienNinoles\Documents\c3-issue-100\` and re-verified there (62 of 62 checks passing).
+- The copies were first built under the scratchpad directory in AppData. The maintainer reported: "C3 cannot open "system files", i.e. files under AppData." They were moved to `Documents\c3-issue-100\` in the maintainer's user profile and re-verified there (62 of 62 checks passing).
 
 ## Maintainer's terminology (verbatim)
 

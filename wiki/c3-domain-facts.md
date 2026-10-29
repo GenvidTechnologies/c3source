@@ -398,6 +398,22 @@ experiment[^domain-fact-audit]. Issue #100's run of a declared empty item
 name in each section is the second use of the channel (see [Item-hood at the
 empty-stem boundary](#item-hood-at-the-empty-stem-boundary))[^issue-100-evidence].
 
+**Running one.** #100's run surfaced five method points, each of which cost a
+round trip with the maintainer[^issue-100-evidence]:
+
+- Build the project copies outside AppData. The editor won't open a folder
+  there, and the session scratchpad sits under it.
+- Give the control copy space-free names. The editor silently renames
+  object-type and family names that contain spaces, and a save then loses their
+  files, so a control with spaced names fails in a way that looks like the
+  effect under test.
+- Agree the outcome words before the run. In #100, *crashed* meant a crash
+  dialog and a restart; *failed* meant an error dialog and a console error, with
+  the editor left as it was.
+- When the editor shows nothing to save, make a small change and revert it to
+  force a save.
+- Record the editor release beside each result.
+
 ## How to re-run
 
 ```sh

@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-10-29
+
+* **Update**: c3-domain-facts.md — added "Running one" under the live-editor channel (copies outside AppData, a space-free control, outcome words agreed up front, forced save, editor release per result); schema.md — added the rule to clean personal paths from a `raw/` capture before its first merge; driven by `raw/issue-100-empty-name-live-editor-2026-10-28.md` (issue #100, session retro).
+
 ## 2026-10-28
 
 * **Update**: c3-domain-facts.md (live-editor result per section for a declared empty item name, the `C3_SECTION_ITEM_EXTENSION` inventory row, the live-editor channel, and the page description naming that channel) and project-manifest.md (the "Manifest validation is unchanged" paragraph, still true, now pointing at the proposed rule in #106); driven by `raw/issue-100-empty-name-live-editor-2026-10-28.md` (issue #100).
