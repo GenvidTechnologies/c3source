@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-28T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-29T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -354,17 +354,23 @@ an item named `""`, the declared name finds nothing on disk and reads as
 `missing ""` drift: the section is not in sync (`inSync` is `false`), and the
 `.json` shows up in `strays` alongside. That `inSync` change comes from the
 `missing` entry, not from the stray, so "a stray is never drift" still holds.
-Manifest validation is unchanged: `validateProjectManifest` and
-`collectManifestIssues` add no rule against `""`, so strict `parseProjectManifest`
-still accepts such a manifest, and a declared `""` still reads as `missing ""`
-drift plus a stray `.json`. A live editor run (#100) has since found that the
-editor's open crashes (layouts, event sheets) or fails (timelines, families)
-on a declared `""`, loads it in flowcharts, and in objectTypes opens without it
-and saves `Text3` in its place without writing that item's
-file[^issue-100-evidence]. A rule rejecting it in every name section is
-proposed in #106, a breaking change intended for 3.0.0, and is not yet shipped.
-See [ADR
-0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain
+Drift is unchanged by validation: a declared `""` still reads as `missing ""`
+drift plus a stray `.json`. A live editor run (#100) found that the editor's
+open crashes (layouts, event sheets) or fails (timelines, families) on a
+declared `""`, loads it in flowcharts, and in objectTypes opens without it and
+saves `Text3` in its place without writing that item's
+file[^issue-100-evidence]. Manifest validation therefore rejects it:
+`validateProjectManifest` reports rule `name-folder-item-empty` (path
+`<where>.items[<j>]`) for an item named `""` in any of the seven name sections
+at any folder depth. Strict `parseProjectManifest` and `readProjectManifest`
+throw `invalid project.c3proj: <path> must not be an empty string`, the tolerant
+readers report it in `issues`, and `C3Project.manifest()` throws (`openProject`
+itself does not, as it reads the manifest lazily). The check is a trailing pass
+at the end of `collectManifestIssues`, so `issues[0]` is unchanged for any
+manifest that already had an issue. It is deliberately stricter than r506.3
+for flowcharts, which loads a nameless one. Breaking, shipping in 3.0.0. See
+[ADR 0034](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md),
+[ADR 0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain
 Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary)[^issue-95-evidence].
 
 ## Related
@@ -376,6 +382,7 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 - [ADR 0032 — The transitions container is never folder-missing](/decisions/0032-transitions-container-never-folder-missing.md) — why suppression is keyed on folder origin.
 - [ADR 0033 — Drift keys on name and path](/decisions/0033-drift-keys-on-name-and-path.md) — why `moved` needs a name unique on both sides, and why `duplicates` is advisory.
 - [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — why a `.json` file is a stray and a declared `""` reads as `missing`.
+- [ADR 0034 — A declared empty item name fails manifest validation](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md) — rule `name-folder-item-empty` and why it is a trailing pass.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide-manifest]: docs/api-guide-manifest.md (c3source API guide, 2026-08-20 capture)

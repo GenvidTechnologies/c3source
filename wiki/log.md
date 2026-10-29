@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-10-29
 
+* **Creation**: decisions/0034-declared-empty-item-name-fails-manifest-validation.md (and its entry in decisions/index.md); **Update**: decisions/0031-empty-stem-is-not-a-section-item.md (Status line and a Related bullet only, naming ADR 0034 as superseding its validation paragraph), project-manifest.md and c3-domain-facts.md (the declared-`""` rule is shipped as `name-folder-item-empty`, no longer proposed); driven by `raw/issue-100-empty-name-live-editor-2026-10-28.md` (issues #100, #106).
 * **Update**: c3-domain-facts.md — added "Running one" under the live-editor channel (copies outside AppData, a space-free control, outcome words agreed up front, forced save, editor release per result); schema.md — added the rule to clean personal paths from a `raw/` capture before its first merge; driven by `raw/issue-100-empty-name-live-editor-2026-10-28.md` (issue #100, session retro).
 
 ## 2026-10-28

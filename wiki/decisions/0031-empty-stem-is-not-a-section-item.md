@@ -1,7 +1,7 @@
 ---
 type: decision-context
 title: "ADR 0031 — An empty stem is not a section item: isSectionItemName rejects `.json`, so such a file is a stray"
-description: isSectionItemName(".json") and any path whose last segment is `.json` now return false (a breaking 3.0.0 change that refines ADR 0025's item-hood axis), so the file is reported by detectStrayFiles instead of find_all_section_items_path, walkDiskNameTree never yields an empty name, and a declared "" reads as missing drift; manifest validation is unchanged. C3's editor rejects an empty name at the setter at r379, r402 and r495 for the traced sections; the objectTypes and families setters are not traced.
+description: isSectionItemName(".json") and any path whose last segment is `.json` now return false (a breaking 3.0.0 change that refines ADR 0025's item-hood axis), so the file is reported by detectStrayFiles instead of find_all_section_items_path, walkDiskNameTree never yields an empty name, and a declared "" reads as missing drift; manifest validation was left unchanged (that paragraph is superseded by ADR 0034). C3's editor rejects an empty name at the setter at r379, r402 and r495 for the traced sections; the objectTypes and families setters are not traced.
 tags: [adr, traversal, manifest, breaking-change, domain-facts]
 status: stable
 generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }
@@ -17,7 +17,7 @@ sources:
 
 # ADR 0031 — An empty stem is not a section item: isSectionItemName rejects `.json`, so such a file is a stray
 
-**Status:** accepted
+**Status:** accepted; its "Manifest validation is unchanged" paragraph is superseded by [ADR 0034](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md)
 **Date:** 2026-10-27
 **Issue:** [#95](https://github.com/GenvidTechnologies/c3source/issues/95)
 
@@ -85,6 +85,7 @@ The alternatives, with the reason each was not chosen:
 
 ## Related
 
+- [ADR 0034 — A declared empty item name fails manifest validation](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md) — supersedes this record's "Manifest validation is unchanged" paragraph; the item-hood decision here is unchanged.
 - [ADR 0025 — Section item-hood as a named axis, and stray files as diagnostic, not drift](/decisions/0025-section-item-hood-and-stray-files.md) — the axis and the partition this record refines.
 - [ADR 0022 — Domain-fact audit convention](/decisions/0022-domain-fact-audit-convention.md) — the confidence label and blast-radius pairing used above.
 - [ADR 0008 — C3 domain facts are exported tables](/decisions/0008-c3-domain-fact-tables.md) — why the extension fact lives in the library.

@@ -74,6 +74,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   [ADR 0031](wiki/decisions/0031-empty-stem-is-not-a-section-item.md). The
   change is in behaviour only, with no type or signature change, and it also
   applies when the function is given a path whose last segment is `.json`.
+- **`validateProjectManifest` now reports rule `name-folder-item-empty` for an
+  item named `""` in any name section at any depth,** so strict
+  `parseProjectManifest`/`readProjectManifest` and `C3Project.manifest()` throw
+  `invalid project.c3proj: <path> must not be an empty string`, and the tolerant
+  readers report it in `issues`
+  ([#106](https://github.com/GenvidTechnologies/c3source/issues/106)) — see
+  [ADR 0034](wiki/decisions/0034-declared-empty-item-name-fails-manifest-validation.md).
+  The check runs last, so `issues[0]` is unchanged for a manifest that already
+  had an issue.
 
 ### Fixed
 

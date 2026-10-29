@@ -400,7 +400,7 @@ describe("an empty-stem .json is a stray, not an item (#95)", () => {
     expect(drift.strays!.map((s) => s.name), JSON.stringify(drift.strays)).to.include(".json");
   });
 
-  it('SF15 (R4): declared "" plus disk .json is missing "" and a stray, not in sync; validation unchanged', () => {
+  it('SF15 (R4): declared "" plus disk .json is missing "" and a stray, not in sync; validation rejects it (#106)', () => {
     root = mkdtempSync(path.join(tmpdir(), "c3source-strays-sf15-"));
     write(root, "layouts/.json", "{}");
     const manifest = minimalManifest({ layouts: { items: [""], subfolders: [] } });
@@ -410,7 +410,13 @@ describe("an empty-stem .json is a stray, not an item (#95)", () => {
     expect(missing.map((e) => e.name), JSON.stringify(drift)).to.include("");
     expect(drift.strays!.map((s) => s.name)).to.include(".json");
     expect(drift.inSync).to.equal(false);
-    expect(validateProjectManifest(manifest)).to.deep.equal([]);
+    expect(validateProjectManifest(manifest)).to.deep.equal([
+      {
+        path: "layouts.items[0]",
+        rule: "name-folder-item-empty",
+        message: "layouts.items[0] must not be an empty string",
+      },
+    ]);
   });
 });
 

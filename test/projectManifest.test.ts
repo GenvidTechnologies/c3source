@@ -1,9 +1,11 @@
 import { describe, it, before } from "mocha";
 import { expect } from "chai";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   parseProjectManifest,
+  parseProjectManifestTolerant,
   readProjectManifest,
   validateProjectManifest,
   collectManifestItemNames,
@@ -867,6 +869,7 @@ describe("validateProjectManifest — shape validation (#58)", () => {
     "name-folder-object",
     "name-folder-items",
     "name-folder-subfolders",
+    "name-folder-item-empty",
     "folder-name-string",
     "root-file-folders-object",
     "file-folder-object",
@@ -973,6 +976,137 @@ describe("validateProjectManifest — shape validation (#58)", () => {
       expect(issue.path === "" || issue.message.startsWith(issue.path), JSON.stringify(issue)).to.equal(true);
       expect(ALL_RULE_IDS.includes(issue.rule), JSON.stringify(issue)).to.equal(true);
     }
+  });
+});
+
+describe("validateProjectManifest — an item named empty string (#106)", () => {
+  const SECTIONS = [
+    "layouts",
+    "eventSheets",
+    "objectTypes",
+    "timelines",
+    "flowcharts",
+    "families",
+    "models3d",
+  ] as const;
+
+  it("covers every name section (parity with C3_SECTION_FOLDERS)", () => {
+    expect([...SECTIONS]).to.deep.equal(Object.keys(C3_SECTION_FOLDERS));
+  });
+
+  /** A minimal, otherwise-valid manifest; hand-written so these tests never depend on the gated fixture. */
+  function baseManifest(): Record<string, any> {
+    return { name: "p", runtime: "c3runtime", projectFormatVersion: 1, savedWithRelease: 1 };
+  }
+
+  const ONE = (path: string) => [
+    { path, rule: "name-folder-item-empty", message: `${path} must not be an empty string` },
+  ];
+
+  for (const sec of SECTIONS) {
+    it(`${sec}: reports exactly one issue for an empty item at the root`, () => {
+      const m = baseManifest();
+      m[sec] = { items: ["a", "", "b"], subfolders: [] };
+      expect(validateProjectManifest(m)).to.deep.equal(ONE(`${sec}.items[1]`));
+    });
+
+    it(`${sec}: reports exactly one issue for an empty item in a nested subfolder`, () => {
+      const m = baseManifest();
+      m[sec] = {
+        items: ["a"],
+        subfolders: [{ name: "x", items: [], subfolders: [{ items: ["", "b"], subfolders: [] }] }],
+      };
+      expect(validateProjectManifest(m)).to.deep.equal(ONE(`${sec}.subfolders[0].subfolders[0].items[0]`));
+    });
+  }
+
+  it("a valid manifest with no empty item reports nothing", () => {
+    const m = baseManifest();
+    m.layouts = { items: ["a"], subfolders: [{ items: ["b"], subfolders: [] }] };
+    expect(validateProjectManifest(m)).to.deep.equal([]);
+  });
+
+  it("walks pre-order: a node's own items before its subfolders", () => {
+    const m = baseManifest();
+    m.layouts = { items: ["", ""], subfolders: [{ items: [""], subfolders: [] }] };
+    expect(validateProjectManifest(m).map((i) => i.path)).to.deep.equal([
+      "layouts.items[0]",
+      "layouts.items[1]",
+      "layouts.subfolders[0].items[0]",
+    ]);
+  });
+
+  describe("strict and tolerant readers", () => {
+    const MESSAGE = "invalid project.c3proj: layouts.items[0] must not be an empty string";
+
+    function bad(): Record<string, any> {
+      const m = baseManifest();
+      m.layouts = { items: [""], subfolders: [] };
+      return m;
+    }
+
+    it("parseProjectManifest throws on issues[0]", () => {
+      expect(() => parseProjectManifest(bad())).to.throw(MESSAGE);
+    });
+
+    it("parseProjectManifestTolerant returns the same object plus the issue", () => {
+      const m = bad();
+      const result = parseProjectManifestTolerant(m);
+      expect(result.manifest).to.equal(m);
+      expect(result.issues).to.deep.equal(ONE("layouts.items[0]"));
+    });
+
+    it("readProjectManifest and openProject(root).manifest() throw on a real file; openProject itself does not", () => {
+      const root = mkdtempSync(path.join(tmpdir(), "c3source-manifest-106-"));
+      try {
+        writeFileSync(path.join(root, "project.c3proj"), JSON.stringify(bad()));
+        expect(() => readProjectManifest(path.join(root, "project.c3proj"))).to.throw(MESSAGE);
+        let project: ReturnType<typeof openProject> | undefined;
+        expect(() => (project = openProject(root))).not.to.throw();
+        expect(() => project!.manifest()).to.throw(MESSAGE);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("emission order and malformed nodes", () => {
+    it("an existing violation stays issues[0] and the empty-item issue is last", () => {
+      const m = baseManifest();
+      m.usedAddons = [{ type: "plugin", id: "i", name: "n", author: "a", bundled: "yes" }];
+      m.layouts = { items: [""], subfolders: [] };
+      const issues = validateProjectManifest(m);
+      expect(issues.map((i) => i.rule)).to.deep.equal(["used-addon-bundled", "name-folder-item-empty"]);
+      expect(() => parseProjectManifest(m)).to.throw("invalid project.c3proj: usedAddons[0].bundled must be a boolean");
+    });
+
+    it("a node with an empty item and non-array subfolders does not crash", () => {
+      const m = baseManifest();
+      m.layouts = { items: [""], subfolders: "oops" };
+      expect(validateProjectManifest(m).map((i) => i.rule)).to.deep.equal([
+        "name-folder-subfolders",
+        "name-folder-item-empty",
+      ]);
+    });
+
+    it("a malformed sibling subfolder does not stop the walk", () => {
+      const m = baseManifest();
+      m.layouts = { items: [], subfolders: [null, 5, { items: [""], subfolders: [] }] };
+      expect(validateProjectManifest(m).map((i) => i.path)).to.include("layouts.subfolders[2].items[0]");
+    });
+
+    it("an empty string inside items that is not string[] is not reported as an empty item", () => {
+      const m = baseManifest();
+      m.layouts = { items: ["", 7], subfolders: [] };
+      expect(validateProjectManifest(m).map((i) => i.rule)).to.deep.equal(["name-folder-items"]);
+    });
+
+    it("a non-object section or subfolder does not crash", () => {
+      const m = baseManifest();
+      m.layouts = "oops";
+      m.eventSheets = { items: [], subfolders: ["oops"] };
+      expect(() => validateProjectManifest(m)).not.to.throw();
+    });
   });
 });
 
