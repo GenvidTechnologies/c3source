@@ -17,7 +17,7 @@ sources:
 
 # ADR 0031 — An empty stem is not a section item: isSectionItemName rejects `.json`, so such a file is a stray
 
-**Status:** accepted
+**Status:** accepted; its "Manifest validation is unchanged" paragraph is superseded by [ADR 0034](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md)
 **Date:** 2026-10-27
 **Issue:** [#95](https://github.com/GenvidTechnologies/c3source/issues/95)
 
@@ -85,6 +85,7 @@ The alternatives, with the reason each was not chosen:
 
 ## Related
 
+- [ADR 0034 — A declared empty item name fails manifest validation](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md) — supersedes this record's "Manifest validation is unchanged" paragraph; the item-hood decision here is unchanged.
 - [ADR 0025 — Section item-hood as a named axis, and stray files as diagnostic, not drift](/decisions/0025-section-item-hood-and-stray-files.md) — the axis and the partition this record refines.
 - [ADR 0022 — Domain-fact audit convention](/decisions/0022-domain-fact-audit-convention.md) — the confidence label and blast-radius pairing used above.
 - [ADR 0008 — C3 domain facts are exported tables](/decisions/0008-c3-domain-fact-tables.md) — why the extension fact lives in the library.

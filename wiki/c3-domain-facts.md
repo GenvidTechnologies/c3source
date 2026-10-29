@@ -5,7 +5,7 @@ description: c3source owns exported tables naming undocumented C3 platform facts
 tags: [domain-facts, c3-domain-facts, corpus-scan, editor-bundle, audit]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-28T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-29T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -215,9 +215,12 @@ of a valid new name is untested[^issue-100-evidence].
 
 So the editor's open crashes or fails on a declared `""` in four sections, keeps
 it in flowcharts, and in objectTypes swaps it for another name, which a save
-then loses. A rule rejecting a declared `""` in every name section is proposed
-in #106, a breaking change intended for 3.0.0, and is not yet shipped; it would
-be deliberately stricter than the editor for flowcharts.
+then loses. Manifest validation therefore rejects a declared `""` in every name
+section with rule `name-folder-item-empty`, a breaking change shipping in 3.0.0
+([ADR 0034](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md)).
+c3source is deliberately stricter than r506.3 for flowcharts, which loads and
+saves a nameless flowchart: the maintainer considers one a bad idea, and the
+editor's name setter cannot produce it.
 
 **Corpus evidence.** Re-run 2026-10-27 on the 14 projects of the inventoried
 corpus (deduplicated by hand, see below): 2,282 declared items across the
