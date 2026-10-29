@@ -220,7 +220,8 @@ section with rule `name-folder-item-empty`, a breaking change shipping in 3.0.0
 ([ADR 0034](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md)).
 c3source is deliberately stricter than r506.3 for flowcharts, which loads and
 saves a nameless flowchart: the maintainer considers one a bad idea, and the
-editor's name setter cannot produce it.
+bundle's flowchart name setter rejects `""` at the releases traced above
+(r379, r402, r495; r506.3's setter was not traced).
 
 **Corpus evidence.** Re-run 2026-10-27 on the 14 projects of the inventoried
 corpus (deduplicated by hand, see below): 2,282 declared items across the

@@ -980,7 +980,19 @@ describe("validateProjectManifest — shape validation (#58)", () => {
 });
 
 describe("validateProjectManifest — an item named empty string (#106)", () => {
-  const SECTIONS = ["layouts", "eventSheets", "objectTypes", "timelines", "flowcharts", "families", "models3d"] as const;
+  const SECTIONS = [
+    "layouts",
+    "eventSheets",
+    "objectTypes",
+    "timelines",
+    "flowcharts",
+    "families",
+    "models3d",
+  ] as const;
+
+  it("covers every name section (parity with C3_SECTION_FOLDERS)", () => {
+    expect([...SECTIONS]).to.deep.equal(Object.keys(C3_SECTION_FOLDERS));
+  });
 
   /** A minimal, otherwise-valid manifest; hand-written so these tests never depend on the gated fixture. */
   function baseManifest(): Record<string, any> {

@@ -1,7 +1,7 @@
 ---
 type: decision-context
 title: "ADR 0031 — An empty stem is not a section item: isSectionItemName rejects `.json`, so such a file is a stray"
-description: isSectionItemName(".json") and any path whose last segment is `.json` now return false (a breaking 3.0.0 change that refines ADR 0025's item-hood axis), so the file is reported by detectStrayFiles instead of find_all_section_items_path, walkDiskNameTree never yields an empty name, and a declared "" reads as missing drift; manifest validation is unchanged. C3's editor rejects an empty name at the setter at r379, r402 and r495 for the traced sections; the objectTypes and families setters are not traced.
+description: isSectionItemName(".json") and any path whose last segment is `.json` now return false (a breaking 3.0.0 change that refines ADR 0025's item-hood axis), so the file is reported by detectStrayFiles instead of find_all_section_items_path, walkDiskNameTree never yields an empty name, and a declared "" reads as missing drift; manifest validation was left unchanged (that paragraph is superseded by ADR 0034). C3's editor rejects an empty name at the setter at r379, r402 and r495 for the traced sections; the objectTypes and families setters are not traced.
 tags: [adr, traversal, manifest, breaking-change, domain-facts]
 status: stable
 generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }

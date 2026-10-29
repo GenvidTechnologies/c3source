@@ -346,11 +346,12 @@ function collectUsedAddonIssues(v: unknown, where: string, issues: ManifestValid
  * pinned test cases. Concretely: top-level `isRecord` → `name` → `runtime` →
  * `projectFormatVersion` → `savedWithRelease`, then `NAME_SECTIONS` in array order, then
  * `rootFileFolders` in `Object.keys(C3_ROOT_FILE_FOLDERS)` order, then `containers`, then
- * `usedAddons`, and LAST of all the empty-item-name pass over `NAME_SECTIONS` (it is last so
- * `issues[0]` stays unchanged for any input that already had an issue). Within a name/file-folder
- * node: `isRecord` → `items` → `subfolders` → `name` LAST → recurse subfolders by index — the old `assertNameFolder`/`assertFileFolder`
- * checked `name` AFTER items/subfolders; do not "tidy" that into checking `name` first, or
- * a doubly-malformed input silently throws a different message than before.
+ * `usedAddons`, then, after everything else, the empty-item-name pass over `NAME_SECTIONS`
+ * (last so that `issues[0]` stays unchanged for any input that already had an issue). Within
+ * a name/file-folder node: `isRecord` → `items` → `subfolders` → `name` LAST → recurse
+ * subfolders by index — the old `assertNameFolder`/`assertFileFolder` checked `name` AFTER
+ * items/subfolders; do not "tidy" that into checking `name` first, or a doubly-malformed
+ * input silently throws a different message than before.
  *
  * `parseProjectManifest` is the strict caller that depends on this: it throws using only
  * `issues[0]`, so a reordering here changes which message a malformed manifest reports.

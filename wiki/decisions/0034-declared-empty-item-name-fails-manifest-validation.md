@@ -29,7 +29,7 @@ ADR 0031 left validation alone because nobody had observed the editor on a manif
 
 - layouts and event sheets: the open **crashes**.
 - timelines and families: the open **fails**.
-- objectTypes: the project opens without the item, the editor renames it (to `Text3` in the run), and a save deletes the item's file and corrupts the project.
+- objectTypes: the project opens with no visible new item. After a save the manifest read `Text3` where `""` had been, the item's file was deleted, no `Text3.json` was written, and the project no longer opened. That the editor renamed the item on load is an inference from that disk state, and the save loss is not specific to `""`: a control copy with space-containing names (r495.2) lost its items the same way.
 - flowcharts: r506.3 **loads and saves** a nameless flowchart.
 - models3d: untested, because the sample has none.
 
@@ -51,13 +51,13 @@ The reason for the placement is the emission-order invariant. Strict parsing thr
 
 **Drift and item-hood are untouched.** `isSectionItemName` and `detectManifestDrift` behave as ADR 0031 decided: given such a manifest, drift still reports `missing ""` plus a stray `.json`. Test SF15 now asserts the validation issue where it used to assert none.
 
-**Flowcharts are included on purpose.** c3source is deliberately stricter than r506.3 there. The maintainer considers a nameless flowchart a bad idea, and the editor's own name setter rejects it, so a nameless flowchart cannot be produced through the editor; it only survives on load of a hand-written manifest. models3d is included without a live result, for uniformity across the seven sections.
+**Flowcharts are included on purpose.** c3source is deliberately stricter than r506.3 there. The maintainer considers a nameless flowchart a bad idea, and the bundle's flowchart name setter rejects `""` at the releases traced for ADR 0031 (r379, r402, r495; r506.3's setter was not traced), so the name setter is not a route to one there; at r506.3 one survives the load and save of a hand-written manifest. models3d is included without a live result, for uniformity across the seven sections.
 
 ## Compromise
 
 - **Inline per-node check, rejected.** Putting the empty-string test inside the per-node shape check would be simpler, but it emits the new issue in the middle of the existing order and so can change `issues[0]` for an input that already had a different issue. That changes which error a strict caller sees. The trailing pass costs a second walk of the trees and buys an unchanged first issue.
-- **Exclude flowcharts to match r506.3, rejected.** The maintainer's position is that a nameless flowchart is a bad idea and cannot be created via the setter, so mirroring the one section where the editor tolerates it would encode an editor accident as a rule. The cost is a manifest the editor opens being refused here.
-- **Leave validation unchanged (ADR 0031's position), rejected.** It was defensible while the editor result was unknown. With #100 in hand the editor crashes or fails on four sections and corrupts an objectTypes save, so accepting the manifest would let a tool pass a project that cannot be opened.
+- **Exclude flowcharts to match r506.3, rejected.** The maintainer's position is that a nameless flowchart is a bad idea, and the traced setters reject one, so mirroring the one section where the editor tolerates it would encode an editor accident as a rule. The cost is a manifest the editor opens being refused here.
+- **Leave validation unchanged (ADR 0031's position), rejected.** It was defensible while the editor result was unknown. With #100 in hand the editor crashes or fails on four sections and an objectTypes save loses the item, so accepting the manifest would let a tool pass a project that cannot be opened.
 - **Accepted cost.** models3d is covered without editor evidence. If the editor is later shown to accept `""` there, the rule would need narrowing in a further record.
 
 ## Consequences
