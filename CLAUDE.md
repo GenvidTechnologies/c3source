@@ -251,6 +251,19 @@ would conflict with Prettier — there is no `prettier` dependency and no
 to one line) passes lint/typecheck/test/build untouched; **review is the only
 formatting gate** — match the surrounding style by hand rather than relying on CI.
 
+Before committing, check width on the lines the branch **adds**, not whole files.
+`src/` and `test/` already hold lines over 120, so a whole-file check is noise:
+
+```sh
+git diff origin/main...HEAD -U0 -- src test | grep '^+' | awk 'length>121'
+```
+
+(`121` allows for the diff's leading `+`.) A long string literal, such as a test
+title, may legitimately stay over the limit, since Prettier doesn't break strings.
+A hand re-wrap of a comment block is what overflows most often. It moves the
+overflow onto the next line rather than removing it, so re-run the check after
+every re-wrap (#106).
+
 **Never run `prettier` / `prettier --write` (or `npx prettier`) here.** Because
 no local prettier config is wired to the checks, it falls back to Prettier's
 defaults (printWidth 80, bracket spacing) — *not* this repo's `printWidth` 120 /
