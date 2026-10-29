@@ -1,7 +1,7 @@
 ---
 type: reference
 title: C3 Domain Facts
-description: c3source owns exported tables naming undocumented C3 platform facts, each carrying a confidence label paired with its blast radius, validated via two evidence channels — a corpus scan of real projects and C3's own editor bundle — that answer different questions and must never be conflated when a table's findings mix both provenances.
+description: c3source owns exported tables naming undocumented C3 platform facts, each carrying a confidence label paired with its blast radius, validated via two evidence channels — a corpus scan of real projects and C3's own editor bundle — that answer different questions and must never be conflated when a table's findings mix both provenances, plus live editor runs for the questions neither channel can settle.
 tags: [domain-facts, c3-domain-facts, corpus-scan, editor-bundle, audit]
 status: stable
 stale_after: 2027-02-20
@@ -26,6 +26,10 @@ sources:
   - id: issue-97-101-evidence
     resource: ../raw/issue-97-101-drift-evidence-2026-10-28.md
     title: "Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)"
+    last_modified: 2026-10-28
+  - id: issue-100-evidence
+    resource: ../raw/issue-100-empty-name-live-editor-2026-10-28.md
+    title: "Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)"
     last_modified: 2026-10-28
 ---
 
@@ -143,7 +147,7 @@ fresh[^domain-fact-audit][^issue-86-evidence].
 | `C3_MINIFIED_SOURCE_SUFFIXES` | `isMinifiedSourcePath` | NO CONTRADICTIONS across 2,605 `.json` files | Cosmetic — write-form only |
 | `SCRIPT_SOURCE_EXTENSIONS` | `isScriptSourceName` | NO GAPS at value level; `.ts`→r433 bundle-pinned | Silent over/under-collection in script discovery, never a throw |
 | `SCRIPT_FILE_TYPE_EXTENSIONS` | — | NO GAPS; same corpus as above | Silent miss in manifest interpretation, never a throw — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS` |
-| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below) | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
+| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED in the bundle; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below). Declared `""`: LIVE-EDITOR r506.3, a separate channel from the bundle — open crashed for layouts/eventSheets and failed for timelines/families; objectTypes opened and a save wrote `Text3` in its place; flowcharts loaded the nameless item; models3d not tested[^issue-100-evidence] | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
 | `TIMELINE_TRANSITIONS_FOLDER` | — | CORPUS-VALIDATED by the 2026-10-28 raw capture: out of 24 unique manifests, 14 have an empty transitions container and no `timelines/transitions/` dir, 8 have a non-empty container with the dir (below) | A false `folder-missing` on every healthy timeline project, or a sync tool that deletes the container |
 | `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, two tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
 
@@ -172,10 +176,48 @@ exist in the r379 and r402 bundles). The section loaders open
 `folder + <manifest item name> + ".json"` and never list the folder, so a
 `.json` no manifest item names is never opened. **Not traced:** the objectTypes
 and families name setters (their loaders were read, their setters were not
-found), and what the editor does with a manifest that declares `""`, which no
-one has run. The matched snippets are verbatim in the raw
-capture[^issue-95-evidence]. This evidence is not scanner-refreshable;
+found), and what the editor does with a manifest that declares `""`, which the
+bundle capture left as a live-editor question. The matched snippets are verbatim
+in the raw capture[^issue-95-evidence]. This evidence is not scanner-refreshable;
 re-verify it against `editor.construct.net/r{NNN}/`.
+
+**Live-editor evidence.** Issue #100 answers that last gap by running the
+editor, a different channel from the bundle, so the two are not merged. Copies
+of the `construct3-sample` project, each declaring one root-level item named
+`""` in one section, were opened in Construct 3 r506.3 (eventSheets also at
+r495.2). "Crashed" means a crash dialog and an editor restart; "failed" means an
+error dialog and a console error, with the editor left as it was
+before[^issue-100-evidence]:
+
+- layouts and eventSheets **crashed** (`invalid layout name ''`, `invalid event
+  sheet name ''`; eventSheets at both releases).
+- timelines and families **failed** to open (`invalid timeline name ''`,
+  `invalid name`).
+- objectTypes **opened** with no visible new object type. After a save (forced
+  by a change and its revert, since nothing was dirty) the manifest read
+  `Text3` where `""` had been, `objectTypes/.json` was deleted and no
+  `Text3.json` was written, and re-opening failed with an error about `Text3`.
+  That the editor renamed the item to `Text3` on load is an inference from that
+  disk state, as no editor code was read.
+- flowcharts **opened** with a nameless flowchart. After a save forced the same
+  way, which rewrote the whole project at r506.3, the manifest still declared
+  `""` and `flowcharts/.json` was unchanged, and it re-opened with the nameless
+  flowchart. So at r506.3 `""` is loadable there, although the bundle's
+  flowchart name setter rejects it at the releases traced above.
+- models3d was not tested (empty in the sample).
+
+The save failure is not specific to `""`. A control copy whose new object type
+and family had names containing spaces (r495.2) opened with those names
+silently stripped of their spaces. Its save deleted both items' files and wrote
+none under the new names, and the project no longer opened. A second control
+with space-free names opened with all six items but was not saved, so a save
+of a valid new name is untested[^issue-100-evidence].
+
+So the editor's open crashes or fails on a declared `""` in four sections, keeps
+it in flowcharts, and in objectTypes swaps it for another name, which a save
+then loses. A rule rejecting a declared `""` in every name section is proposed
+in #106, a breaking change intended for 3.0.0, and is not yet shipped; it would
+be deliberately stricter than the editor for flowcharts.
 
 **Corpus evidence.** Re-run 2026-10-27 on the 14 projects of the inventoried
 corpus (deduplicated by hand, see below): 2,282 declared items across the
@@ -352,7 +394,25 @@ used to confirm `extractScriptsFromSheet`'s `scopeVars` claim; see [C3
 local-variable scoping](/event-sheet-extraction.md) for the traced result.
 Unlike the corpus/bundle-derived tables, this evidence is **not
 scanner-refreshable at all** — re-verifying it means repeating the manual
-experiment[^domain-fact-audit].
+experiment[^domain-fact-audit]. Issue #100's run of a declared empty item
+name in each section is the second use of the channel (see [Item-hood at the
+empty-stem boundary](#item-hood-at-the-empty-stem-boundary))[^issue-100-evidence].
+
+**Running one.** #100's run surfaced five method points, each of which cost a
+round trip with the maintainer[^issue-100-evidence]:
+
+- Build the project copies outside AppData. The editor won't open a folder
+  there, and the session scratchpad sits under it.
+- Give the control copy space-free names. The editor silently renames
+  object-type and family names that contain spaces, and a save then loses their
+  files, so a control with spaced names fails in a way that looks like the
+  effect under test.
+- Agree the outcome words before the run. In #100, *crashed* meant a crash
+  dialog and a restart; *failed* meant an error dialog and a console error, with
+  the editor left as it was.
+- When the editor shows nothing to save, make a small change and revert it to
+  force a save.
+- Record the editor release beside each result.
 
 ## How to re-run
 
@@ -397,3 +457,4 @@ update this doc's **numbers** — never the JSDoc labels.
 [^issue-86-evidence]: Issue #86 file-entry type evidence (capture, 2026-10-01)
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 [^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
+[^issue-100-evidence]: Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)

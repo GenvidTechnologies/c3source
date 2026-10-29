@@ -150,6 +150,10 @@ was when captured.
 
 - **Never edit a file under `raw/`.** A `raw/` file is a historical capture,
   not a living document.
+- **Clean a capture before its first merge.** The repo is public, so remove
+  personal paths and usernames (a Windows profile path, a home directory) while
+  the capture is still on its branch. Once it is on `main`, the rule above
+  means it can't be edited.
 - **If a source changes, re-capture it as a new file** (e.g. suffix with a
   date or revision), leaving the prior capture in place. The wiki page that
   cites it gets updated (see above); the old capture stays as the record of

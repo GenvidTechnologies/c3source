@@ -23,6 +23,10 @@ sources:
     resource: ../raw/issue-97-101-drift-evidence-2026-10-28.md
     title: "Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)"
     last_modified: 2026-10-28
+  - id: issue-100-evidence
+    resource: ../raw/issue-100-empty-name-live-editor-2026-10-28.md
+    title: "Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)"
+    last_modified: 2026-10-28
 ---
 
 # Project Manifest
@@ -352,8 +356,14 @@ an item named `""`, the declared name finds nothing on disk and reads as
 `missing` entry, not from the stray, so "a stray is never drift" still holds.
 Manifest validation is unchanged: `validateProjectManifest` and
 `collectManifestIssues` add no rule against `""`, so strict `parseProjectManifest`
-still accepts such a manifest, because what the editor does with a declared
-`""` has not been observed. See [ADR
+still accepts such a manifest, and a declared `""` still reads as `missing ""`
+drift plus a stray `.json`. A live editor run (#100) has since found that the
+editor's open crashes (layouts, event sheets) or fails (timelines, families)
+on a declared `""`, loads it in flowcharts, and in objectTypes opens without it
+and saves `Text3` in its place without writing that item's
+file[^issue-100-evidence]. A rule rejecting it in every name section is
+proposed in #106, a breaking change intended for 3.0.0, and is not yet shipped.
+See [ADR
 0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain
 Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary)[^issue-95-evidence].
 
@@ -371,4 +381,5 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 [^api-guide-manifest]: docs/api-guide-manifest.md (c3source API guide, 2026-08-20 capture)
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 [^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
+[^issue-100-evidence]: Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)
 </content>
