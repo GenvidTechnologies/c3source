@@ -215,6 +215,7 @@ export type ManifestShapeRuleId =
   | "name-folder-object"
   | "name-folder-items"
   | "name-folder-subfolders"
+  | "name-folder-item-empty"
   | "folder-name-string"
   | "root-file-folders-object"
   | "file-folder-object"
@@ -345,8 +346,9 @@ function collectUsedAddonIssues(v: unknown, where: string, issues: ManifestValid
  * pinned test cases. Concretely: top-level `isRecord` → `name` → `runtime` →
  * `projectFormatVersion` → `savedWithRelease`, then `NAME_SECTIONS` in array order, then
  * `rootFileFolders` in `Object.keys(C3_ROOT_FILE_FOLDERS)` order, then `containers`, then
- * `usedAddons`. Within a name/file-folder node: `isRecord` → `items` → `subfolders` →
- * `name` LAST → recurse subfolders by index — the old `assertNameFolder`/`assertFileFolder`
+ * `usedAddons`, and LAST of all the empty-item-name pass over `NAME_SECTIONS` (it is last so
+ * `issues[0]` stays unchanged for any input that already had an issue). Within a name/file-folder
+ * node: `isRecord` → `items` → `subfolders` → `name` LAST → recurse subfolders by index — the old `assertNameFolder`/`assertFileFolder`
  * checked `name` AFTER items/subfolders; do not "tidy" that into checking `name` first, or
  * a doubly-malformed input silently throws a different message than before.
  *
@@ -414,7 +416,29 @@ function collectManifestIssues(json: unknown): ManifestValidationIssue[] {
     }
   }
 
+  for (const sec of NAME_SECTIONS) if (sec in json) collectEmptyItemNameIssues(json[sec], sec, issues);
+
   return issues;
+}
+
+/**
+ * Report every item named `""` in a name-section tree, pre-order (a node's own items, then its
+ * subfolders by index). Descends only into well-shaped nodes: a record whose `items` is a
+ * string[] is checked, and `subfolders` is walked only when it is an array. Never throws.
+ */
+function collectEmptyItemNameIssues(v: unknown, where: string, issues: ManifestValidationIssue[]): void {
+  if (!isRecord(v)) return;
+  if (Array.isArray(v.items) && v.items.every((i) => typeof i === "string"))
+    v.items.forEach((it, j) => {
+      if (it === "")
+        issues.push({
+          path: `${where}.items[${j}]`,
+          rule: "name-folder-item-empty",
+          message: `${where}.items[${j}] must not be an empty string`,
+        });
+    });
+  if (Array.isArray(v.subfolders))
+    v.subfolders.forEach((sf, i) => collectEmptyItemNameIssues(sf, `${where}.subfolders[${i}]`, issues));
 }
 
 /**
