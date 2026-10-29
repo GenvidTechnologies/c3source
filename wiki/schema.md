@@ -194,6 +194,18 @@ Construct 3 release can invalidate.
   date* and are never retro-edited, so they **omit `stale_after` entirely**.
   An ADR does not go stale; it gets **superseded**, which is recorded by
   flipping `status` to `deprecated` and naming the superseding page.
+  **Partial supersession** (a later record replaces one paragraph or one half
+  of an ADR, and the rest stays in effect) keeps `status` as is and touches
+  three places together: the body's `**Status:**` line names the superseding
+  record and the part it replaces, the frontmatter `description`, and the
+  record's entry in `decisions/index.md`. The body below the Status line stays
+  unedited. A reader meets the description and the index entry before the
+  Status line, so updating only the Status line leaves the record looking
+  current. ADR 0001's Status line is the precedent for the wording: it names
+  ADR 0012 as superseding its module-layout half. Its description and index
+  entry were never updated, though, and still describe the single module as
+  current, which is exactly the gap this rule closes. #106 applies all three
+  places to ADR 0031.
 - **Library API surface and architecture** — module DAG, exported functions,
   the `C3Project` handle. Changes on this repo's own release cadence, which is
   observable from `CHANGELOG.md`, so a stale date adds little: `stale_after`
