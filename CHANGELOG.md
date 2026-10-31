@@ -47,6 +47,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **File-section drift now sees files in undeclared subdirectories.**
+  `detectManifestDrift` walks each `rootFileFolders.<category>` directory into
+  every non-editor-local subdirectory, so a file moved into a new folder reads as
+  `moved` instead of `missing`. File sections also report `folder-missing` and
+  `folder-untracked` entries, as the name sections already did. `walkDiskFileTree`
+  gains an opt-in `options.walkUndeclared` argument for this; its default
+  behaviour is unchanged
+  ([#110](https://github.com/GenvidTechnologies/c3source/issues/110)).
+
 ## [3.0.0] - 2026-10-29
 
 ### Added

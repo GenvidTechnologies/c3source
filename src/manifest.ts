@@ -867,8 +867,12 @@ export function walkDiskNameTree(
 /**
  * Yield every source file found on disk under a file-section root directory,
  * with its section-root-relative subfolder path.
- * Recurses ONLY into subdirectories whose name matches a declared subfolder's `name`
- * (D3/R5: undeclared subdirs like `ts-defs/` are never walked).
+ * By default (D3/R5) recurses ONLY into subdirectories whose name matches a declared subfolder's
+ * `name`; undeclared subdirs are never walked.
+ * With `options.walkUndeclared` it recurses into every directory that is not editor-local, so files
+ * under undeclared subfolders are yielded too (an undeclared directory recurses with no declared
+ * subfolders). `isEditorLocalPath` (which covers `ts-defs/`, `uistate/` and `tsconfig.json`) is the
+ * only exclusion under that option.
  * Emits full filenames WITH extension (file-folder matching is extension-agnostic, R11).
  * Returns [] if `diskFolder` absent.
  */
@@ -876,6 +880,7 @@ export function walkDiskFileTree(
   diskFolder: string,
   declaredSubfolders: C3FileFolder[],
   basePath: ManifestPathSegment[] = [],
+  options?: { walkUndeclared?: boolean },
 ): Array<{ name: string; path: ManifestPathSegment[] }> {
   if (!existsSync(diskFolder)) return [];
   const out: Array<{ name: string; path: ManifestPathSegment[] }> = [];
@@ -883,9 +888,11 @@ export function walkDiskFileTree(
     if (isEditorLocalPath(entry)) continue;
     const full = path.join(diskFolder, entry);
     if (statSync(full).isDirectory()) {
-      // Only recurse into declared subfolders; skip undeclared dirs (e.g. ts-defs/).
+      // Default: only recurse into declared subfolders. Editor-local dirs (e.g. ts-defs/) were
+      // already skipped above, so they stay out under walkUndeclared too.
       const matched = declaredSubfolders.find((sf) => sf.name === entry);
-      if (matched) out.push(...walkDiskFileTree(full, matched.subfolders, [...basePath, entry]));
+      if (matched) out.push(...walkDiskFileTree(full, matched.subfolders, [...basePath, entry], options));
+      else if (options?.walkUndeclared) out.push(...walkDiskFileTree(full, [], [...basePath, entry], options));
     } else if (statSync(full).isFile()) {
       out.push({ name: entry, path: basePath });
     }
@@ -1007,7 +1014,7 @@ function collectDuplicateNames(
  * and the transitions container (origin `"named"` or `"transitions-container"`).
  */
 function collectManifestFolderPaths(
-  folder: C3NameFolder,
+  folder: C3NameFolder | C3FileFolder,
   base: ManifestPathSegment[] = [],
   unnamedSubfolderName?: string,
 ): Array<{ path: ManifestPathSegment[]; origin: ManifestFolderOrigin }> {
@@ -1102,10 +1109,13 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
       const folder = rff[cat as keyof C3RootFileFolders];
       const declared = isRecord(folder) ? walkManifestFileTree(folder) : [];
-      const onDisk = isRecord(folder)
-        ? walkDiskFileTree(path.join(projectDir, folderName), folder.subfolders)
-        : walkDiskFileTree(path.join(projectDir, folderName), []);
-      const entries = diffNameMaps(declared, onDisk);
+      const diskDir = path.join(projectDir, folderName);
+      const onDisk = walkDiskFileTree(diskDir, isRecord(folder) ? folder.subfolders : [], [], { walkUndeclared: true });
+      const folderEntries = diffFolderPaths(
+        isRecord(folder) ? collectManifestFolderPaths(folder) : [],
+        collectDiskFolderPaths(diskDir),
+      );
+      const entries = sortDriftEntries([...diffNameMaps(declared, onDisk), ...folderEntries]);
       if (entries.length) sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, entries });
       duplicates.push(...collectDuplicateNames(`rootFileFolders.${cat}`, folderName, "folder", declared, onDisk));
     }
