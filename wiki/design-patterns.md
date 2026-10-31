@@ -5,7 +5,7 @@ description: Reusable engineering patterns c3source has settled on — single-so
 tags: [design-patterns, traversal, validation, testing, drift]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-10-28T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-31T12:00:00Z }
 sources:
   - id: docs-design-patterns
     resource: ../raw/docs-design-patterns-2026-08-20.md
@@ -234,6 +234,14 @@ no longer means "nothing to report".
 
 ## Declared-subfolder recursion for file-folder walks
 
+> **Status:** no longer used by drift. `detectManifestDrift` passes
+> `walkUndeclared: true` and walks every non-editor-local subdirectory, because
+> declared-only descent turned a move into an undeclared subfolder into a false
+> `missing` ([ADR 0035](/decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md)).
+> The pattern survives as `walkDiskFileTree`'s default for a direct caller. The
+> text below describes that default and the reasoning that originally chose it
+> for drift.
+
 **Problem.** C3 writes generated subtrees under file-folder sections (e.g.
 `scripts/ts-defs/`) that the manifest never declares. A naive recursive
 disk walk would see them and report them as drift; excluding them one at a
@@ -248,7 +256,7 @@ File-folder sections recurse **only into subdirectories whose name matches
 a declared subfolder** in the manifest (`walkDiskFileTree(dir,
 folder.subfolders)`) — undeclared subdirectories are never entered.
 
-**Trade-off.** The practical effect is that adding a new C3-generated
+**Trade-off (original rationale).** The practical effect is that adding a new C3-generated
 subtree under `scripts/` (or `icons/`, etc.) never breaks drift detection —
 the walk simply does not descend there, with no exclusion entry needed per
 subtree. The cost is symmetry discipline: `walkManifestFileTree` and

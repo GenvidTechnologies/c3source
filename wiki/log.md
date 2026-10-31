@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-10-31
+
+* **Creation**: decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md (and its entry in decisions/index.md); **Update**: decisions/0020-caller-controlled-walk-descent.md (Status line and description only, naming ADR 0035 as superseding its "second, independent mechanism" remark; the index entry likewise), project-manifest.md (drift walks every non-editor-local subdirectory of file folders and file sections emit folder entries) and design-patterns.md (declared-subfolder recursion is now only `walkDiskFileTree`'s default); driven by issue #110.
+
 ## 2026-10-29
 
 * **Creation**: decisions/0034-declared-empty-item-name-fails-manifest-validation.md (and its entry in decisions/index.md); **Update**: decisions/0031-empty-stem-is-not-a-section-item.md (Status line and a Related bullet only, naming ADR 0034 as superseding its validation paragraph), project-manifest.md and c3-domain-facts.md (the declared-`""` rule is shipped as `name-folder-item-empty`, no longer proposed); driven by `raw/issue-100-empty-name-live-editor-2026-10-28.md` (issues #100, #106).
