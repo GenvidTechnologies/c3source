@@ -926,6 +926,31 @@ describe("detectManifestDrift: file sections see undeclared subdirectories (#110
       expect(shape(detectManifestDrift(root, m))).to.deep.equal([["folder-missing", "gone", ["gone"], undefined]]);
     });
   });
+
+  it("walkUndeclared (#110): the option descends into an undeclared subfolder; the default does not", () => {
+    withProject({ items: [], subfolders: [] }, ["sub/a.txt"], (root) => {
+      const dir = path.join(root, "files");
+      expect(walkDiskFileTree(dir, [])).to.deep.equal([]);
+      expect(walkDiskFileTree(dir, [], [], { walkUndeclared: true })).to.deep.equal([{ name: "a.txt", path: ["sub"] }]);
+    });
+  });
+
+  it("walkUndeclared (#110): an editor-local directory nested under an undeclared one stays excluded", () => {
+    withProject({ items: [], subfolders: [] }, ["sub/keep.txt", "sub/ts-defs/b.d.ts", "sub/uistate/c.json"], (root) => {
+      const items = walkDiskFileTree(path.join(root, "files"), [], [], { walkUndeclared: true });
+      expect(items).to.deep.equal([{ name: "keep.txt", path: ["sub"] }]);
+    });
+  });
+
+  it("#110 nested: undeclared x/y reports folder-untracked for both levels and the file as untracked", () => {
+    withProject({ items: [], subfolders: [] }, ["x/y/z.txt"], (root, m) => {
+      expect(shape(detectManifestDrift(root, m))).to.deep.equal([
+        ["untracked", "z.txt", undefined, ["x", "y"]],
+        ["folder-untracked", "x", undefined, ["x"]],
+        ["folder-untracked", "y", undefined, ["x", "y"]],
+      ]);
+    });
+  });
 });
 
 describe("validateProjectManifest — shape validation (#58)", () => {

@@ -39,13 +39,13 @@ The undeclared-subfolder blind spot traces to one rule. File-folder disk walks (
 
 ## Compromise
 
-- **Opt-in option, chosen.** Add an options argument defaulting to the declared-only behaviour; `detectManifestDrift` passes the opt-in. It does not break existing callers, so it ships as a minor feat (3.1.0). It is implemented as the boolean `walkUndeclared` rather than a string enum, since there are only two modes.
+- **Opt-in option, chosen.** Add an options argument defaulting to the declared-only behaviour; `detectManifestDrift` passes the opt-in. It does not break existing callers of `walkDiskFileTree`, so it ships as a minor feat (3.1.0). The drift output does change: a project can go from `inSync: true` to `false` on upgrade, which is the fix itself when the cause is an undeclared subfolder, and a new report when the cause is a declared empty subfolder a git checkout does not hold. That was judged a corrected report, not a broken API. It is implemented as the boolean `walkUndeclared` rather than a string enum, since there are only two modes.
 - **Change the default, rejected.** `walkDiskFileTree` always walks every non-editor-local subdirectory. Simpler API, but a breaking change: `feat!` and 4.0.0, days after 3.0.0.
 - **Keep declared-only for drift, rejected.** It is the rule that produced the wrong `missing` in P1 and the unseen `c/x.txt` in P3.
 
 ## Evidence
 
-Corpus measurement, 2026-10-31: a scan of the 38 local `project.c3proj` copies under `C:\repos` (about 14 distinct projects, since most are duplicates) found **0** undeclared non-editor-local subdirectories and **0** declared-but-absent subdirectories under any file-folder root. Positive control: burbank declares 22 `scripts/` and 2 `files/` subfolders, and all are present on disk. So the corpus holds no case where the new walk would add noise.
+Corpus measurement, 2026-10-31: a scan of the working trees of the 38 local `project.c3proj` copies under `C:\repos` (about 14 distinct projects, since most are duplicates) found **0** undeclared non-editor-local subdirectories and **0** declared-but-absent subdirectories under any file-folder root. Positive control: burbank declares 22 `scripts/` and 2 `files/` subfolders, and all are present on disk. So the corpus holds no case where the new walk would add noise. The scan read working trees, which can keep an empty directory that a fresh git checkout would drop, so it does not measure the empty-declared-subfolder case named under Consequences.
 
 Blast radius: no known consumer (burbank, construct3-chef, c3-domain-manager) calls `walkDiskFileTree` directly, and construct3-chef's sync skips `rootFileFolders.*` drift sections.
 
@@ -53,7 +53,8 @@ Blast radius: no known consumer (burbank, construct3-chef, c3-domain-manager) ca
 
 - A future C3-generated subtree under a file folder now surfaces as drift until its name is added to `EDITOR_LOCAL_EXCLUSIONS`. That table becomes the single place to fix it.
 - A declared but empty file subfolder in a git checkout (git cannot hold empty directories) reads `folder-missing`, as the name sections already do.
-- Semver: non-breaking, minor.
+- A symbolic link or junction under a file folder that loops back on an ancestor now makes `detectManifestDrift` throw (`ELOOP` from `statSync`), since undeclared directories are entered. The name-section walks already recurse this way. Observed on a hand-made junction in review; not guarded, since no known trigger exists in a C3 project.
+- Semver: non-breaking for the API, minor; the drift output change is stated under Compromise.
 - The wiki states the shipped behaviour in [Project Manifest](/project-manifest.md#drift-detection).
 
 ## Related

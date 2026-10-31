@@ -247,25 +247,24 @@ no longer means "nothing to report".
 disk walk would see them and report them as drift; excluding them one at a
 time as they're discovered is a losing, ever-growing exclusion list.
 
-**Shape.** `detectManifestDrift` uses two different walk strategies for its
-two manifest section types, unified by one invariant: **walk depth must
-match what the manifest can declare.** Name-folder sections recurse fully
-(`walkDiskNameTree`) — C3 writes `<Name>.json` at arbitrary subfolder depth
-there, so both sides must descend fully to avoid missing an item.
-File-folder sections recurse **only into subdirectories whose name matches
-a declared subfolder** in the manifest (`walkDiskFileTree(dir,
-folder.subfolders)`) — undeclared subdirectories are never entered.
+**Shape (the default today).** Called without options,
+`walkDiskFileTree(dir, folder.subfolders)` recurses **only into
+subdirectories whose name matches a declared subfolder** in the manifest;
+undeclared subdirectories are never entered. Name-folder sections have always
+recursed fully (`walkDiskNameTree`), because C3 writes `<Name>.json` at
+arbitrary subfolder depth there. Before ADR 0035, `detectManifestDrift` used
+this default for file-folder sections too, under one invariant: walk depth
+must match what the manifest declares.
 
-**Trade-off (original rationale).** The practical effect is that adding a new C3-generated
-subtree under `scripts/` (or `icons/`, etc.) never breaks drift detection —
-the walk simply does not descend there, with no exclusion entry needed per
-subtree. The cost is symmetry discipline: `walkManifestFileTree` and
-`walkDiskFileTree` must recurse into the *same* declared subfolders on each
-side, or the invariant silently breaks; if C3 ever introduces file-folder
-nesting in a new release, updating `C3FileFolder.subfolders` in the
-manifest model is sufficient because both walk functions already handle
-the recursive case — but forgetting to keep them symmetric would reintroduce
-exactly the drift-noise problem this pattern exists to prevent.
+**Trade-off (original rationale, retired for drift).** The intended effect was
+that a new C3-generated subtree under `scripts/` (or `icons/`, etc.) never
+broke drift detection, with no exclusion entry needed per subtree. The cost was
+symmetry discipline: `walkManifestFileTree` and `walkDiskFileTree` had to
+recurse into the *same* declared subfolders. What retired it was the other
+side of that symmetry: a user's own undeclared subfolder was invisible too, so
+a file moved into one read as `missing`. Drift now walks every non-editor-local
+subdirectory and relies on `EDITOR_LOCAL_EXCLUSIONS` alone to keep generated
+subtrees out.
 
 ## Collect-then-throw-first
 

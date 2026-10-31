@@ -871,8 +871,8 @@ export function walkDiskNameTree(
  * `name`; undeclared subdirs are never walked.
  * With `options.walkUndeclared` it recurses into every directory that is not editor-local, so files
  * under undeclared subfolders are yielded too (an undeclared directory recurses with no declared
- * subfolders). `isEditorLocalPath` (which covers `ts-defs/`, `uistate/` and `tsconfig.json`) is the
- * only exclusion under that option.
+ * subfolders). `isEditorLocalPath` (which covers `ts-defs/`, `uistate/`, `*.uistate.json` and
+ * `tsconfig.json`) is the only exclusion under that option.
  * Emits full filenames WITH extension (file-folder matching is extension-agnostic, R11).
  * Returns [] if `diskFolder` absent.
  */
@@ -1007,7 +1007,7 @@ function collectDuplicateNames(
 }
 
 /**
- * Collect every subfolder path (segment chains of names) declared in a manifest name-folder tree.
+ * Collect every subfolder path (segment chains of names) declared in a manifest name- or file-folder tree.
  * `unnamedSubfolderName` mirrors {@link walkManifestNameTree}: a nameless direct child of the
  * section root adopts that name (the `timelines/transitions` exception); not propagated into
  * recursion, so it applies to top-level children only. Returns `{path, origin}` for the named folders
