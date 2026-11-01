@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-11-01
+
+* **Update**: schema.md — a topical page whose rule an ADR retires or narrows gets its body rewritten, not just a status note (only ADR bodies stay unedited); driven by issue #110 (session retro).
+
 ## 2026-10-31
 
 * **Creation**: decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md (and its entry in decisions/index.md); **Update**: decisions/0020-caller-controlled-walk-descent.md (Status line and description only, naming ADR 0035 as superseding its "second, independent mechanism" remark; the index entry likewise), project-manifest.md (drift walks every non-editor-local subdirectory of file folders and file sections emit folder entries) and design-patterns.md (declared-subfolder recursion is now only `walkDiskFileTree`'s default); driven by issue #110.
