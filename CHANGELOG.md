@@ -47,6 +47,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-02
+
 ### Added
 
 - `walkDiskFileTree` gains an opt-in `options.walkUndeclared` argument that
@@ -459,7 +461,8 @@ meaningful library content. There are two of these — one under `@genvid` at th
 project's start, and one under `@genvidtech` when the scope rename at 1.6.0
 needed the new name claimed the same way.
 
-[Unreleased]: https://github.com/GenvidTechnologies/c3source/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/GenvidTechnologies/c3source/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/GenvidTechnologies/c3source/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/GenvidTechnologies/c3source/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/GenvidTechnologies/c3source/compare/v2.0.1...v2.1.0
 [2.0.1]: https://github.com/GenvidTechnologies/c3source/compare/v2.0.0...v2.0.1
