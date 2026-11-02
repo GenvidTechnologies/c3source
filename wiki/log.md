@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-11-02
+
+* **Update**: c3-domain-facts.md (the file-entry `type` section now names the editor's MIME registry and section hint, states the `video` section rows and both extension sets, and replaces the untested-`.webm` residual with the r506.3 save evidence), project-manifest.md (the section override and the new exports; `video` is no longer inferred) and canonical-fixture.md (pin v1.3.0, `b76dd45`, 127 files, new version-history row); driven by `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and `raw/issue-113-video-section-editor-save-2026-11-02.md` (issue #113).
+
 ## 2026-11-01
 
 * **Update**: schema.md — a topical page whose rule an ADR retires or narrows gets its body rewritten, not just a status note (only ADR bodies stay unedited); driven by issue #110 (session retro).

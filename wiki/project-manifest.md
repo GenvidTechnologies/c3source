@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-31T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-02T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -27,6 +27,14 @@ sources:
     resource: ../raw/issue-100-empty-name-live-editor-2026-10-28.md
     title: "Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)"
     last_modified: 2026-10-28
+  - id: issue-113-bundle-evidence
+    resource: ../raw/issue-113-video-section-bundle-evidence-2026-11-02.md
+    title: "Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)"
+    last_modified: 2026-11-02
+  - id: issue-113-editor-save
+    resource: ../raw/issue-113-video-section-editor-save-2026-11-02.md
+    title: "Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)"
+    last_modified: 2026-11-02
 ---
 
 # Project Manifest
@@ -106,8 +114,8 @@ export including `objectTypes`, which has no per-type directory).
 source folder, with a deliberate singular-to-plural naming shift (`script`→
 `scripts`, `icon`→`icons`, both fixture-confirmed; `sound`, `music`,
 `font`, `general` follow the same pattern and are fixture-validated since
-construct3-sample v1.2.0; only `video` remains inferred, not
-fixture-validated)[^api-guide-manifest].
+construct3-sample v1.2.0; `video` is fixture-validated since v1.3.0, whose
+save put five clips in `videos/`)[^api-guide-manifest][^issue-113-editor-save].
 
 `SCRIPT_FILE_TYPE_EXTENSIONS` maps a script `C3FileEntry.type` MIME
 (`application/javascript`→`.js`, `application/typescript`→`.ts`) to its
@@ -126,10 +134,21 @@ records on a `rootFileFolders` file entry — for a tool that *writes* entries.
 `fileTypeForName(name)` resolves a bare name or a `/`- or `\`-separated path
 case-insensitively and falls back to `C3_DEFAULT_FILE_TYPE`
 (`application/octet-stream`); indexing the table directly gives `undefined`
-instead. The table is flat across sections, `KNOWN INCOMPLETE`, and split into
-AUDITED and UNVALIDATED tiers; see [ADR
-0027](/decisions/0027-file-entry-type-writer-fact.md) and [C3 Domain
-Facts](/c3-domain-facts.md) for the evidence.
+instead. The table holds across sections except where
+`SECTION_EXTENSION_FILE_TYPES` overrides it (the `video` section: `.webm`,
+`.ogv`, `.mov`); `fileTypeForSection(section, name)` applies that override
+first and then falls back to `fileTypeForName`, which is unchanged. The table
+is `KNOWN INCOMPLETE`, and split into AUDITED and UNVALIDATED tiers; see [ADR
+0027](/decisions/0027-file-entry-type-writer-fact.md), [ADR
+0036](/decisions/0036-section-aware-file-entry-type-and-info-keys.md) and [C3
+Domain Facts](/c3-domain-facts.md) for the evidence.
+
+The same decision adds the section-keyed exports `C3FileSection` (the seven
+`rootFileFolders` keys), `C3_FILE_INFO_KEYS` (the info key an entry carries per
+section: `script-info` for `script`, `icon-info` for `icon`, `file-info` for
+the other five), `C3_DEFAULT_FILE_INFO_PURPOSE` (`"none"`) and
+`C3_VIDEO_IMPORT_EXTENSIONS` (`.webm`, `.ogv`, `.mp4`, the set the editor's
+Import dialog offers for `video`)[^issue-113-bundle-evidence].
 
 ## Canonical walks and their thin collectors
 
@@ -398,4 +417,6 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 [^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
 [^issue-100-evidence]: Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)
+[^issue-113-bundle-evidence]: Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)
+[^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)
 </content>
