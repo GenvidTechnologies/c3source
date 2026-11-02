@@ -168,6 +168,16 @@ self-skip** on their now-stale hardcoded paths[^claude-md]. **When bumping
 the pin, re-measure paths as well as counts** — a bump can be count-neutral
 and still invalidate a third of the fixture-gated suite.
 
+**An editor save at a newer release changes more than the added content.**
+v1.3.0 (#113) was saved in C3 r506.3, not the r495 its plan assumed. The
+save moved `savedWithRelease` from 49502 to 50603, which re-pinned `R-C1`,
+and added a top-level `saveLLMContextFile: true` that no earlier pin
+carried. The strict `parseProjectManifest` accepts it, but that was checked
+by a probe after the save, not known beforehand. Before an upstream editor
+save, decide whether the release is pinned. If it is not, plan to re-derive
+every `savedWithRelease` pin and to probe the strict parser and
+`detectManifestDrift` against the new manifest before bumping.
+
 ## The fixture-gate story: skip vs. throw, and `--forbid-pending`
 
 **As of issue #82 ([ADR
