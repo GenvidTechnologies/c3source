@@ -5,7 +5,7 @@ description: construct3-sample is the tag-pinned, editor-round-tripped golden C3
 tags: [canonical-fixture, construct3-sample, submodule, fixture-gate, mocharc]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-06T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-02T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -22,12 +22,16 @@ sources:
     resource: ../raw/issue-90-prep-fixture-strict-2026-10-06.md
     title: "c3source#90 and its comments (2026-10-06 capture)"
     last_modified: 2026-10-06
+  - id: issue-113-editor-save
+    resource: ../raw/issue-113-video-section-editor-save-2026-11-02.md
+    title: "Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)"
+    last_modified: 2026-11-02
 ---
 
 # Canonical Reference Fixture
 
 `construct3-sample/` is a **second** git submodule (added issue #51), pinned
-at the commit tagged `v1.2.0` (`fe53059`) as of 2026-10-05 — the single,
+at the commit tagged `v1.3.0` (`b76dd45`) as of 2026-11-02 — the single,
 editor-round-tripped golden C3 project that c3source and its sibling tools
 consume instead of each hand-maintaining a drifting fixture[^claude-md].
 
@@ -139,6 +143,7 @@ adding, removing, or moving any[^claude-md]:
 | v1.0.0 (**MAJOR**) | "Cross-domain coupling coverage" (driven upstream by `c3-domain-manager`#34): folds `eventSheets/`/`layouts/` into `Gameplay/`/`UI/` subfolders, adds a cross-domain include, an object-member expression reference, and an event-variable reference, each deliberately crossing a folder boundary |
 | v1.1.0 | Local variable referenced before its declaration in `UI/Event sheet 2` — the observable signature separating level-wide visibility from re-initialization-at-declaration (see [Event-Sheet Extraction](/event-sheet-extraction.md)) |
 | v1.2.0 | File-entry media (upstream #5, #6), all editor-registered at r49502: nine `general` (`files/`) entries (`.jpg .jpeg .webp .gif .svg .mp4 .mp3 .m4a` plus `GoogleService-Info.plist`), generated `tone_sound.webm` (sound) and `tone_music.webm` (music and `files/`), and `Saira.ttf` (font and `files/`; SIL OFL, licence kept outside `project/`). The manifest now has 23 `rootFileFolders` entries over 13 extensions. Added so c3source #86's FE9 can assert every entry against `fileTypeForName`; the materialized fixture grows to 122 files, the `.json`/`.c3proj` count (27 tracked) and `savedWithRelease` (49502) are unchanged, and no c3source test pin moved |
+| v1.3.0 | Five generated 1-second clips in the `video` section, `videos/` (upstream #7, merge commit `b76dd45`): `clip_disk.webm` (VP8) and `clip.mov` (H.264), registered by the editor's disk scan of `videos/`, and `clip_import.webm` (VP9), `clip.mp4` and `clip.ogv` (Theora), registered through the Import dialog. Saved in C3 **r506.3**, so `savedWithRelease` moves from 49502 to **50603** and the top-level property `saveLLMContextFile: true` appears. `rootFileFolders` grows from 23 to 28 entries over 15 extensions (was 13); the materialized fixture grows from 122 to 127 files. R-C1 moved: it now pins 50603[^issue-113-editor-save] |
 
 Per the sample's own versioning convention, a **MAJOR** bump means a
 consumer with a generated read-surface keyed on those paths must regenerate
@@ -162,6 +167,16 @@ Measured fallout in this repo: the bump broke `R-C1`/`R-C2`/`R-C14` in
 self-skip** on their now-stale hardcoded paths[^claude-md]. **When bumping
 the pin, re-measure paths as well as counts** — a bump can be count-neutral
 and still invalidate a third of the fixture-gated suite.
+
+**An editor save at a newer release changes more than the added content.**
+v1.3.0 (#113) was saved in C3 r506.3, not the r495 its plan assumed. The
+save moved `savedWithRelease` from 49502 to 50603, which re-pinned `R-C1`,
+and added a top-level `saveLLMContextFile: true` that no earlier pin
+carried. The strict `parseProjectManifest` accepts it, but that was checked
+by a probe after the save, not known beforehand. Before an upstream editor
+save, decide whether the release is pinned. If it is not, plan to re-derive
+every `savedWithRelease` pin and to probe the strict parser and
+`detectManifestDrift` against the new manifest before bumping.
 
 ## The fixture-gate story: skip vs. throw, and `--forbid-pending`
 
@@ -237,3 +252,4 @@ non-strict local runs[^claude-md].
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^issue-88]: c3source#88 and its comments (2026-10-05 capture)
+[^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)

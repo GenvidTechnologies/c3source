@@ -405,8 +405,8 @@ describe("openProject — new has*() methods on the fixture (OP-60 to OP-63)", (
     proj = openProject(FIXTURE_DIR);
   });
 
-  // fixture has: timelines/, flowcharts/, images/, icons/
-  // fixture does NOT have: models3d/, sounds/, music/, videos/, fonts/, files/
+  // fixture has: timelines/, flowcharts/, images/, icons/, sounds/, music/, videos/, fonts/, files/
+  // fixture does NOT have: models3d/
 
   it("OP-60: hasTimelines() is true for the fixture", () => {
     expect(proj.hasTimelines()).to.equal(true);
@@ -422,6 +422,10 @@ describe("openProject — new has*() methods on the fixture (OP-60 to OP-63)", (
 
   it("OP-63: hasIcons() is true for the fixture", () => {
     expect(proj.hasIcons()).to.equal(true);
+  });
+
+  it("OP-79: hasVideos() is true for the fixture", () => {
+    expect(proj.hasVideos()).to.equal(true);
   });
 });
 

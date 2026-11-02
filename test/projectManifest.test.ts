@@ -49,7 +49,7 @@ describe("parseProjectManifest / readProjectManifest", () => {
 
   it("R-C1: reads name and savedWithRelease from the fixture", () => {
     expect(m.name).to.equal("construct3-sample");
-    expect(m.savedWithRelease).to.equal(49502);
+    expect(m.savedWithRelease).to.equal(50603);
   });
 
   it("R-C2: name-folder typing — layouts and eventSheets are nested under domain subfolders (v1.0.0 fold)", () => {

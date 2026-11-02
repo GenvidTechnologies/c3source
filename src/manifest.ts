@@ -510,8 +510,9 @@ export const TIMELINE_TRANSITIONS_FOLDER = "transitions";
  * CONFIRMED by fixture: script→scripts, icon→icons, sound→sounds, music→music,
  * font→fonts, general→files (the last four since construct3-sample v1.2.0, which
  * populates them; the drift tests walk each one).
- * INFERRED (shipped anyway; c3source owns the fix if wrong): video→videos. No corpus
- * project populates the `video` section.
+ * Also confirmed by an editor save at C3 r506.3: video→videos. construct3-sample v1.3.0
+ * populates the `video` section from that save, and the drift tests walk it. Evidence:
+ * `raw/issue-113-video-section-editor-save-2026-11-02.md`.
  */
 export const C3_ROOT_FILE_FOLDERS = {
   script: "scripts",
@@ -1227,8 +1228,14 @@ export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
  * File extension, dotted and lowercase (`".png"`), -> the `type` (MIME) the C3 editor
  * records on a {@link C3FileEntry} under `rootFileFolders`. The writer direction of
  * {@link IMAGE_FILE_TYPE_EXTENSIONS} / {@link SCRIPT_FILE_TYPE_EXTENSIONS}, which
- * map the other way. The mapping is flat across the `rootFileFolders` sections (the
- * r49502 experiment showed general, sound, music and font agree). Exported so callers
+ * map the other way. The editor takes `type` from its MIME registry, by extension plus a
+ * section hint [bundle r495] [bundle r460]. The table is flat in every `rootFileFolders`
+ * section (the r49502 experiment showed general, sound, music and font agree), except
+ * where {@link SECTION_EXTENSION_FILE_TYPES} overrides it; resolve a section-aware `type`
+ * with {@link fileTypeForSection}. Today the only such cells are the `video` section's
+ * `.webm`, `.ogv` and `.mov`, and `.ogv` and `.mov` have no row in this flat table at all.
+ * Evidence: `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and
+ * `raw/issue-113-video-section-editor-save-2026-11-02.md`. Exported so callers
  * can introspect/extend — an open `Record<string, string>`, see ADR 0024 Compromise 5.
  *
  * **KNOWN INCOMPLETE** — this table is not exhaustive and never claims to be.
@@ -1239,9 +1246,10 @@ export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
  * **UNVALIDATED** (seen in one project or one editor save): `.txt`, `.xml`, `.vtt`,
  * `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.mp4`, `.mp3`, `.m4a`.
  *
- * **Observed, not specified:** the editor bundle reads `type` from an opaque getter, so
- * these values are observed editor outputs (C3 r49502), not a documented contract.
- * Residuals: a video-content `.webm`, and other OSes, are untested.
+ * **Observed, not specified:** the registry lives in the editor bundle and is not a
+ * documented contract, so these values are observed editor outputs (C3 r49502).
+ * The video case is covered by {@link SECTION_EXTENSION_FILE_TYPES} and by one editor save
+ * at r506.3. Other OSes are untested.
  *
  * **Blast radius:** a silently wrong `type` is written into `project.c3proj`; whether
  * C3 re-derives it on load is unknown.
@@ -1297,6 +1305,112 @@ export function fileTypeForName(name: string): string {
   return Object.prototype.hasOwnProperty.call(EXTENSION_FILE_TYPES, ext)
     ? EXTENSION_FILE_TYPES[ext]
     : C3_DEFAULT_FILE_TYPE;
+}
+
+/** A key of {@link C3RootFileFolders}: one root file section of the manifest. */
+export type C3FileSection = keyof C3RootFileFolders;
+
+/**
+ * The info-object key each file section's entries carry. The editor's item serializer
+ * writes `icon-info` for `icon`, `script-info` for `script` and `file-info` for every other
+ * section [bundle r495] [bundle r460]. Evidence:
+ * `raw/issue-113-video-section-bundle-evidence-2026-11-02.md`.
+ */
+export const C3_FILE_INFO_KEYS = {
+  script: "script-info",
+  sound: "file-info",
+  music: "file-info",
+  video: "file-info",
+  font: "file-info",
+  icon: "icon-info",
+  general: "file-info",
+} as const satisfies Record<C3FileSection, string>;
+
+/**
+ * The `purpose` value of a default file-info object. The editor's item constructor starts the
+ * icon, script and file purposes at `"none"` [bundle r495] [bundle r460]. An `icon` item
+ * loaded without an `icon-info` key does not keep that default: its purpose is chosen from
+ * its name (for example `loading-logo.png` gives `loading-logo`). Evidence:
+ * `raw/issue-113-video-section-bundle-evidence-2026-11-02.md`.
+ */
+export const C3_DEFAULT_FILE_INFO_PURPOSE = "none";
+
+/**
+ * Per-section extension overrides of {@link EXTENSION_FILE_TYPES}, keyed by section, then by
+ * dotted lowercase extension. Read through {@link fileTypeForSection}.
+ *
+ * Only the `video` `.webm` cell is a true section override: the section hint `video/` selects
+ * the second `.webm` registration, `video/webm`, over the first,
+ * `audio/webm; codecs=opus` [bundle r495]. The `.ogv` and `.mov` rows are section-scoped
+ * additions for extensions the flat table lacks. The bundle registers each of them once,
+ * `video/ogg` and `video/quicktime`, independent of section [bundle r495]; the editor recorded
+ * `video/quicktime` for a `.mov` in the video section [editor save r50603].
+ * The `.webm`, `.ogv` and `.mov` cells are confirmed by one editor save at r506.3
+ * [editor save r50603], so they are UNVALIDATED (one save). The imported `.webm` also
+ * recorded `video/webm`, which depends on the browser's `File.type`. Evidence:
+ * `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and
+ * `raw/issue-113-video-section-editor-save-2026-11-02.md`.
+ */
+export const SECTION_EXTENSION_FILE_TYPES: Partial<Record<C3FileSection, Record<string, string>>> = {
+  video: { ".webm": "video/webm", ".ogv": "video/ogg", ".mov": "video/quicktime" },
+};
+
+/**
+ * The extensions of the Videos set in the editor's Import Files dialog [bundle r495]
+ * (r460 has the same video set). This is one of two answers to "which extensions does the
+ * video section accept"; the other is below.
+ *
+ * - **Import dialog:** `.webm`, `.ogv`, `.mp4`, which is this constant.
+ * - **Rescanning the `videos/` folder on disk:** a file is admitted when the category of its
+ *   registry type (the first segment of the type string) is `video`. The type is looked up
+ *   by extension with the section hint `video/` [bundle r495]. This is not a list of
+ *   extensions. For example `.mpg`, `.mov` and `.avi` have `video/` registry types, so the
+ *   bundle predicts a rescan can admit them although the dialog does not offer them. Only
+ *   `.mov` was observed being admitted [editor save r50603].
+ *
+ * The content checks (`Acs` and `Ocs` in the bundle) appear in the folder-import dialog's
+ * `_us` callback, while the rescan computes admission by registry category [bundle r495].
+ * Inference: the rescan runs no content check, a reading from absence. The content checks
+ * decide which section accepts an imported file, not which `type` is stored.
+ *
+ * The `type` of a file added through the Import dialog depends on the browser's `File.type`:
+ * a registered `File.type` that lists the extension is kept, otherwise the lookup runs with
+ * no section hint [bundle r495]. The editor save at r506.3 imported a `.webm` and recorded
+ * `video/webm`, which depends on the browser's `File.type` [editor save r50603]; no other
+ * browser has been observed. Evidence: `raw/issue-113-video-section-bundle-evidence-2026-11-02.md`
+ * and `raw/issue-113-video-section-editor-save-2026-11-02.md`.
+ */
+export const C3_VIDEO_IMPORT_EXTENSIONS = [".webm", ".ogv", ".mp4"] as const;
+
+/**
+ * The `type` (MIME) for a file named `name` in the given section, where the editor's type is
+ * known to c3source. Section-aware form of {@link fileTypeForName}: it applies the section's
+ * row in {@link SECTION_EXTENSION_FILE_TYPES} when the extension has one, and otherwise returns
+ * {@link fileTypeForName}`(name)`. Name parsing is the same as {@link fileTypeForName}: only
+ * the basename of a `/`- or `\`-separated path counts, case-insensitively.
+ *
+ * **Known gap:** an extension in neither table falls back to {@link C3_DEFAULT_FILE_TYPE},
+ * because the flat table is frozen. The editor registry has a single registration for some
+ * of them, so it would record a `video/*` type: `fileTypeForSection("general", "x.mov")`,
+ * `("sound", "x.ogv")` and `("video", "x.avi")` all return `application/octet-stream`.
+ *
+ * The section overrides come from the bundle [bundle r495]. The `.webm`, `.ogv` and `.mov`
+ * cells are confirmed by one editor save at r506.3 [editor save r50603], so they are
+ * UNVALIDATED (one save). See `raw/issue-113-video-section-bundle-evidence-2026-11-02.md`
+ * and `raw/issue-113-video-section-editor-save-2026-11-02.md`.
+ *
+ * @example
+ * fileTypeForSection("video", "intro.webm"); // "video/webm"
+ * fileTypeForSection("sound", "intro.webm"); // "audio/webm; codecs=opus"
+ */
+export function fileTypeForSection(section: C3FileSection, name: string): string {
+  const base = name.slice(Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\")) + 1).toLowerCase();
+  const dot = base.lastIndexOf(".");
+  const ext = dot === -1 ? "" : base.slice(dot);
+  const rows = Object.prototype.hasOwnProperty.call(SECTION_EXTENSION_FILE_TYPES, section)
+    ? SECTION_EXTENSION_FILE_TYPES[section]
+    : undefined;
+  return rows && Object.prototype.hasOwnProperty.call(rows, ext) ? rows[ext] : fileTypeForName(name);
 }
 
 /**

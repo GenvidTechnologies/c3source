@@ -47,6 +47,41 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Section-aware file-entry `type` and info keys.** `fileTypeForSection(section,
+  name)` resolves the `type` for a `rootFileFolders` entry in a given section:
+  in the `video` section `.webm`, `.ogv` and `.mov` resolve to `video/webm`,
+  `video/ogg` and `video/quicktime`, and every other case falls back to
+  `fileTypeForName`, which is unchanged. New exports: `SECTION_EXTENSION_FILE_TYPES`
+  (the per-section override rows), `C3FileSection` (the seven section keys),
+  `C3_FILE_INFO_KEYS` (`script` -> `script-info`, `icon` -> `icon-info`, the other
+  five -> `file-info`), `C3_DEFAULT_FILE_INFO_PURPOSE` (`"none"`) and
+  `C3_VIDEO_IMPORT_EXTENSIONS` (`.webm`, `.ogv`, `.mp4`, the set the editor's
+  Import dialog offers for `video`). The change is additive: six names added, none
+  removed against 3.1.0
+  ([#113](https://github.com/GenvidTechnologies/c3source/issues/113)) — see
+  [ADR 0036](wiki/decisions/0036-section-aware-file-entry-type-and-info-keys.md).
+
+### Changed
+
+- Probe 10 of `scripts/scan-domain-facts.mjs` checks the section rows before the
+  flat table. Its output on the 14 local projects was identical before and after
+  the change (572 MATCH, 0 MISMATCH, 0 UNMAPPED, measured 2026-11-02).
+- The canonical fixture pin moves to `construct3-sample` v1.3.0, which adds five
+  clips to the `video` section. It was saved in C3 r506.3, so `savedWithRelease`
+  is 50603 and the manifest has a top-level `saveLLMContextFile: true`. The
+  materialized fixture has 127 files
+  ([#113](https://github.com/GenvidTechnologies/c3source/issues/113)).
+
+### Docs
+
+- The domain-facts and manifest wiki pages no longer describe the file-entry
+  `type` mechanism as hidden behind an opaque getter. The editor takes it from a
+  MIME registry by extension plus a section hint, and the `video` section is
+  attested by an editor save. See
+  [ADR 0036](wiki/decisions/0036-section-aware-file-entry-type-and-info-keys.md).
+
 ## [3.1.0] - 2026-11-02
 
 ### Added

@@ -4,7 +4,8 @@
 // C3_MINIFIED_SOURCE_SUFFIXES (via isMinifiedSourcePath),
 // SCRIPT_SOURCE_EXTENSIONS (via isScriptSourceName),
 // SCRIPT_FILE_TYPE_EXTENSIONS, C3_SECTION_ITEM_EXTENSION (via
-// isSectionItemName), and EXTENSION_FILE_TYPES (probe 10, fileEntryType, which
+// isSectionItemName), and EXTENSION_FILE_TYPES together with its per-section
+// override table SECTION_EXTENSION_FILE_TYPES (probe 10, fileEntryType, which
 // walks every `rootFileFolders` section of the manifest). The section-item
 // probe additionally doubles as the STRAY-FILE INVENTORY (src/manifest.ts's
 // `detectStrayFiles`), since it walks the seven name-section roots with that
@@ -79,6 +80,7 @@ const {
   PROJECT_MANIFEST_FILE,
   SCRIPT_FILE_TYPE_EXTENSIONS,
   SCRIPT_SOURCE_EXTENSIONS,
+  SECTION_EXTENSION_FILE_TYPES,
   comparisonSymbol,
   find_all_files_path,
   hasActions,
@@ -571,9 +573,12 @@ function bumpFileEntryType(map, ext, section, type, status, projectDir) {
 /**
  * Walks EVERY section of the MANIFEST's `rootFileFolders` (recursively through
  * `subfolders`) and buckets each file entry by lowercased extension x section x
- * recorded `type` x status against the imported `EXTENSION_FILE_TYPES` table:
- * MATCH (extension is a key and the value equals the recorded `type`), MISMATCH
- * (key present, value differs), UNMAPPED (extension is not a key). Reports
+ * recorded `type` x status against two imported tables: the flat
+ * `EXTENSION_FILE_TYPES` and the per-section `SECTION_EXTENSION_FILE_TYPES`. An
+ * extension is keyed when it is in the entry's section row or in the flat table;
+ * the expected value is the section row's when it has the extension, otherwise
+ * the flat row's. MATCH (extension is keyed and the expected value equals the
+ * recorded `type`), MISMATCH (keyed, value differs), UNMAPPED (not keyed). Reports
  * partitions only; the AUDITED-tier verdict (>=2 independent projects) is the
  * maintainer's, recomputed from the per-bucket distinct-project counts.
  */
@@ -585,8 +590,17 @@ function scanFileEntryType(result, projectDir, manifest) {
       result.fileEntryTypeCount++;
       const ext = fileEntryExt(node.name);
       const type = node.type === undefined ? ABSENT : String(node.type);
-      const keyed = Object.prototype.hasOwnProperty.call(EXTENSION_FILE_TYPES, ext);
-      const status = !keyed ? "UNMAPPED" : EXTENSION_FILE_TYPES[ext] === node.type ? "MATCH" : "MISMATCH";
+      const has = (table, key) => Object.prototype.hasOwnProperty.call(table, key);
+      const sectionRow = has(SECTION_EXTENSION_FILE_TYPES, section)
+        ? SECTION_EXTENSION_FILE_TYPES[section]
+        : undefined;
+      const expected =
+        sectionRow && has(sectionRow, ext)
+          ? sectionRow[ext]
+          : has(EXTENSION_FILE_TYPES, ext)
+            ? EXTENSION_FILE_TYPES[ext]
+            : undefined;
+      const status = expected === undefined ? "UNMAPPED" : expected === node.type ? "MATCH" : "MISMATCH";
       bumpFileEntryType(result.fileEntryType, ext, section, type, status, projectDir);
     }
   }

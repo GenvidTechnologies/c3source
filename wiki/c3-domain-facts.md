@@ -5,7 +5,7 @@ description: c3source owns exported tables naming undocumented C3 platform facts
 tags: [domain-facts, c3-domain-facts, corpus-scan, editor-bundle, audit]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-29T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-02T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -31,6 +31,14 @@ sources:
     resource: ../raw/issue-100-empty-name-live-editor-2026-10-28.md
     title: "Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)"
     last_modified: 2026-10-28
+  - id: issue-113-bundle-evidence
+    resource: ../raw/issue-113-video-section-bundle-evidence-2026-11-02.md
+    title: "Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)"
+    last_modified: 2026-11-02
+  - id: issue-113-editor-save
+    resource: ../raw/issue-113-video-section-editor-save-2026-11-02.md
+    title: "Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)"
+    last_modified: 2026-11-02
 ---
 
 # C3 Domain Facts
@@ -298,8 +306,16 @@ Every other MIME table maps MIME to extension, for reading. This one maps an
 extension to the `type` the editor records on a `rootFileFolders` file entry,
 for a tool that writes entries; [ADR
 0027](/decisions/0027-file-entry-type-writer-fact.md) owns the decision. The
-mechanism is hidden: the editor bundle reads `type` from an opaque getter, so
-the values are **observed editor outputs, not a specification**[^issue-86-evidence].
+mechanism is in the editor bundle: the editor takes `type` from a MIME
+registry (51 registrations at r495, 49 at r460) by extension, narrowed by a
+**section hint** when the lookup has to choose between two registrations of
+one extension[^issue-113-bundle-evidence]. ADR 0027's mechanism note called
+the mechanism hidden behind an opaque getter; the bundle reading in the
+capture[^issue-113-bundle-evidence] qualifies that. The table values are still
+**observed editor outputs**, so the table keeps its `KNOWN INCOMPLETE`
+label[^issue-86-evidence]. [ADR
+0036](/decisions/0036-section-aware-file-entry-type-and-info-keys.md) owns the
+section-aware API.
 
 **Corpus evidence.** Probe 10 (`fileEntryType`) of the scanner covers the 14
 inventoried projects: 567 file entries across 8 releases (`37900` to `49500`),
@@ -312,10 +328,9 @@ for upstream #5 and for the maintainer's 2026-10-01 experiment: one save each of
 general `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`, `.mp4`, `.mp3`, `.m4a` and
 `.plist`, and the same audio `.webm` and `.ttf` saved in `sound`/`music`/`font`
 and under `files/`. Both placements recorded identical strings
-(`audio/webm; codecs=opus`, `application/font-sfnt`), so the table is **flat**
-across sections. A browser `File.type` would not yield `; codecs=opus`, so the
-value is probably probed by the editor — an inference, not a bundle
-finding[^issue-86-evidence].
+(`audio/webm; codecs=opus`, `application/font-sfnt`), so for those
+extensions the table is **flat** across sections[^issue-86-evidence]. The
+`video` section is the exception (below).
 
 **Tiers.** Counted in independent editor-saved projects, the sample included:
 
@@ -332,10 +347,70 @@ The 14-project scan prints `.ttf`, `.webm` and `.plist` at **1 project** each
 only because it does not include the sample's r49502 saves; the tier above
 counts them. Across all 38 manifests on the maintainer machine, duplicates
 included, no extension was ever observed with two different types in any
-section, and the `video` section is empty[^issue-86-evidence].
+section, and the `video` section was empty in all of them[^issue-86-evidence]
+(the sample's v1.3.0 save fills it, below).
 
-**Residuals, untested:** a `.webm` carrying video, and other operating
-systems.
+**Residual, untested:** other operating systems. The video case is attested
+(next section).
+
+### The `video` section
+
+**The `type` depends on the section for `.webm`.** The registry lists `webm`
+twice, as `audio/webm; codecs=opus` and then `video/webm`. A disk-scan lookup
+passes a hint taken from the section (`audio/` for `sound` and `music`,
+`video/` for `video`, `font` for `font`, `image/` for `icon`, none for
+`script` and `general`), and the hint picks `video/webm` only in the `video`
+section[^issue-113-bundle-evidence]. `SECTION_EXTENSION_FILE_TYPES` holds the
+rows that differ by section, and `fileTypeForSection(section, name)` consults it
+before the flat `EXTENSION_FILE_TYPES`. Its `video` rows:
+
+| Extension | `type` |
+|---|---|
+| `.webm` | `video/webm` |
+| `.ogv` | `video/ogg` |
+| `.mov` | `video/quicktime` |
+
+`.mp4` needs no row: the flat table already gives `video/mp4`. The `.ogv` row
+rests on the registry entry `video/ogg` and on the save below, each seen once[^issue-113-bundle-evidence][^issue-113-editor-save].
+
+**Which extensions does the `video` section accept? Two answers, by path.**
+
+- **The Import dialog** offers `.webm`, `.ogv` and `.mp4`, exported as
+  `C3_VIDEO_IMPORT_EXTENSIONS`[^issue-113-bundle-evidence].
+- **The disk scan of `videos/`** admits a file by the category of the type the
+  registry gives its extension (here `video`). `.mov` is registered as
+  `video/quicktime`, so the scan admitted it although the dialog does not offer
+  it[^issue-113-bundle-evidence][^issue-113-editor-save]. The bundle predicts
+  `.mpg` and `.avi` are admitted the same way; only `.mov` was observed. The
+  content checks sit in the folder-import dialog's `_us` callback, and the rescan
+  computes admission by registry category. Inference: the rescan runs no content
+  check, a reading from absence.
+- **Fallback gap.** `fileTypeForSection` returns the editor's type only for
+  extensions in `SECTION_EXTENSION_FILE_TYPES` or the flat table; any other
+  extension returns `application/octet-stream`. For example `("general",
+  "x.mov")`, `("sound", "x.ogv")` and `("video", "x.avi")` do, although the
+  registry has one `video/*` registration for each.
+
+**Editor save evidence, r506.3.** `construct3-sample` v1.3.0 holds five clips
+saved in the `video` section, folder `videos/`, each with `file-info` and
+`{"purpose": "none"}`: `clip_disk.webm` (disk scan) -> `video/webm`, `clip.mov`
+(disk scan) -> `video/quicktime`, and `clip_import.webm`, `clip.mp4`,
+`clip.ogv` (Import dialog) -> `video/webm`, `video/mp4`, `video/ogg`. Every row
+was consistent with the bundle prediction. The `video` folder name `videos` and the info key
+`file-info` matched too[^issue-113-editor-save]. The imported VP9 `.webm`'s
+`video/webm` depends on the browser's `File.type`: it is consistent with the
+prediction given Chrome's `File.type`. Chrome is a user report made after the
+save capture was written, not an observation; the capture lists the browser as
+not recorded. The info key follows the
+section: `script` -> `script-info`, `icon` -> `icon-info`, the other five ->
+`file-info` (`C3_FILE_INFO_KEYS`), with default purpose `"none"`
+(`C3_DEFAULT_FILE_INFO_PURPOSE`)[^issue-113-bundle-evidence].
+
+**Caveats.** The bundle was read at r495 and r460; the save is r506.3, and no
+r506 bundle was read. The save attests r506.3 output only. The browser used for
+the Import dialog was not recorded, so the `video/webm` of `clip_import.webm`
+is consistent with a browser `File.type` of `video/webm`, not proof of
+it[^issue-113-editor-save].
 
 ## Two defects the audit found and fixed
 
@@ -447,6 +522,7 @@ update this doc's **numbers** — never the JSDoc labels.
 ## Related
 
 - [ADR 0027 — File-entry type as a writer-direction domain fact](/decisions/0027-file-entry-type-writer-fact.md) — why `EXTENSION_FILE_TYPES` is an open table with an accessor and two tiers.
+- [ADR 0036 — Section-aware file-entry type and info keys](/decisions/0036-section-aware-file-entry-type-and-info-keys.md) — why `fileTypeForSection` overrides the flat table for the `video` section.
 - [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — the decision behind the empty-stem boundary above.
 - [ADR 0032 — The transitions container is never folder-missing](/decisions/0032-transitions-container-never-folder-missing.md) — the decision behind the container fact above.
 - [ADR 0033 — Drift keys on name and path](/decisions/0033-drift-keys-on-name-and-path.md) — the decision behind the uniqueness scope above.
@@ -462,3 +538,5 @@ update this doc's **numbers** — never the JSDoc labels.
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 [^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
 [^issue-100-evidence]: Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)
+[^issue-113-bundle-evidence]: Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)
+[^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)
