@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-29T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-10-31T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -156,15 +156,23 @@ nesting without re-walking[^claude-md].
 | `missing` | path in manifest | — | Declared in manifest; no file on disk |
 | `untracked` | — | path on disk | File on disk; not declared in manifest |
 | `moved` | path in manifest | path on disk | Same name, different subfolder on each side |
-| `folder-missing` | path in manifest | — | Subfolder declared; not on disk |
+| `folder-missing` | path in manifest | — | Subfolder declared; not on disk (name and file sections) |
 | `folder-untracked` | — | path on disk | Subfolder on disk; not declared |
 | `dangling-ref` | `["#<i>"]` (container index) | — | Container member names a non-existent object type |
 
 Name-section disk walks use `walkDiskNameTree` (recursive,
 `readdirSync`-based, section-root-relative paths). File-folder disk walks
-use `walkDiskFileTree`, which recurses **manifest-declared subfolders
-only** — so an undeclared generated subtree like `scripts/ts-defs/` is
-never visited, without needing an explicit exclusion for it[^claude-md][^api-guide-manifest].
+use `walkDiskFileTree`. Drift calls it with `walkUndeclared: true`, so it
+walks **every subdirectory that is not editor-local** (`isEditorLocalPath` is
+the only exclusion), and file sections emit `folder-missing` and
+`folder-untracked` through the same `diffFolderPaths` as the name sections.
+A file moved into an undeclared subfolder therefore reads as `moved` (plus
+`folder-untracked`), not `missing`. Declared-only descent, which recurses
+manifest-declared subfolders only, is `walkDiskFileTree`'s default for a direct
+caller that omits the option[^claude-md][^api-guide-manifest]. A future
+C3-generated subtree under a file folder surfaces as drift until it is added to
+`EDITOR_LOCAL_EXCLUSIONS`. See [ADR
+0035](/decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md).
 
 `diffNameMaps` is the diff engine underneath `detectManifestDrift`: it
 groups the paths of each name per side and keys on **name plus path**, so the
@@ -383,6 +391,7 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 - [ADR 0033 — Drift keys on name and path](/decisions/0033-drift-keys-on-name-and-path.md) — why `moved` needs a name unique on both sides, and why `duplicates` is advisory.
 - [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — why a `.json` file is a stray and a declared `""` reads as `missing`.
 - [ADR 0034 — A declared empty item name fails manifest validation](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md) — rule `name-folder-item-empty` and why it is a trailing pass.
+- [ADR 0035 — File-folder drift walks undeclared subdirectories](/decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md) — why file sections report folder entries and `walkDiskFileTree` keeps declared-only as its default.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide-manifest]: docs/api-guide-manifest.md (c3source API guide, 2026-08-20 capture)

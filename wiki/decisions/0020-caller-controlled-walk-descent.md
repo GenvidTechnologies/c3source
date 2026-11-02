@@ -1,7 +1,7 @@
 ---
 type: decision-context
 title: "ADR 0020 — Editor-local classification does not imply walk unreachability"
-description: EDITOR_LOCAL_EXCLUSIONS and isEditorLocalPath are left unchanged; find_all_files_path gains a caller-controlled, defaulted descend parameter so a consumer can enter an otherwise-pruned directory like ts-defs/ without widening what counts as C3 source.
+description: EDITOR_LOCAL_EXCLUSIONS and isEditorLocalPath are left unchanged; find_all_files_path gains a caller-controlled, defaulted descend parameter so a consumer can enter an otherwise-pruned directory like ts-defs/ without widening what counts as C3 source. Partially superseded by ADR 0035: drift no longer relies on declared-only descent, so isEditorLocalPath is the only mechanism hiding ts-defs/ from drift.
 tags: [adr, traversal, layout-traversal]
 status: stable
 generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
@@ -14,7 +14,7 @@ sources:
 
 # ADR 0020 — Editor-local classification does not imply walk unreachability
 
-**Status:** accepted
+**Status:** accepted; its remark that `ts-defs/` was invisible to drift "by a second, independent mechanism" (declared-only descent) is superseded by [ADR 0035](/decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md)
 **Date:** 2026-08-03
 **Issue:** #63
 
