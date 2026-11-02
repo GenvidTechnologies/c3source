@@ -2,8 +2,14 @@ import { describe, it } from "mocha";
 import { expect } from "chai";
 import {
   EXTENSION_FILE_TYPES,
+  C3_DEFAULT_FILE_INFO_PURPOSE,
   C3_DEFAULT_FILE_TYPE,
+  C3_FILE_INFO_KEYS,
+  C3_VIDEO_IMPORT_EXTENSIONS,
+  SECTION_EXTENSION_FILE_TYPES,
   fileTypeForName,
+  fileTypeForSection,
+  type C3FileSection,
   IMAGE_FILE_TYPE_EXTENSIONS,
   SCRIPT_FILE_TYPE_EXTENSIONS,
 } from "../src/c3source.js";
@@ -80,7 +86,7 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
     expect(C3_DEFAULT_FILE_TYPE).to.equal("application/octet-stream");
   });
 
-  it("FE9: every canonical-fixture rootFileFolders entry type matches fileTypeForName", function () {
+  it("FE9: every canonical-fixture rootFileFolders entry type matches the section-aware fileTypeForSection", function () {
     if (!fixtureProjectAvailable("files")) return this.skip();
     const manifest = JSON.parse(loadFixtureProject(PROJECT_MANIFEST)) as {
       rootFileFolders: Record<string, FileFolder>;
@@ -100,7 +106,7 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
     for (const { section, name, type } of visited) {
       const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
       extensions.add(ext);
-      expect(type, `${section}/${name}`).to.equal(fileTypeForName(name));
+      expect(type, `${section}/${name}`).to.equal(fileTypeForSection(section as C3FileSection, name));
       expect(Object.prototype.hasOwnProperty.call(EXTENSION_FILE_TYPES, ext), `${section}/${name}: ${ext}`).to.equal(
         true,
       );
@@ -111,7 +117,81 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
       expect(bySection[section], section).to.be.greaterThan(0);
     }
   });
+
+  it("FE10: C3_FILE_INFO_KEYS names the info key of all 7 sections; the default purpose is none", () => {
+    expect(C3_FILE_INFO_KEYS).to.deep.equal({
+      script: "script-info",
+      sound: "file-info",
+      music: "file-info",
+      video: "file-info",
+      font: "file-info",
+      icon: "icon-info",
+      general: "file-info",
+    });
+    expect(C3_DEFAULT_FILE_INFO_PURPOSE).to.equal("none");
+  });
+
+  it("FE11: SECTION_EXTENSION_FILE_TYPES overrides only the video .webm and .ogv extensions", () => {
+    expect(SECTION_EXTENSION_FILE_TYPES).to.deep.equal({
+      video: { ".webm": "video/webm", ".ogv": "video/ogg" },
+    });
+  });
+
+  it("FE12: fileTypeForSection resolves video names case-insensitively and through path separators", () => {
+    for (const name of ["clip.webm", "clip.WebM", "videos/sub/a.webm", "videos\\a.webm"]) {
+      expect(fileTypeForSection("video", name), name).to.equal("video/webm");
+    }
+    expect(fileTypeForSection("video", "clip.ogv")).to.equal("video/ogg");
+  });
+
+  it("FE13: outside the (video, .webm) cell fileTypeForSection equals fileTypeForName", () => {
+    const sections = Object.keys(C3_FILE_INFO_KEYS) as C3FileSection[];
+    expect(sections).to.have.length(7);
+    for (const section of sections) {
+      for (const ext of Object.keys(EXTENSION_FILE_TYPES)) {
+        if (section === "video" && ext === ".webm") continue;
+        const name = `x${ext}`;
+        expect(fileTypeForSection(section, name), `${section}/${name}`).to.equal(fileTypeForName(name));
+      }
+      for (const name of ["x.unknownext", "LICENSE"]) {
+        expect(fileTypeForSection(section, name), `${section}/${name}`).to.equal(C3_DEFAULT_FILE_TYPE);
+      }
+    }
+    expect(fileTypeForSection("sound", "a.webm")).to.equal("audio/webm; codecs=opus");
+  });
+
+  it("FE14: every canonical-fixture rootFileFolders entry carries its section's info key and no other", function () {
+    if (!fixtureProjectAvailable("files")) return this.skip();
+    const manifest = JSON.parse(loadFixtureProject(PROJECT_MANIFEST)) as {
+      rootFileFolders: Record<string, InfoFolder>;
+    };
+    let visited = 0;
+    const walk = (section: C3FileSection, folder: InfoFolder): void => {
+      for (const entry of folder.items ?? []) {
+        visited++;
+        const infoKeys = Object.keys(entry).filter((k) => k.endsWith("-info"));
+        expect(infoKeys, `${section}/${entry.name}`).to.deep.equal([C3_FILE_INFO_KEYS[section]]);
+      }
+      for (const sub of folder.subfolders ?? []) walk(section, sub);
+    };
+    for (const [section, folder] of Object.entries(manifest.rootFileFolders)) {
+      walk(section as C3FileSection, folder);
+    }
+    expect(visited).to.be.greaterThan(0);
+  });
+
+  it("FE16: C3_VIDEO_IMPORT_EXTENSIONS lists the importable video extensions, each typed video/*", () => {
+    expect(C3_VIDEO_IMPORT_EXTENSIONS).to.deep.equal([".webm", ".ogv", ".mp4"]);
+    for (const m of C3_VIDEO_IMPORT_EXTENSIONS) {
+      expect(fileTypeForSection("video", m), m).to.match(/^video\//);
+    }
+  });
 });
+
+interface InfoFolder {
+  items?: ({ name: string } & Record<string, unknown>)[];
+  subfolders?: InfoFolder[];
+}
 
 interface FileFolder {
   items?: { name: string; type: string }[];
