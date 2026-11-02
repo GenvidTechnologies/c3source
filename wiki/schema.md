@@ -206,6 +206,15 @@ Construct 3 release can invalidate.
   entry were never updated, though, and still describe the single module as
   current, which is exactly the gap this rule closes. #106 applies all three
   places to ADR 0031.
+
+  **A topical page is not frozen.** When an ADR retires or narrows a rule
+  that a topical page (design patterns, a domain page) states as current,
+  rewrite that page's body to describe the rule as it now stands, and link
+  the ADR. A status note above an unchanged body is not enough: the body
+  still reads as current to anyone who skips the note. Only ADR bodies stay
+  unedited. On #110, ADR 0035 retired declared-only recursion for drift, and
+  `design-patterns.md` first got only a status note over the old Shape and
+  Trade-off text. Review caught it, and the body was rewritten.
 - **Library API surface and architecture** — module DAG, exported functions,
   the `C3Project` handle. Changes on this repo's own release cadence, which is
   observable from `CHANGELOG.md`, so a stale date adds little: `stale_after`

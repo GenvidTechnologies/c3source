@@ -1,6 +1,6 @@
 import { describe, it, before } from "mocha";
 import { expect } from "chai";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -458,6 +458,18 @@ describe("F1: path-walk primitives", () => {
     expect(names.includes("tsconfig.json")).to.equal(false);
   });
 
+  it("walkUndeclared (#110): still finds main.ts and excludes ts-defs/ and tsconfig.json", () => {
+    const scriptFolder = path.join(FIXTURE_DIR, "scripts");
+    const items = walkDiskFileTree(scriptFolder, m.rootFileFolders.script.subfolders, [], { walkUndeclared: true });
+    const names = items.map((e) => e.name);
+
+    expect(names).to.include("main.ts");
+    // ts-defs/ is editor-local → never walked, even under walkUndeclared
+    expect(items.some((e) => e.path.includes("ts-defs"))).to.equal(false);
+    expect(names.some((n) => n.includes("ts-defs"))).to.equal(false);
+    expect(names.includes("tsconfig.json")).to.equal(false);
+  });
+
   it("F1-7: walkManifestNameTree without unnamedSubfolderName leaves a nameless subfolder segment-less", () => {
     let items: Array<{ name: string; path: string[] }>;
     expect(() => {
@@ -851,6 +863,93 @@ describe("walkers tolerate a malformed manifest (#58)", () => {
     }).to.not.throw();
     expect(drift).to.be.an("object");
     expect(drift!.sections).to.be.an("array");
+  });
+});
+
+describe("detectManifestDrift: file sections see undeclared subdirectories (#110)", () => {
+  const entry = (name: string) => ({ name, type: "image", sid: 1 });
+  const emptyFolders = (): C3ProjectManifest["rootFileFolders"] => {
+    const f = (): C3FileFolder => ({ items: [], subfolders: [] });
+    return { script: f(), sound: f(), music: f(), video: f(), font: f(), icon: f(), general: f() };
+  };
+  /** Build a tmpdir project whose `files/` holds `onDisk` (relative paths), run `fn`, then clean up. */
+  const withProject = (general: C3FileFolder, onDisk: string[], fn: (root: string, m: C3ProjectManifest) => void) => {
+    const root = mkdtempSync(path.join(tmpdir(), "c3source-manifest-110-"));
+    try {
+      mkdirSync(path.join(root, "files"), { recursive: true });
+      for (const rel of onDisk) {
+        mkdirSync(path.dirname(path.join(root, "files", rel)), { recursive: true });
+        writeFileSync(path.join(root, "files", rel), "x");
+      }
+      const m = { rootFileFolders: { ...emptyFolders(), general } } as unknown as C3ProjectManifest;
+      fn(root, m);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  };
+  const general = (drift: ManifestDrift) => drift.sections.find((s) => s.section === "rootFileFolders.general");
+  const shape = (drift: ManifestDrift) =>
+    (general(drift)?.entries ?? []).map((e) => [e.kind, e.name, e.manifestPath, e.diskPath]);
+
+  it("#110 P1: a file moved into a new undeclared subfolder reads as moved plus folder-untracked", () => {
+    withProject({ items: [entry("sample.gif")], subfolders: [] }, ["sub/sample.gif"], (root, m) => {
+      expect(shape(detectManifestDrift(root, m))).to.deep.equal([
+        ["moved", "sample.gif", [], ["sub"]],
+        ["folder-untracked", "sub", undefined, ["sub"]],
+      ]);
+    });
+  });
+
+  it("#110 P2: a file moved into a declared subfolder reports exactly one moved and no folder entry", () => {
+    const sub: C3FileFolder = { name: "sub", items: [], subfolders: [] };
+    withProject({ items: [entry("sample.gif")], subfolders: [sub] }, ["sub/sample.gif"], (root, m) => {
+      expect(shape(detectManifestDrift(root, m))).to.deep.equal([["moved", "sample.gif", [], ["sub"]]]);
+    });
+  });
+
+  it("#110 P3: a name declared in a and b, on disk in a and c, reports file and folder entries", () => {
+    const a: C3FileFolder = { name: "a", items: [entry("x.txt")], subfolders: [] };
+    const b: C3FileFolder = { name: "b", items: [entry("x.txt")], subfolders: [] };
+    withProject({ items: [], subfolders: [a, b] }, ["a/x.txt", "c/x.txt"], (root, m) => {
+      expect(shape(detectManifestDrift(root, m))).to.deep.equal([
+        ["missing", "x.txt", ["b"], undefined],
+        ["untracked", "x.txt", undefined, ["c"]],
+        ["folder-missing", "b", ["b"], undefined],
+        ["folder-untracked", "c", undefined, ["c"]],
+      ]);
+    });
+  });
+
+  it("#110 R4: a declared subfolder with no directory on disk reports folder-missing", () => {
+    const sub: C3FileFolder = { name: "gone", items: [], subfolders: [] };
+    withProject({ items: [], subfolders: [sub] }, [], (root, m) => {
+      expect(shape(detectManifestDrift(root, m))).to.deep.equal([["folder-missing", "gone", ["gone"], undefined]]);
+    });
+  });
+
+  it("walkUndeclared (#110): the option descends into an undeclared subfolder; the default does not", () => {
+    withProject({ items: [], subfolders: [] }, ["sub/a.txt"], (root) => {
+      const dir = path.join(root, "files");
+      expect(walkDiskFileTree(dir, [])).to.deep.equal([]);
+      expect(walkDiskFileTree(dir, [], [], { walkUndeclared: true })).to.deep.equal([{ name: "a.txt", path: ["sub"] }]);
+    });
+  });
+
+  it("walkUndeclared (#110): an editor-local directory nested under an undeclared one stays excluded", () => {
+    withProject({ items: [], subfolders: [] }, ["sub/keep.txt", "sub/ts-defs/b.d.ts", "sub/uistate/c.json"], (root) => {
+      const items = walkDiskFileTree(path.join(root, "files"), [], [], { walkUndeclared: true });
+      expect(items).to.deep.equal([{ name: "keep.txt", path: ["sub"] }]);
+    });
+  });
+
+  it("#110 nested: undeclared x/y reports folder-untracked for both levels and the file as untracked", () => {
+    withProject({ items: [], subfolders: [] }, ["x/y/z.txt"], (root, m) => {
+      expect(shape(detectManifestDrift(root, m))).to.deep.equal([
+        ["untracked", "z.txt", undefined, ["x", "y"]],
+        ["folder-untracked", "x", undefined, ["x"]],
+        ["folder-untracked", "y", undefined, ["x", "y"]],
+      ]);
+    });
   });
 });
 

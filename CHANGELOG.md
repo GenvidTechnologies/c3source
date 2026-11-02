@@ -47,6 +47,25 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- `walkDiskFileTree` gains an opt-in `options.walkUndeclared` argument that
+  recurses into every non-editor-local subdirectory. Its default (declared
+  subfolders only) is unchanged
+  ([#110](https://github.com/GenvidTechnologies/c3source/issues/110)).
+
+### Changed
+
+- **File-section drift now sees files in undeclared subdirectories.**
+  `detectManifestDrift` walks each `rootFileFolders.<category>` directory into
+  every non-editor-local subdirectory, so a file moved into a new folder reads as
+  `moved` instead of `missing`, and a new file there reads as `untracked`. File
+  sections also report `folder-missing` and `folder-untracked` entries, as the
+  name sections already did. A project can therefore go from `inSync: true` to
+  `false` on upgrade, for example when it declares an empty file subfolder that a
+  git checkout does not hold
+  ([#110](https://github.com/GenvidTechnologies/c3source/issues/110)).
+
 ## [3.0.0] - 2026-10-29
 
 ### Added
