@@ -5,6 +5,7 @@ import {
   C3_DEFAULT_FILE_INFO_PURPOSE,
   C3_DEFAULT_FILE_TYPE,
   C3_FILE_INFO_KEYS,
+  C3_ROOT_FILE_FOLDERS,
   C3_VIDEO_IMPORT_EXTENSIONS,
   SECTION_EXTENSION_FILE_TYPES,
   fileTypeForName,
@@ -107,13 +108,13 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
       const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
       extensions.add(ext);
       expect(type, `${section}/${name}`).to.equal(fileTypeForSection(section as C3FileSection, name));
-      expect(Object.prototype.hasOwnProperty.call(EXTENSION_FILE_TYPES, ext), `${section}/${name}: ${ext}`).to.equal(
-        true,
-      );
+      const has = (table: object | undefined): boolean => !!table && Object.prototype.hasOwnProperty.call(table, ext);
+      const sectionRows = SECTION_EXTENSION_FILE_TYPES[section as C3FileSection];
+      expect(has(EXTENSION_FILE_TYPES) || has(sectionRows), `${section}/${name}: ${ext}`).to.equal(true);
     }
-    expect(visited.length).to.equal(23);
-    expect(extensions.size).to.equal(13);
-    for (const section of ["general", "sound", "music", "font"]) {
+    expect(visited.length).to.equal(28);
+    expect(extensions.size).to.equal(15);
+    for (const section of ["general", "sound", "music", "font", "video"]) {
       expect(bySection[section], section).to.be.greaterThan(0);
     }
   });
@@ -131,9 +132,9 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
     expect(C3_DEFAULT_FILE_INFO_PURPOSE).to.equal("none");
   });
 
-  it("FE11: SECTION_EXTENSION_FILE_TYPES overrides only the video .webm and .ogv extensions", () => {
+  it("FE11: SECTION_EXTENSION_FILE_TYPES overrides only the video .webm, .ogv and .mov extensions", () => {
     expect(SECTION_EXTENSION_FILE_TYPES).to.deep.equal({
-      video: { ".webm": "video/webm", ".ogv": "video/ogg" },
+      video: { ".webm": "video/webm", ".ogv": "video/ogg", ".mov": "video/quicktime" },
     });
   });
 
@@ -186,7 +187,30 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
       expect(fileTypeForSection("video", m), m).to.match(/^video\//);
     }
   });
+
+  it("FE15: the canonical-fixture video section carries the types the editor save recorded", function () {
+    if (!fixtureProjectAvailable("videos")) return this.skip();
+    const manifest = JSON.parse(loadFixtureProject(PROJECT_MANIFEST)) as {
+      rootFileFolders: Record<string, VideoFolder>;
+    };
+    const items = manifest.rootFileFolders.video.items ?? [];
+    expect(items.length).to.be.greaterThan(0);
+    const typeOf = (name: string): string | undefined => items.find((i) => i.name === name)?.type;
+    expect(typeOf("clip_disk.webm")).to.equal("video/webm");
+    expect(typeOf("clip_import.webm")).to.equal("video/webm");
+    expect(typeOf("clip.mp4")).to.equal("video/mp4");
+    expect(typeOf("clip.ogv")).to.equal("video/ogg");
+    expect(typeOf("clip.mov")).to.equal("video/quicktime");
+    for (const item of items) {
+      expect(item["file-info"], item.name).to.deep.equal({ purpose: "none" });
+      expect(fixtureProjectAvailable(`${C3_ROOT_FILE_FOLDERS.video}/${item.name}`), item.name).to.equal(true);
+    }
+  });
 });
+
+interface VideoFolder {
+  items?: { name: string; type: string; "file-info"?: unknown }[];
+}
 
 interface InfoFolder {
   items?: ({ name: string } & Record<string, unknown>)[];
