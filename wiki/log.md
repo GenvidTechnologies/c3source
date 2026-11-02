@@ -22,6 +22,7 @@ the full maintenance schema.
 
 ## 2026-11-02
 
+* **Update**: module-architecture.md (the `project` DAG bullet now lists its five direct imports and says it reaches `serialize` only through them; a note that a JSDoc-experiment baseline is better taken without stashing) and library-overview.md (counts, release lists and scan dates now point at c3-domain-facts.md, which is also added to Related); driven by `raw/wiki-review-module-architecture-library-overview-2026-11-02.md`.
 * **Update**: c3-domain-facts.md (the file-entry `type` section now names the editor's MIME registry and section hint, states the `video` section rows and both extension sets, and replaces the untested-`.webm` residual with the r506.3 save evidence), project-manifest.md (the section override and the new exports; `video` is no longer inferred) and canonical-fixture.md (pin v1.3.0, `b76dd45`, 127 files, new version-history row); driven by `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and `raw/issue-113-video-section-editor-save-2026-11-02.md` (issue #113).
 
 ## 2026-11-01
