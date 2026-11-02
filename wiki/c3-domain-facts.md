@@ -311,7 +311,7 @@ registry (51 registrations at r495, 49 at r460) by extension, narrowed by a
 **section hint** when the lookup has to choose between two registrations of
 one extension[^issue-113-bundle-evidence]. ADR 0027's mechanism note called
 the mechanism hidden behind an opaque getter; the bundle reading in the
-[#113 capture](#the-video-section) qualifies that. The table values are still
+capture[^issue-113-bundle-evidence] qualifies that. The table values are still
 **observed editor outputs**, so the table keeps its `KNOWN INCOMPLETE`
 label[^issue-86-evidence]. [ADR
 0036](/decisions/0036-section-aware-file-entry-type-and-info-keys.md) owns the
@@ -380,15 +380,28 @@ rests on the registry entry `video/ogg` and on the save below, each seen once[^i
 - **The disk scan of `videos/`** admits a file by the category of the type the
   registry gives its extension (here `video`). `.mov` is registered as
   `video/quicktime`, so the scan admitted it although the dialog does not offer
-  it[^issue-113-bundle-evidence][^issue-113-editor-save].
+  it[^issue-113-bundle-evidence][^issue-113-editor-save]. The bundle predicts
+  `.mpg` and `.avi` are admitted the same way; only `.mov` was observed. The
+  content checks sit in the folder-import dialog's `_us` callback, and the rescan
+  computes admission by registry category. Inference: the rescan runs no content
+  check, a reading from absence.
+- **Fallback gap.** `fileTypeForSection` returns the editor's type only for
+  extensions in `SECTION_EXTENSION_FILE_TYPES` or the flat table; any other
+  extension returns `application/octet-stream`. For example `("general",
+  "x.mov")`, `("sound", "x.ogv")` and `("video", "x.avi")` do, although the
+  registry has one `video/*` registration for each.
 
 **Editor save evidence, r506.3.** `construct3-sample` v1.3.0 holds five clips
 saved in the `video` section, folder `videos/`, each with `file-info` and
 `{"purpose": "none"}`: `clip_disk.webm` (disk scan) -> `video/webm`, `clip.mov`
 (disk scan) -> `video/quicktime`, and `clip_import.webm`, `clip.mp4`,
 `clip.ogv` (Import dialog) -> `video/webm`, `video/mp4`, `video/ogg`. Every row
-matched the bundle prediction. The `video` folder name `videos` and the info key
-`file-info` matched too[^issue-113-editor-save]. The info key follows the
+was consistent with the bundle prediction. The `video` folder name `videos` and the info key
+`file-info` matched too[^issue-113-editor-save]. The imported VP9 `.webm`'s
+`video/webm` depends on the browser's `File.type`: it is consistent with the
+prediction given Chrome's `File.type`. Chrome is a user report made after the
+save capture was written, not an observation; the capture lists the browser as
+not recorded. The info key follows the
 section: `script` -> `script-info`, `icon` -> `icon-info`, the other five ->
 `file-info` (`C3_FILE_INFO_KEYS`), with default purpose `"none"`
 (`C3_DEFAULT_FILE_INFO_PURPOSE`)[^issue-113-bundle-evidence].

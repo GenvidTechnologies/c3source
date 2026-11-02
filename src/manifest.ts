@@ -1339,10 +1339,12 @@ export const C3_DEFAULT_FILE_INFO_PURPOSE = "none";
  * Per-section extension overrides of {@link EXTENSION_FILE_TYPES}, keyed by section, then by
  * dotted lowercase extension. Read through {@link fileTypeForSection}.
  *
- * The `video` `.webm` cell exists because the section hint `video/` selects the second
- * `.webm` registration, `video/webm`, over the first, `audio/webm; codecs=opus` [bundle r495].
- * The `.ogv` row is the registry's only `.ogv` entry, `video/ogg` [bundle r495]. The `.mov`
- * row, `video/quicktime`, is the type the editor recorded for a `.mov` in the video section.
+ * Only the `video` `.webm` cell is a true section override: the section hint `video/` selects
+ * the second `.webm` registration, `video/webm`, over the first,
+ * `audio/webm; codecs=opus` [bundle r495]. The `.ogv` and `.mov` rows are section-scoped
+ * additions for extensions the flat table lacks. The bundle registers each of them once,
+ * `video/ogg` and `video/quicktime`, independent of section [bundle r495]; the editor recorded
+ * `video/quicktime` for a `.mov` in the video section [editor save r50603].
  * The `.webm`, `.ogv` and `.mov` cells are confirmed by one editor save at r506.3
  * [editor save r50603], so they are UNVALIDATED (one save). The imported `.webm` also
  * recorded `video/webm`, which depends on the browser's `File.type`. Evidence:
@@ -1362,12 +1364,14 @@ export const SECTION_EXTENSION_FILE_TYPES: Partial<Record<C3FileSection, Record<
  * - **Rescanning the `videos/` folder on disk:** a file is admitted when the category of its
  *   registry type (the first segment of the type string) is `video`. The type is looked up
  *   by extension with the section hint `video/` [bundle r495]. This is not a list of
- *   extensions. For example `.mpg`, `.mov` and `.avi` have `video/` registry types, so a
- *   rescan can admit them although the dialog does not offer them.
+ *   extensions. For example `.mpg`, `.mov` and `.avi` have `video/` registry types, so the
+ *   bundle predicts a rescan can admit them although the dialog does not offer them. Only
+ *   `.mov` was observed being admitted [editor save r50603].
  *
- * The content checks (`Acs` and `Ocs` in the bundle) belong to the import paths, not to the
- * folder rescan [bundle r495]. They decide which section accepts an imported file, not which
- * `type` is stored.
+ * The content checks (`Acs` and `Ocs` in the bundle) appear in the folder-import dialog's
+ * `_us` callback, while the rescan computes admission by registry category [bundle r495].
+ * Inference: the rescan runs no content check, a reading from absence. The content checks
+ * decide which section accepts an imported file, not which `type` is stored.
  *
  * The `type` of a file added through the Import dialog depends on the browser's `File.type`:
  * a registered `File.type` that lists the extension is kept, otherwise the lookup runs with
@@ -1379,11 +1383,16 @@ export const SECTION_EXTENSION_FILE_TYPES: Partial<Record<C3FileSection, Record<
 export const C3_VIDEO_IMPORT_EXTENSIONS = [".webm", ".ogv", ".mp4"] as const;
 
 /**
- * The `type` (MIME) the C3 editor would record for a file named `name` in the given section.
- * Section-aware form of {@link fileTypeForName}: it applies the section's row in
- * {@link SECTION_EXTENSION_FILE_TYPES} when the extension has one, and otherwise returns
+ * The `type` (MIME) for a file named `name` in the given section, where the editor's type is
+ * known to c3source. Section-aware form of {@link fileTypeForName}: it applies the section's
+ * row in {@link SECTION_EXTENSION_FILE_TYPES} when the extension has one, and otherwise returns
  * {@link fileTypeForName}`(name)`. Name parsing is the same as {@link fileTypeForName}: only
  * the basename of a `/`- or `\`-separated path counts, case-insensitively.
+ *
+ * **Known gap:** an extension in neither table falls back to {@link C3_DEFAULT_FILE_TYPE},
+ * because the flat table is frozen. The editor registry has a single registration for some
+ * of them, so it would record a `video/*` type: `fileTypeForSection("general", "x.mov")`,
+ * `("sound", "x.ogv")` and `("video", "x.avi")` all return `application/octet-stream`.
  *
  * The section overrides come from the bundle [bundle r495]. The `.webm`, `.ogv` and `.mov`
  * cells are confirmed by one editor save at r506.3 [editor save r50603], so they are

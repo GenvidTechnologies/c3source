@@ -66,8 +66,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 
 - Probe 10 of `scripts/scan-domain-facts.mjs` checks the section rows before the
-  flat table. Its output on the 14 local projects is unchanged (572 MATCH, 0
-  MISMATCH, 0 UNMAPPED).
+  flat table. Its output on the 14 local projects was identical before and after
+  the change (572 MATCH, 0 MISMATCH, 0 UNMAPPED, measured 2026-11-02).
 - The canonical fixture pin moves to `construct3-sample` v1.3.0, which adds five
   clips to the `video` section. It was saved in C3 r506.3, so `savedWithRelease`
   is 50603 and the manifest has a top-level `saveLLMContextFile: true`. The
