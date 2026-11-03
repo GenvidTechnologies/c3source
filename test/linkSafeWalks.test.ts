@@ -25,12 +25,15 @@ import {
   openProject,
   walkDiskFileTree,
   walkDiskNameTree,
+  type SkippedLink,
 } from "../src/c3source.js";
 import { fixtureProjectPath } from "./fixtureHelpers.js";
 
 // Link-safe disk walks (#114). Every link below targets an absolute path inside a mkdtemp tree
 // created by this file, so cleanup can never reach real data. On Windows a "junction" link needs
-// no privilege; elsewhere the type is ignored and a plain symlink is created.
+// no privilege; elsewhere the type is ignored and a plain symlink is created. The file-symlink
+// cases need symlink privilege on Windows (Developer Mode or an elevated shell): without it they
+// fail with EPERM. That is the environment, not a regression; the tests deliberately do not skip.
 
 const tmpRoots: string[] = [];
 
@@ -108,16 +111,9 @@ function writeManifest(dir: string, overrides: Record<string, unknown> = {}): vo
 const LINK_KINDS = ["loop", "dangling"] as const;
 const LINK_PLACES = ["at root", "below root"] as const;
 
-/** The advisory `links` records, read through a local type so this file does not depend on the new export. */
-interface LinkRecord {
-  section: string;
-  folder: string;
-  name: string;
-  diskPath: string[];
-}
-
-function linksOf(result: unknown): LinkRecord[] | undefined {
-  return (result as { links?: LinkRecord[] }).links;
+/** The advisory `links` records of a drift result. */
+function linksOf(result: { links?: SkippedLink[] }): SkippedLink[] | undefined {
+  return result.links;
 }
 
 /** All seven rootFileFolders categories, each empty. */
@@ -502,6 +498,22 @@ describe("#114 link-safe disk walks", function () {
           { section: "rootFileFolders.script", folder: "scripts", name: "dangScript", diskPath: [] },
           { section: "images", folder: "images", name: "dangImage", diskPath: [] },
         ]);
+      });
+
+      it("#114 D4 images links are listed in sorted name order", function () {
+        const { root, project } = newProject();
+        const images = path.join(project, "images");
+        mkdirSync(images, { recursive: true });
+        // "Zebra" sorts before "apple" by code point, while a case-insensitive directory listing
+        // (NTFS) returns "apple" first, so the order cannot come from the listing.
+        const apple = path.join(images, "apple");
+        const zebra = path.join(images, "Zebra");
+        seedDangling(path.join(root, "scratchApple"), apple);
+        seedDangling(path.join(root, "scratchZebra"), zebra);
+        for (const link of [apple, zebra]) expect(lstatSync(link).isSymbolicLink()).to.equal(true);
+
+        const drift = detectManifestDrift(project);
+        expect(linksOf(drift)?.map((l) => l.name)).to.deep.equal(["Zebra", "apple"]);
       });
 
       it("#114 D4 a project whose only finding is a link is in sync", function () {

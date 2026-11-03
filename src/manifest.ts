@@ -1722,9 +1722,9 @@ function imageDriftLists(projectDir: string): ImageDriftLists | null {
       : (actualNameByStem.get(e.stem) ?? `${e.stem}${C3_LEGACY_IMAGE_EXTENSION}`),
   );
 
-  const links = readdirSync(imagesDir).filter(
-    (f) => !isEditorLocalPath(f) && lstatSync(path.join(imagesDir, f)).isSymbolicLink(),
-  );
+  const links = readdirSync(imagesDir)
+    .sort()
+    .filter((f) => !isEditorLocalPath(f) && lstatSync(path.join(imagesDir, f)).isSymbolicLink());
 
   return {
     expected: expectedNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
