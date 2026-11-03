@@ -5,7 +5,7 @@ description: c3source is a TypeScript library of typed interfaces and traversal/
 tags: [overview, architecture, consumers, c3source]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-11-02T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -15,6 +15,10 @@ sources:
     resource: ../raw/docs-api-guide-2026-08-20.md
     title: "docs/api-guide.md (c3source API guide, 2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: wiki-review
+    resource: ../raw/wiki-review-module-architecture-library-overview-2026-11-02.md
+    title: "Wiki review of module-architecture.md and library-overview.md against main (2026-11-02 capture)"
+    last_modified: 2026-11-02
 ---
 
 # Library Overview
@@ -81,7 +85,7 @@ silent false negatives or purely cosmetic[^claude-md].
 Deliberately, **numbers never go in JSDoc**: JSDoc ships to consumers inside
 `dist/*.d.ts`, where a claim like "audited against 14 projects" goes false the
 day a 15th project is scanned. Counts, release lists, and scan dates live in
-the maintainer's own audit doc instead; JSDoc carries only the confidence
+[C3 Domain Facts](/c3-domain-facts.md) instead[^wiki-review]; JSDoc carries only the confidence
 label and a pointer. A **release pin** (e.g. `r402`, `r437`) is the one
 exception allowed in JSDoc, because it names a fixed historical fact rather
 than a rotting count[^claude-md].
@@ -108,6 +112,8 @@ just its *values*, and the audit convention exists to catch both[^claude-md].
 - [C3Project Handle](/c3project-handle.md) — the root-bound convenience handle over the free-function API.
 - [Event-Sheet Extraction](/event-sheet-extraction.md) — script, function, and reference extraction from event sheets.
 - [Serialization Form](/serialization-form.md) — the on-disk write form this library reproduces exactly.
+- [C3 Domain Facts](/c3-domain-facts.md) — the C3 platform facts behind the pinned tables, with the corpus counts and scan dates.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide]: docs/api-guide.md (c3source API guide, 2026-08-20 capture)
+[^wiki-review]: Wiki review of module-architecture.md and library-overview.md against main (2026-11-02 capture), section 4

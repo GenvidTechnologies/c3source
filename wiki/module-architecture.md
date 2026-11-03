@@ -5,7 +5,7 @@ description: c3source's logic is split across seven per-area modules imported in
 tags: [architecture, modules, esm, api-surface, build]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-11-02T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -15,6 +15,10 @@ sources:
     resource: ../raw/2026-08-20-jsdoc-dump-asymmetry-experiment.md
     title: "Controlled api-surface JSDoc-asymmetry experiment (2026-08-20 capture)"
     last_modified: 2026-08-20
+  - id: wiki-review
+    resource: ../raw/wiki-review-module-architecture-library-overview-2026-11-02.md
+    title: "Wiki review of module-architecture.md and library-overview.md against main (2026-11-02 capture)"
+    last_modified: 2026-11-02
 ---
 
 # Module Architecture
@@ -32,7 +36,9 @@ Logic is split across seven per-area modules — `src/serialize.ts`,
   **mutually independent siblings**.
 - `references` sits one tier above that sibling group, importing `layouts`,
   `eventSheets`, `addons`, and `manifest`.
-- `project` imports all of the above, at the top of the DAG.
+- `project` imports `layouts`, `eventSheets`, `manifest`, `addons`, and
+  `references`, at the top of the DAG. It does not import `serialize`
+  directly; it reaches `serialize` only through those modules[^wiki-review].
 
 [ADR 0012](/decisions/0012-per-area-module-split.md) records the split
 rationale — it supersedes the module-layout half of
@@ -120,7 +126,10 @@ moved the dump, the raw delta would have been four or more
 lines[^jsdoc-asymmetry-experiment]. The baseline for that comparison came from
 `git stash push -- src/`, rebuild, dump, `git stash pop`, rebuild — isolating
 the `src/` change from everything else in the working tree so the two dumps
-differ by nothing else[^jsdoc-asymmetry-experiment]. The practical rule this
+differ by nothing else[^jsdoc-asymmetry-experiment]. A baseline taken today
+is better built without touching the working tree, from `git show
+<base>:<path>` or a scratch worktree, because stashing can disturb
+uncommitted work. The practical rule this
 yields: to predict a dump delta, count only the comments attached to
 interface/type members — const comments are free[^jsdoc-asymmetry-experiment].
 And the empty JSDoc-stripped diff, not the raw one, is the real "no signature
@@ -154,3 +163,4 @@ genuinely leave comments alone.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^jsdoc-asymmetry-experiment]: Controlled api-surface JSDoc-asymmetry experiment (2026-08-20 capture)
+[^wiki-review]: Wiki review of module-architecture.md and library-overview.md against main (2026-11-02 capture), section 1
