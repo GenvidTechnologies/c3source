@@ -183,6 +183,25 @@ export interface ManifestDrift {
    * Ordered by the walk order of sections, then by name.
    */
   duplicates?: DuplicateName[];
+  /**
+   * Symbolic links and junctions found below a section root and not followed (see {@link SkippedLink}).
+   * **Advisory, never drift**: never counted by {@link ManifestDrift.inSync}. Present only when
+   * non-empty — same convention as {@link ManifestDrift.degraded} and {@link ManifestDrift.strays}.
+   * Ordered by the walk order of sections, then pre-order with sorted names within a section.
+   */
+  links?: SkippedLink[];
+}
+
+/** A symbolic link or junction found below a section root and not followed. Advisory, never drift. */
+export interface SkippedLink {
+  /** The section, e.g. `"layouts"`, `"rootFileFolders.script"`, `"images"`. */
+  section: string;
+  /** The section's on-disk folder, e.g. `"layouts"`, `"scripts"`, `"images"`. */
+  folder: string;
+  /** The bare basename of the link. */
+  name: string;
+  /** Section-root-relative subfolder segments of the link's parent; `[]` at the section root. */
+  diskPath: ManifestPathSegment[];
 }
 
 // ─── Private guards ───────────────────────────────────────────────────────────
@@ -1030,16 +1049,34 @@ function collectManifestFolderPaths(
     .map((v) => ({ path: v.path, origin: v.origin }));
 }
 
-/** Collect every subdirectory path (segment chains, section-root-relative) on disk, editor-local filtered. */
-function collectDiskFolderPaths(dir: string, base: ManifestPathSegment[] = []): ManifestPathSegment[][] {
+/** A symbolic link or junction met by {@link collectDiskFolderPaths}: its name and its parent's path. */
+interface DiskLink {
+  name: string;
+  path: ManifestPathSegment[];
+}
+
+/**
+ * Collect every subdirectory path (segment chains, section-root-relative) on disk, editor-local filtered.
+ * A symbolic link or junction is not followed and is not returned; it is pushed to `links` when given.
+ */
+function collectDiskFolderPaths(
+  dir: string,
+  base: ManifestPathSegment[] = [],
+  links?: DiskLink[],
+): ManifestPathSegment[][] {
   if (!existsSync(dir)) return [];
   const out: ManifestPathSegment[][] = [];
   for (const entry of readdirSync(dir).sort()) {
     if (isEditorLocalPath(entry)) continue;
-    if (lstatSync(path.join(dir, entry)).isDirectory()) {
+    const st = lstatSync(path.join(dir, entry));
+    if (st.isSymbolicLink()) {
+      links?.push({ name: entry, path: base });
+      continue;
+    }
+    if (st.isDirectory()) {
       const childPath = [...base, entry];
       out.push(childPath);
-      out.push(...collectDiskFolderPaths(path.join(dir, entry), childPath));
+      out.push(...collectDiskFolderPaths(path.join(dir, entry), childPath, links));
     }
   }
   return out;
@@ -1091,11 +1128,16 @@ function diffFolderPaths(
  *
  * The result also carries the advisory {@link ManifestDrift.duplicates}: item names occurring more
  * than once in a section. They never count as drift and never affect `inSync`.
+ *
+ * A symbolic link or junction below a section root is not followed: it is not an item, not a
+ * folder and not a stray. Each one is listed in the advisory {@link ManifestDrift.links}, which is
+ * never drift and never affects `inSync`. A tree with no such link has no `links` key.
  */
 export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
   const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
   const sections: SectionDrift[] = [];
   const duplicates: DuplicateName[] = [];
+  const links: SkippedLink[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
     // timelines exception: the unnamed top-level subfolder is the on-disk transitions/ ("Eases") dir.
@@ -1103,10 +1145,12 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     const declared = sectionFolder ? walkManifestNameTree(sectionFolder, [], unnamed) : [];
     const onDisk = walkDiskNameTree(path.join(projectDir, folderName));
     const itemEntries = diffNameMaps(declared, onDisk);
+    const skipped: DiskLink[] = [];
     const folderEntries = diffFolderPaths(
       sectionFolder ? collectManifestFolderPaths(sectionFolder, [], unnamed) : [],
-      collectDiskFolderPaths(path.join(projectDir, folderName)),
+      collectDiskFolderPaths(path.join(projectDir, folderName), [], skipped),
     );
+    for (const l of skipped) links.push({ section, folder: folderName, name: l.name, diskPath: l.path });
     const entries = sortDriftEntries([...itemEntries, ...folderEntries]);
     if (entries.length) sections.push({ section, folder: folderName, entries });
     duplicates.push(...collectDuplicateNames(section, folderName, "section", declared, onDisk));
@@ -1118,10 +1162,13 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
       const declared = isRecord(folder) ? walkManifestFileTree(folder) : [];
       const diskDir = path.join(projectDir, folderName);
       const onDisk = walkDiskFileTree(diskDir, isRecord(folder) ? folder.subfolders : [], [], { walkUndeclared: true });
+      const skipped: DiskLink[] = [];
       const folderEntries = diffFolderPaths(
         isRecord(folder) ? collectManifestFolderPaths(folder) : [],
-        collectDiskFolderPaths(diskDir),
+        collectDiskFolderPaths(diskDir, [], skipped),
       );
+      for (const l of skipped)
+        links.push({ section: `rootFileFolders.${cat}`, folder: folderName, name: l.name, diskPath: l.path });
       const entries = sortDriftEntries([...diffNameMaps(declared, onDisk), ...folderEntries]);
       if (entries.length) sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, entries });
       duplicates.push(...collectDuplicateNames(`rootFileFolders.${cat}`, folderName, "folder", declared, onDisk));
@@ -1135,6 +1182,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
       const entries = diffNameMaps(lists.expected, lists.actual);
       if (entries.length) sections.push({ section: "images", folder: IMAGES_FOLDER, entries });
       duplicates.push(...collectDuplicateNames("images", IMAGES_FOLDER, "folder", lists.expected, lists.actual));
+      for (const name of lists.links) links.push({ section: "images", folder: IMAGES_FOLDER, name, diskPath: [] });
     }
   } catch (err) {
     // Best-effort: never fail core drift on image derivation — but never hide the
@@ -1151,6 +1199,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     ...(degraded ? { degraded } : {}),
     ...(strayFiles.length ? { strays: strayFiles } : {}),
     ...(duplicates.length ? { duplicates } : {}),
+    ...(links.length ? { links } : {}),
   };
 }
 
@@ -1623,6 +1672,9 @@ function stripExt(fileName: string): string {
  * unknown (present-but-unmapped) `fileType` in any object type causes `deriveExpectedImages` to
  * throw; that error propagates to the caller. `detectManifestDrift` wraps this function in a
  * try/catch so such a failure degrades gracefully to "images section omitted".
+ *
+ * A symbolic link or junction below `images/` is not followed and is not an image, so it never
+ * appears in the result. {@link detectManifestDrift} lists such links in {@link ManifestDrift.links}.
  */
 export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManifest): SectionDrift | null {
   const lists = imageDriftLists(projectDir);
@@ -1638,6 +1690,8 @@ export function detectImageDrift(projectDir: string, _manifest?: C3ProjectManife
 interface ImageDriftLists {
   expected: Array<{ name: string; path: ManifestPathSegment[] }>;
   actual: Array<{ name: string; path: ManifestPathSegment[] }>;
+  /** Root-level names in `images/` that are symbolic links or junctions: skipped, not followed. */
+  links: string[];
 }
 
 /** Build the lists {@link detectImageDrift} diffs; `null` if `images/` is absent. May throw
@@ -1668,9 +1722,14 @@ function imageDriftLists(projectDir: string): ImageDriftLists | null {
       : (actualNameByStem.get(e.stem) ?? `${e.stem}${C3_LEGACY_IMAGE_EXTENSION}`),
   );
 
+  const links = readdirSync(imagesDir).filter(
+    (f) => !isEditorLocalPath(f) && lstatSync(path.join(imagesDir, f)).isSymbolicLink(),
+  );
+
   return {
     expected: expectedNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
     actual: actualNames.map((n) => ({ name: n, path: [] as ManifestPathSegment[] })),
+    links,
   };
 }
 
