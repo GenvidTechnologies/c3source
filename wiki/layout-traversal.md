@@ -42,6 +42,14 @@ project. The root itself may be a link, and it is followed. `walkDiskNameTree`,
 `detectManifestDrift` reports the skipped links in its advisory `links` field
 ([ADR 0037](/decisions/0037-link-safe-disk-walks.md)).
 
+The per-level `.sort()` is required, not cosmetic. On Windows (NTFS),
+`readdirSync` lists names in a case-insensitive order (`apple`, `Zebra`), while
+`.sort()` gives code-point order (`Zebra`, `apple`), and other platforms give
+other orders. A walk that keeps the listing order is ordered differently per
+platform and differs from the documented order. Every walk level sorts its
+names before it uses them ([ADR 0037](/decisions/0037-link-safe-disk-walks.md),
+Evidence).
+
 It is exported precisely so a downstream tool can discover non-source
 artifacts (e.g. a generator's own `.dsl.txt` sidecar files) through the same
 walk, instead of maintaining a second, parallel collector that silently

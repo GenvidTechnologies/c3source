@@ -85,6 +85,8 @@ Behaviour on real data: a copy of `src/` with the `lstatSync` swap gave byte-ide
 
 Why `lstat` and not Dirent: libuv v1.51.0 `src/win/fs.c`, the libuv of Node 24.11.1[^libuv-win-fs]. `scandir` and `lstat` disagree on non-link reparse points, as described under Compromise. Not measured: no cloud-file placeholder was available to observe, so the case rests on the libuv source.
 
+Ordering: on Windows (NTFS), `readdirSync` over `Zebra.png`, `apple.png` and `banana.png` returned `["apple.png", "banana.png", "Zebra.png"]`, a case-insensitive order, while `.sort()` gives `["Zebra.png", "apple.png", "banana.png"]` (measured in review). The images list of `links` therefore sorts its names like every other walk level. A test with the names `apple` and `Zebra` fails without the sort.
+
 Downstream callers, searched across the organisation's code: no consumer calls `walkDiskNameTree` or `walkDiskFileTree`. `find_all_files_path` is called once, in construct3-chef's navigation graph, on a chef-generated directory of `.dsl.txt` files.
 
 ## Consequences

@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-11-03
 
+* **Update**: layout-traversal.md (the per-level `.sort()` is required because Windows `readdirSync` lists names case-insensitively) and decisions/0037-link-safe-disk-walks.md (the ordering measurement under Evidence); driven by the review of issue #114.
 * **Creation**: decisions/0037-link-safe-disk-walks.md (and its entry in decisions/index.md); **Update**: decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md (Status line and description only, naming ADR 0037 as superseding its unguarded-`ELOOP` consequence; the index entry likewise), project-manifest.md (the `links` field in the drift result shape and a "Links are not followed" subsection), layout-traversal.md (the link rule of `find_all_files_path`) and design-patterns.md (`links` joins the advisory fields); driven by issue #114 and ADR 0037.
 
 ## 2026-11-02
