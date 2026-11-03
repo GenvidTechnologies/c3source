@@ -1,7 +1,7 @@
 ---
 type: decision-context
 title: "ADR 0035 — File-folder drift walks undeclared subdirectories and reports folder entries; walkDiskFileTree keeps declared-only as its default"
-description: detectManifestDrift walks every non-editor-local subdirectory of a rootFileFolders category and emits folder-missing / folder-untracked for file sections, so a file moved into an undeclared subfolder reads as moved rather than missing. walkDiskFileTree gains an opt-in walkUndeclared option and keeps declared-only descent as its default, so the change is a non-breaking minor. Partially supersedes ADR 0020's remark that ts-defs/ is invisible to drift by a second mechanism.
+description: detectManifestDrift walks every non-editor-local subdirectory of a rootFileFolders category and emits folder-missing / folder-untracked for file sections, so a file moved into an undeclared subfolder reads as moved rather than missing. walkDiskFileTree gains an opt-in walkUndeclared option and keeps declared-only descent as its default, so the change is a non-breaking minor. Partially supersedes ADR 0020's remark that ts-defs/ is invisible to drift by a second mechanism. Its consequence about an unguarded ELOOP on links is superseded by ADR 0037: walks no longer follow links below a walk root.
 tags: [adr, manifest, drift-detection, traversal]
 status: stable
 generated: { by: process:maintain-wiki, at: 2026-10-31T12:00:00Z }
@@ -13,7 +13,7 @@ sources:
 
 # ADR 0035 — File-folder drift walks undeclared subdirectories and reports folder entries; `walkDiskFileTree` keeps declared-only as its default
 
-**Status:** accepted
+**Status:** accepted; its Consequences bullet that leaves an `ELOOP` on a looping link unguarded is superseded by [ADR 0037](/decisions/0037-link-safe-disk-walks.md)
 **Date:** 2026-10-31
 **Issue:** [#110](https://github.com/GenvidTechnologies/c3source/issues/110)
 
