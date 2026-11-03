@@ -80,7 +80,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   **Behaviour change for direct callers:** `find_all_files_path`, the
   `find_all_*_path` collectors, `walkDiskNameTree`, `walkDiskFileTree` and
   `C3Project.findAll*` no longer return the contents of a link on a tree that
-  holds one. A tree with no link gives byte-identical results.
+  holds one. A tree with no link gives byte-identical results. See
+  [ADR 0037](wiki/decisions/0037-link-safe-disk-walks.md), which also records
+  why this ships as a minor.
 
 ### Changed
 

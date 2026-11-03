@@ -45,7 +45,7 @@ ADR 0035 made the file-section walk enter undeclared directories, which widened 
 
 **Roots are still followed.** A walk root (a section root or the project directory) that is itself a link is followed and not reported. Only links below a walk root are skipped. A dangling root already reads as absent through `existsSync`.
 
-**File symlinks are not members.** Every link is skipped, file or directory.
+**File symlinks are not members.** Every link is skipped, file or directory. The item branch of `walkDiskNameTree` now requires `isFile()`, so an entry named `*.json` that is not a regular file (a link, a FIFO, a socket or a device) is not an item either.
 
 **`images/` is included.** A dangling link in `images/` no longer degrades the section, and a direct `detectImageDrift` call no longer throws.
 
@@ -56,7 +56,7 @@ ADR 0035 made the file-section walk enter undeclared directories, which widened 
 ## Compromise
 
 - **Option A: no-follow walks plus an advisory `links` report (recommended)** — chosen. It is the pattern in [Design Patterns](/design-patterns.md): an advisory field is additive and never a new `DriftKind`. Its failure is visible under either answer to the open C3 question below.
-- **Option B: no-follow walks, silent skip.** Rejected. It is chef's precedent (its `readDiskDir` drops links) and saves about 25 lines of `src/`. But a declared item stored behind a link then reads `missing` or `folder-missing` with nothing explaining why. The repo's rule against silent drops ([ADR 0023](/decisions/0023-pre-r402-image-serialization-drift-degradation.md): a rare silent failure is the worst kind) argues against it.
+- **Option B: no-follow walks, silent skip.** Rejected. It is chef's precedent (its `readDiskDir` drops links) and saves about 25 lines of `src/`. But a declared item stored behind a link then reads `missing` or `folder-missing` with nothing explaining why. The repo's rule against silent drops argues against it: [ADR 0023](/decisions/0023-pre-r402-image-serialization-drift-degradation.md) made a caught image failure surface as `degraded` because silently dropping the images section was the worse outcome.
 - **Option C: follow links that stay inside the project.** Rejected. It keeps following, but calls `realpathSync` on each link: skip a dangling or `ELOOP` link, skip a target outside the project, follow a target inside with a visited-realpath set. The costs:
   - The exported walks need a new containment-root parameter, because `walkDiskNameTree(diskFolder)` does not know the project directory.
   - An inside link double-counts items, which produces spurious `duplicates` and an `untracked` entry at the link path.
