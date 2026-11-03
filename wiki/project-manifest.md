@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-11-02T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-03T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -163,7 +163,7 @@ fields (filenames like `"main.ts"`)[^api-guide-manifest].
 
 `detectManifestDrift(projectDir, manifest?)` compares declared membership
 against on-disk source (editor-local files filtered via `isEditorLocalPath`)
-and returns `ManifestDrift: {sections, inSync, degraded?, strays?, duplicates?}`. Each
+and returns `ManifestDrift: {sections, inSync, degraded?, strays?, duplicates?, links?}`. Each
 `SectionDrift` carries `entries: DriftEntry[]` — a structured list where
 every entry has a `kind` (`missing` | `untracked` | `moved` |
 `folder-missing` | `folder-untracked` | `dangling-ref`) and path-segment
@@ -220,6 +220,29 @@ occurrences in the **same folder** count. Comparison is case-sensitive. Like
 `degraded` and `strays`, the field is omitted when empty and **never counted
 by `inSync`** — a duplicate is advisory, not drift. The per-section scope and
 the case sensitivity are **UNVALIDATED**[^issue-97-101-evidence].
+
+### Links are not followed
+
+Every disk walk that drift uses classifies entries with `lstatSync`, so a
+symbolic link or junction **below** a section root is neither followed nor
+counted. It is not an item, not a folder and not a stray, and a file symlink is
+not a member. This holds for the name sections, the `rootFileFolders` sections
+and `images/`. A loop or a dangling link therefore no longer makes
+`detectManifestDrift` throw, and the contents of a link that points outside the
+project are not imported. A section root or the project directory that is itself
+a link is still followed and not reported.
+
+Each skipped link is listed in the advisory `ManifestDrift.links?:
+SkippedLink[]`. A `SkippedLink` has `section` (for example `"layouts"`,
+`"rootFileFolders.script"` or `"images"`), `folder` (the section's on-disk
+folder), `name` (the link's basename) and `diskPath` (the section-root-relative
+subfolder segments of its parent, `[]` at the section root). The field is
+omitted when empty, **never counted by `inSync`**, and listed in section walk
+order, then pre-order with sorted names. An editor-local name such as `uistate`
+is skipped before the link test, so it is never listed. Whether C3 follows such
+a link on load is **UNVALIDATED**; if it does, an item stored behind a link
+reads `missing`, and `links` shows why. See [ADR
+0037](/decisions/0037-link-safe-disk-walks.md).
 
 ### Containers drift
 
@@ -411,6 +434,7 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 - [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — why a `.json` file is a stray and a declared `""` reads as `missing`.
 - [ADR 0034 — A declared empty item name fails manifest validation](/decisions/0034-declared-empty-item-name-fails-manifest-validation.md) — rule `name-folder-item-empty` and why it is a trailing pass.
 - [ADR 0035 — File-folder drift walks undeclared subdirectories](/decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md) — why file sections report folder entries and `walkDiskFileTree` keeps declared-only as its default.
+- [ADR 0037 — Disk walks never follow links below a walk root](/decisions/0037-link-safe-disk-walks.md) — why a symbolic link is skipped and reported in the advisory `links`.
 
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide-manifest]: docs/api-guide-manifest.md (c3source API guide, 2026-08-20 capture)

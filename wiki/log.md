@@ -15,6 +15,11 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-11-03
+
+* **Update**: layout-traversal.md (the per-level `.sort()` is required because Windows `readdirSync` lists names case-insensitively) and decisions/0037-link-safe-disk-walks.md (the ordering measurement under Evidence); driven by the review of issue #114.
+* **Creation**: decisions/0037-link-safe-disk-walks.md (and its entry in decisions/index.md); **Update**: decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md (Status line and description only, naming ADR 0037 as superseding its unguarded-`ELOOP` consequence; the index entry likewise), project-manifest.md (the `links` field in the drift result shape and a "Links are not followed" subsection), layout-traversal.md (the link rule of `find_all_files_path`) and design-patterns.md (`links` joins the advisory fields); driven by issue #114 and ADR 0037.
+
 ## 2026-11-02
 
 * **Update**: c3-domain-facts.md (the file-entry `type` section now names the editor's MIME registry and section hint, states the `video` section rows and both extension sets, and replaces the untested-`.webm` residual with the r506.3 save evidence), project-manifest.md (the section override and the new exports; `video` is no longer inferred) and canonical-fixture.md (pin v1.3.0, `b76dd45`, 127 files, new version-history row); driven by `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and `raw/issue-113-video-section-editor-save-2026-11-02.md` (issue #113).

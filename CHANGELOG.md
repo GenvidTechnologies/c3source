@@ -62,6 +62,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   removed against 3.1.0
   ([#113](https://github.com/GenvidTechnologies/c3source/issues/113)) — see
   [ADR 0036](wiki/decisions/0036-section-aware-file-entry-type-and-info-keys.md).
+- **`SkippedLink` and the advisory `ManifestDrift.links`.** `detectManifestDrift`
+  lists each symbolic link or junction it skipped below a section root as a
+  `SkippedLink` (`section`, `folder`, `name`, `diskPath`). The field is omitted
+  when empty and never counted by `inSync`. One type added, none removed
+  ([#114](https://github.com/GenvidTechnologies/c3source/issues/114)) — see
+  [ADR 0037](wiki/decisions/0037-link-safe-disk-walks.md).
+
+### Fixed
+
+- **Disk walks no longer follow links below a walk root.** A link loop or a
+  dangling link no longer makes `detectManifestDrift` throw `ELOOP` or `ENOENT`,
+  the contents of a link that points outside the project are no longer imported
+  as members, and a file symlink is no longer counted as a member. A walk root
+  that is itself a link is still followed
+  ([#114](https://github.com/GenvidTechnologies/c3source/issues/114)).
+  **Behaviour change for direct callers:** `find_all_files_path`, the
+  `find_all_*_path` collectors, `walkDiskNameTree`, `walkDiskFileTree` and
+  `C3Project.findAll*` no longer return the contents of a link on a tree that
+  holds one. A tree with no link gives byte-identical results. See
+  [ADR 0037](wiki/decisions/0037-link-safe-disk-walks.md), which also records
+  why this ships as a minor.
 
 ### Changed
 

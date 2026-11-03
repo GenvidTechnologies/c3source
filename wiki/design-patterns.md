@@ -5,7 +5,7 @@ description: Reusable engineering patterns c3source has settled on — single-so
 tags: [design-patterns, traversal, validation, testing, drift]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-10-31T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-03T12:00:00Z }
 sources:
   - id: docs-design-patterns
     resource: ../raw/docs-design-patterns-2026-08-20.md
@@ -218,7 +218,7 @@ a degraded sub-detector, a stray file, a repeated item name. Folding them into
 them hides real information.
 
 **Shape.** Each is an optional field on `ManifestDrift` — `degraded`, `strays`,
-and `duplicates` — **omitted when empty** (so a clean project's result is
+`duplicates` and `links` — **omitted when empty** (so a clean project's result is
 byte-identical to an older one) and **never counted by `inSync`**. Adding one is
 additive, never a new `DriftKind`.
 

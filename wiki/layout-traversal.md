@@ -5,7 +5,7 @@ description: find_all_files_path is the single canonical recursive disk walk und
 tags: [traversal, layouts, filesystem, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-10-27T19:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-03T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -33,6 +33,22 @@ recursive descent itself, the `uistate/` skip, and the per-level
 thin wrapper over it[^claude-md]. It skips `.uistate.json` files and never
 descends into `uistate/` subfolders — a folder C3 r487+ writes alongside
 layouts, object types, and event sheets[^claude-md].
+
+The walk classifies each entry with `lstatSync`, so a symbolic link or junction
+below the walk root is neither followed nor returned, whether it points to a
+file or a directory, loops back on an ancestor, dangles or points outside the
+project. The root itself may be a link, and it is followed. `walkDiskNameTree`,
+`walkDiskFileTree` and the images walk follow the same rule, and
+`detectManifestDrift` reports the skipped links in its advisory `links` field
+([ADR 0037](/decisions/0037-link-safe-disk-walks.md)).
+
+The per-level `.sort()` is required, not cosmetic. On Windows (NTFS),
+`readdirSync` lists names in a case-insensitive order (`apple`, `Zebra`), while
+`.sort()` gives code-point order (`Zebra`, `apple`), and other platforms give
+other orders. A walk that keeps the listing order is ordered differently per
+platform and differs from the documented order. Every walk level sorts its
+names before it uses them ([ADR 0037](/decisions/0037-link-safe-disk-walks.md),
+Evidence).
 
 It is exported precisely so a downstream tool can discover non-source
 artifacts (e.g. a generator's own `.dsl.txt` sidecar files) through the same

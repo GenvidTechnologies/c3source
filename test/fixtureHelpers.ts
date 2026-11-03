@@ -157,6 +157,11 @@ export function sdkFixtureAvailable(rel: string): boolean {
  *
  * The manifest is written with `writeC3JsonFile` rather than a second hand-rolled
  * tab-indent literal, so temp projects are byte-shaped exactly like real ones.
+ *
+ * It writes only `project.c3proj` and creates no section folders. A manifest that must
+ * pass `parseProjectManifest` needs `name`, a string `runtime`, `projectFormatVersion`
+ * and `savedWithRelease`. `test/linkSafeWalks.test.ts` has its own `writeManifest` for a
+ * project tree with section folders; lift it here when a second test file needs one.
  */
 export function makeTempProject(manifestJson: unknown): string {
   const dir = mkdtempSync(path.join(tmpdir(), "c3source-manifest-"));
