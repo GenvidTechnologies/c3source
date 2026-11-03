@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import {
   find_all_files_path,
@@ -845,7 +845,9 @@ export function resolveManifestFolders<F extends C3NameFolder | C3FileFolder>(
  * Skips editor-local entries via `isEditorLocalPath`. Returns [] if `diskFolder` absent.
  * Never yields an empty name: an empty-stem `.json` is not a section item
  * (`isSectionItemName`), so it is a stray, not an entry here.
- * Uses `readdirSync`/`statSync` directly (NOT `find_all_files_path`) to preserve path context.
+ * Uses `readdirSync`/`lstatSync` directly (NOT `find_all_files_path`) to preserve path context.
+ * Classifies each entry with `lstatSync`, so a symbolic link or junction below `diskFolder` is
+ * neither descended into nor yielded as an item.
  */
 export function walkDiskNameTree(
   diskFolder: string,
@@ -856,9 +858,10 @@ export function walkDiskNameTree(
   for (const entry of readdirSync(diskFolder).sort()) {
     if (isEditorLocalPath(entry)) continue;
     const full = path.join(diskFolder, entry);
-    if (statSync(full).isDirectory()) {
+    const st = lstatSync(full);
+    if (st.isDirectory()) {
       out.push(...walkDiskNameTree(full, [...basePath, entry]));
-    } else if (isSectionItemName(entry)) {
+    } else if (st.isFile() && isSectionItemName(entry)) {
       out.push({ name: path.basename(entry, ".json"), path: basePath });
     }
   }
@@ -875,6 +878,8 @@ export function walkDiskNameTree(
  * subfolders). `isEditorLocalPath` (which covers `ts-defs/`, `uistate/`, `*.uistate.json` and
  * `tsconfig.json`) is the only exclusion under that option.
  * Emits full filenames WITH extension (file-folder matching is extension-agnostic, R11).
+ * Classifies each entry with `lstatSync`, so a symbolic link or junction below `diskFolder` is
+ * neither descended into nor yielded.
  * Returns [] if `diskFolder` absent.
  */
 export function walkDiskFileTree(
@@ -888,13 +893,14 @@ export function walkDiskFileTree(
   for (const entry of readdirSync(diskFolder).sort()) {
     if (isEditorLocalPath(entry)) continue;
     const full = path.join(diskFolder, entry);
-    if (statSync(full).isDirectory()) {
+    const st = lstatSync(full);
+    if (st.isDirectory()) {
       // Default: only recurse into declared subfolders. Editor-local dirs (e.g. ts-defs/) were
       // already skipped above, so they stay out under walkUndeclared too.
       const matched = declaredSubfolders.find((sf) => sf.name === entry);
       if (matched) out.push(...walkDiskFileTree(full, matched.subfolders, [...basePath, entry], options));
       else if (options?.walkUndeclared) out.push(...walkDiskFileTree(full, [], [...basePath, entry], options));
-    } else if (statSync(full).isFile()) {
+    } else if (st.isFile()) {
       out.push({ name: entry, path: basePath });
     }
   }
@@ -1030,7 +1036,7 @@ function collectDiskFolderPaths(dir: string, base: ManifestPathSegment[] = []): 
   const out: ManifestPathSegment[][] = [];
   for (const entry of readdirSync(dir).sort()) {
     if (isEditorLocalPath(entry)) continue;
-    if (statSync(path.join(dir, entry)).isDirectory()) {
+    if (lstatSync(path.join(dir, entry)).isDirectory()) {
       const childPath = [...base, entry];
       out.push(childPath);
       out.push(...collectDiskFolderPaths(path.join(dir, entry), childPath));
@@ -1651,7 +1657,7 @@ function imageDriftLists(projectDir: string): ImageDriftLists | null {
   }
 
   const actualNames = readdirSync(imagesDir).filter(
-    (f) => !isEditorLocalPath(f) && statSync(path.join(imagesDir, f)).isFile(),
+    (f) => !isEditorLocalPath(f) && lstatSync(path.join(imagesDir, f)).isFile(),
   );
   const actualNameByStem = new Map<string, string>();
   for (const f of actualNames) actualNameByStem.set(stripExt(f), f);

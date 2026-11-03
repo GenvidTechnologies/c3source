@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { writeC3JsonFile } from "./serialize.js";
 
@@ -282,6 +282,9 @@ export function filterAuthoredScriptPaths(paths: string[]): string[] {
  *   editor UI state and generated TS typings into these next to the real files,
  *   and their non-source contents crash the parsers (mirrors the per-file
  *   `.uistate.json` skip the source predicates apply).
+ * - **Links** — a symbolic link or junction below `dir` is neither followed nor
+ *   returned (entries are classified with `lstatSync`). `dir` itself may be a
+ *   link and is followed.
  * - **Ordering** — deterministic, per-level `readdirSync().sort()` depth-first.
  *
  * The named collectors (`find_all_layouts_path`, `find_all_eventsheets_path`, …)
@@ -315,7 +318,7 @@ export function find_all_files_path(
     .sort()
     .forEach((file) => {
       const filepath = path.join(dir, file);
-      const stats = statSync(filepath);
+      const stats = lstatSync(filepath);
       if (stats.isDirectory()) {
         if (!descend(file)) return; // C3 r487+ uistate/ and ts-defs/ subfolders are not descended by default
         result.push(...find_all_files_path(filepath, predicate, descend));
