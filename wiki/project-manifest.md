@@ -167,7 +167,7 @@ fields (filenames like `"main.ts"`)[^api-guide-manifest].
 
 ## Drift detection
 
-`detectManifestDrift(projectDir, manifest?)` compares declared membership
+`detectManifestDrift(projectDir, manifest?, options?)` compares declared membership
 against on-disk source (editor-local files filtered via `isEditorLocalPath`)
 and returns `ManifestDrift: {sections, inSync, degraded?, strays?, duplicates?, links?}`. Each
 `SectionDrift` carries `entries: DriftEntry[]` — a structured list where
@@ -198,6 +198,22 @@ caller that omits the option[^claude-md][^api-guide-manifest]. A future
 C3-generated subtree under a file folder surfaces as drift until it is added to
 `EDITOR_LOCAL_EXCLUSIONS`. See [ADR
 0035](/decisions/0035-file-folder-drift-walks-undeclared-subdirectories.md).
+
+The third parameter is `ManifestDriftOptions`, which has one member,
+`skipFileSections?: boolean`. When it is true, the seven `rootFileFolders`
+sections are not checked: neither their manifest walk nor their disk walk
+runs, and the result has no `rootFileFolders.*` entry in `sections`,
+`duplicates` or `links`. A skipped section is absent and is not listed in
+`degraded`. `inSync` keeps its definition, and no result field records the
+skip. The option interacts with the shape of the manifest in four ways:
+
+- with `rootFileFolders` absent, the file sections are not walked;
+- with `rootFileFolders: {}`, they are walked;
+- with a name-section key absent, its folder is still walked;
+- `skipFileSections` is the supported way to skip the file sections.
+
+Stray detection is not gated by the option. See [ADR
+0039](/decisions/0039-drift-skip-file-sections-option.md).
 
 `diffNameMaps` is the diff engine underneath `detectManifestDrift`: it
 groups the paths of each name per side and keys on **name plus path**, so the
