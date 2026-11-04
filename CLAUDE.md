@@ -14,10 +14,12 @@ the C3 editor. There is no runtime application; it ships as a library.
 
 **Known consumers** (all checked out under `C:\repos` on a dev machine, all
 depending on the published `@genvidtech/c3source`): **`burbank`**, **`construct3-chef`**
-(the heaviest consumer), and **`c3-domain-manager`**. Because the package is
+(the heaviest consumer), and **`c3-domain-manager`**. The fixture repo
+**`construct3-sample`** is a fourth code consumer: its `scripts/validate.mjs`
+calls `detectManifestDrift` (found by `gh search code` during #119). Because the package is
 public, that list is a floor rather than a census — but it is the set whose
 breakage is *observable from this machine*, so **measure the blast radius of an
-API change by grepping all three**, not by reasoning about what a hypothetical
+API change by grepping all four**, not by reasoning about what a hypothetical
 caller might do. The consumers' own decision records are evidence too, and can
 be blocking. See [Library Overview](wiki/library-overview.md) for the worked
 examples behind this rule.
@@ -126,7 +128,9 @@ absent, isn't its own git repository, or the pin can't be established, so
 Tests use **mocha + chai** with `tsx` for on-the-fly TS execution (no build
 step needed). `test/setup.ts` is a mocha root hook that silences `console.log`
 and `console.debug` during runs (warn/error pass through), so library code may
-log freely.
+log freely. Put a test file's `before*`/`after*` hooks inside its `describe`: a
+hook at the top level of a file registers on mocha's root suite and runs around
+every test in every file.
 
 ## Design records & branches
 
@@ -260,6 +264,9 @@ git diff origin/main...HEAD -U0 -- src test | grep '^+' | awk 'length>121'
 
 (`121` allows for the diff's leading `+`.) A long string literal, such as a test
 title, may legitimately stay over the limit, since Prettier doesn't break strings.
+That allowance does not apply when an acceptance row pledges that this check prints
+nothing: then the test titles must fit too, or the row must say that every hit is a
+string literal (#119).
 A hand re-wrap of a comment block is what overflows most often. It moves the
 overflow onto the next line rather than removing it, so re-run the check after
 every re-wrap (#106).

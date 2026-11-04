@@ -122,11 +122,15 @@ GitHub task-list under a `Depends on` heading.
 ## Mutation recipes
 
 The exact commands the triage skill runs to apply **approved** changes. `{id}`,
-`{type}`, `{text}`, `{canonical}`, `{other}`, `{title}`, `{body}`, `{tmpfile}`,
+`{type}`, `{otherTypes}`, `{text}`, `{canonical}`, `{other}`, `{title}`, `{body}`, `{tmpfile}`,
 `{triagedLabel}`, and `{needsInfoLabel}` are substituted by the skill. (There are
 no `{p}`/`{a}` substitutions — this repo has no priority or area labels.)
 
-- Set category: `gh issue edit {id} --remove-label "bug,enhancement,documentation,question" --add-label "{type}"`
+`{otherTypes}` is the set of category labels (`bug`, `enhancement`, `documentation`,
+`question`), written out in full, with the label being added removed. The added label
+is never in its own remove list, because the add and the remove would cancel on it.
+
+- Set category: `gh issue edit {id} --add-label "{type}" --remove-label "{otherTypes}"`
 - Edit body (language fix / fill missing info): `gh issue edit {id} --body-file {tmpfile}` — the skill writes the approved new body to `{tmpfile}` first
 - Comment: `gh issue comment {id} --body "{text}"`
 - Flag missing info: `gh issue edit {id} --add-label {needsInfoLabel}` (i.e. `question`; pair with a Comment saying what's missing)
