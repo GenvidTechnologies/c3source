@@ -51,9 +51,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - **Section-aware file-entry `type` and info keys.** `fileTypeForSection(section,
   name)` resolves the `type` for a `rootFileFolders` entry in a given section:
-  in the `video` section `.webm`, `.ogv` and `.mov` resolve to `video/webm`,
-  `video/ogg` and `video/quicktime`, and every other case falls back to
-  `fileTypeForName`, which is unchanged. New exports: `SECTION_EXTENSION_FILE_TYPES`
+  in the `video` section `.webm` resolves to `video/webm`, and every other case
+  falls back to the flat `fileTypeForName` table, which also types `.ogv` and
+  `.mov` (`video/ogg`, `video/quicktime`). New exports: `SECTION_EXTENSION_FILE_TYPES`
   (the per-section override rows), `C3FileSection` (the seven section keys),
   `C3_FILE_INFO_KEYS` (`script` -> `script-info`, `icon` -> `icon-info`, the other
   five -> `file-info`), `C3_DEFAULT_FILE_INFO_PURPOSE` (`"none"`) and
@@ -86,6 +86,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **`EXTENSION_FILE_TYPES` grows from 20 to 65 rows.** The 45 extensions that the
+  editor's MIME registry types exactly once, and that had no row, now resolve to
+  the registry type. `.ogv` and `.mov` are at the UNVALIDATED tier; the other 43
+  sit under a new BUNDLE-PREDICTED tier, which marks a type read from the editor
+  bundle and not yet confirmed by an editor save. `SECTION_EXTENSION_FILE_TYPES`
+  now holds only the `video` `.webm` row, and `fileTypeForSection` returns the
+  same strings for `.ogv` and `.mov` through the flat table
+  ([#115](https://github.com/GenvidTechnologies/c3source/issues/115)).
+  **Behaviour change for direct callers:** `fileTypeForName` and
+  `EXTENSION_FILE_TYPES` return the registry type instead of
+  `application/octet-stream` for those 45 extensions. Existing rows are
+  untouched. See
+  [ADR 0038](wiki/decisions/0038-bundle-predicted-file-entry-types.md).
 - Probe 10 of `scripts/scan-domain-facts.mjs` checks the section rows before the
   flat table. Its output on the 14 local projects was identical before and after
   the change (572 MATCH, 0 MISMATCH, 0 UNMAPPED, measured 2026-11-02).

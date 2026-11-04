@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-11-04
+
+* **Creation**: decisions/0038-bundle-predicted-file-entry-types.md (and its entry in decisions/index.md); **Update**: c3-domain-facts.md and project-manifest.md (the file-entry `type` tiers and the 65-row flat table); driven by `raw/issue-115-mime-registry-r506-3-and-type-paths-2026-11-04.md` (issue #115).
+
 ## 2026-11-03
 
 * **Update**: layout-traversal.md (the per-level `.sort()` is required because Windows `readdirSync` lists names case-insensitively) and decisions/0037-link-safe-disk-walks.md (the ordering measurement under Evidence); driven by the review of issue #114.
