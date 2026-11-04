@@ -81,7 +81,10 @@ is validated*.
    in JSDoc until a per-release grep caught it[^issue-95-evidence].
 3. **`scripts/scan-domain-facts.mjs` reports partitions; the maintainer
    produces the verdict.** It never concludes a table is correct —
-   `scripts/*.mjs` is unlinted, untypechecked, untested, and not in CI, so a
+   `scripts/*.mjs` is unlinted, untypechecked and not in CI, and the scanner
+   is untested apart from the file-entry `type` classifier (probe 10, moved
+   to `scripts/file-entry-type.mjs` and covered by
+   `test/fileEntryTypeProbe.test.ts`; #116, #117), so a
    probe bug must yield odd-looking evidence a human notices, not a wrong
    conclusion baked into a table[^claude-md]. Every verdict line carries its
    own observation count, and zero observations prints `NOT EXERCISED`,
