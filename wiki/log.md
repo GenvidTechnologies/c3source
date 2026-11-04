@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-11-04
 
+* **Update**: module-architecture.md (the JSDoc-in-dump table gains top-level functions; a base-build recipe without a worktree, and the appended-export control with its no-final-newline trap); driven by the V15 amendment recorded in issue #115.
 * **Creation**: decisions/0038-bundle-predicted-file-entry-types.md (and its entry in decisions/index.md); **Update**: c3-domain-facts.md and project-manifest.md (the file-entry `type` tiers and the 65-row flat table); driven by `raw/issue-115-mime-registry-r506-3-and-type-paths-2026-11-04.md` (issue #115).
 
 ## 2026-11-03
