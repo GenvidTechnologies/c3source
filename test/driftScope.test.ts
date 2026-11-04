@@ -3,7 +3,7 @@ import { expect } from "chai";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { detectManifestDrift, type C3ProjectManifest, type ManifestDrift } from "../src/c3source.js";
+import { detectManifestDrift, openProject, type C3ProjectManifest, type ManifestDrift } from "../src/c3source.js";
 
 // Scoped drift detection (#119): `skipFileSections` drops the seven rootFileFolders.<cat> sections.
 // The trees are built under a mkdtemp root of this file, so the junctions never point at real data.
@@ -183,5 +183,15 @@ describe("detectManifestDrift options (#119)", () => {
     expect(script?.entries.map((e) => e.kind)).to.deep.equal(["untracked"]);
     const skipped = detectManifestDrift(root, empty, { skipFileSections: true });
     expect(skipped.sections.some((s) => isFile(s.section))).to.equal(false);
+  });
+
+  it("#119 H1 the C3Project handle forwards the option to the free function", () => {
+    const root = makeRoot();
+    put(root, "scripts", "not a directory");
+    put(root, "project.c3proj", JSON.stringify(baseManifest()));
+    expect(thrown(() => openProject(root).detectManifestDrift())?.code).to.equal("ENOTDIR");
+    expect(openProject(root).detectManifestDrift({ skipFileSections: true })).to.deep.equal(
+      detectManifestDrift(root, undefined, { skipFileSections: true }),
+    );
   });
 });
