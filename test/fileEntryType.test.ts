@@ -17,7 +17,7 @@ import {
 import { fixtureProjectAvailable, loadFixtureProject, PROJECT_MANIFEST } from "./fixtureHelpers.js";
 
 describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
-  it("FE1: the table holds exactly the audited and unvalidated pairs", () => {
+  it("FE1: the table holds exactly the audited, unvalidated and bundle-predicted pairs", () => {
     expect(EXTENSION_FILE_TYPES).to.deep.equal({
       ".css": "text/css",
       ".html": "text/html",
@@ -39,6 +39,51 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
       ".mp4": "video/mp4",
       ".mp3": "audio/mpeg",
       ".m4a": "audio/mp4",
+      ".ogv": "video/ogg",
+      ".mov": "video/quicktime",
+      ".htm": "text/html",
+      ".scon": "application/json",
+      ".scml": "text/xml",
+      ".csv": "text/csv",
+      ".tsv": "text/tab-separated-values",
+      ".md": "text/markdown",
+      ".ini": "text/x-ini",
+      ".apng": "image/apng",
+      ".jxl": "image/jxl",
+      ".tif": "image/tiff",
+      ".tiff": "image/tiff",
+      ".bmp": "image/bmp",
+      ".ico": "image/x-icon",
+      ".avif": "image/avif",
+      ".avifs": "image/avif",
+      ".opus": "audio/ogg; codecs=opus",
+      ".ogg": "audio/ogg; codecs=vorbis",
+      ".wav": "audio/wav",
+      ".flac": "audio/flac",
+      ".mid": "audio/midi",
+      ".midi": "audio/midi",
+      ".kar": "audio/midi",
+      ".mpg": "video/mpeg",
+      ".mpeg": "video/mpeg",
+      ".qt": "video/quicktime",
+      ".avi": "video/avi",
+      ".woff": "application/font-woff",
+      ".woff2": "font/woff2",
+      ".otf": "application/font-sfnt",
+      ".eot": "application/vnd.ms-fontobject",
+      ".pdf": "application/pdf",
+      ".zip": "application/zip",
+      ".c3p": "application/zip",
+      ".capx": "application/zip",
+      ".wasm": "application/wasm",
+      ".wast": "application/wast",
+      ".mem": "application/octet-stream",
+      ".c3addon": "application/x-construct3-addon",
+      ".c2addon": "application/x-construct2-addon",
+      ".glb": "model/glb",
+      ".gltf": "model/gltf",
+      ".fbx": "model/fbx",
+      ".obj": "model/obj",
     });
   });
 
@@ -132,10 +177,8 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
     expect(C3_DEFAULT_FILE_INFO_PURPOSE).to.equal("none");
   });
 
-  it("FE11: SECTION_EXTENSION_FILE_TYPES overrides only the video .webm, .ogv and .mov extensions", () => {
-    expect(SECTION_EXTENSION_FILE_TYPES).to.deep.equal({
-      video: { ".webm": "video/webm", ".ogv": "video/ogg", ".mov": "video/quicktime" },
-    });
+  it("FE11: SECTION_EXTENSION_FILE_TYPES overrides only the video .webm extension", () => {
+    expect(SECTION_EXTENSION_FILE_TYPES).to.deep.equal({ video: { ".webm": "video/webm" } });
   });
 
   it("FE12: fileTypeForSection resolves video names case-insensitively and through path separators", () => {
@@ -149,7 +192,11 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
     const sections = Object.keys(C3_FILE_INFO_KEYS) as C3FileSection[];
     expect(sections).to.have.length(7);
     for (const section of sections) {
-      for (const ext of Object.keys(EXTENSION_FILE_TYPES)) {
+      const exts = new Set(Object.keys(EXTENSION_FILE_TYPES));
+      for (const rows of Object.values(SECTION_EXTENSION_FILE_TYPES)) {
+        for (const ext of Object.keys(rows ?? {})) exts.add(ext);
+      }
+      for (const ext of exts) {
         if (section === "video" && ext === ".webm") continue;
         const name = `x${ext}`;
         expect(fileTypeForSection(section, name), `${section}/${name}`).to.equal(fileTypeForName(name));
@@ -159,6 +206,99 @@ describe("fileTypeForName / EXTENSION_FILE_TYPES", () => {
       }
     }
     expect(fileTypeForSection("sound", "a.webm")).to.equal("audio/webm; codecs=opus");
+  });
+
+  it("FE17: the video-family extensions resolve to their registered types in every section", () => {
+    expect(fileTypeForSection("general", "x.mov")).to.equal("video/quicktime");
+    expect(fileTypeForSection("sound", "x.ogv")).to.equal("video/ogg");
+    expect(fileTypeForSection("video", "x.avi")).to.equal("video/avi");
+    const expected: [string, string][] = [
+      [".mov", "video/quicktime"],
+      [".qt", "video/quicktime"],
+      [".ogv", "video/ogg"],
+      [".avi", "video/avi"],
+      [".mpg", "video/mpeg"],
+      [".mpeg", "video/mpeg"],
+    ];
+    for (const section of ["general", "sound", "video"] as C3FileSection[]) {
+      for (const [ext, type] of expected) {
+        expect(fileTypeForSection(section, `x${ext}`), `${section}/x${ext}`).to.equal(type);
+      }
+    }
+  });
+
+  it("FE18: every single-registration extension resolves to its registered type by name and in all 7 sections", () => {
+    const pairs: [string, string][] = [
+      [".html", "text/html"],
+      [".css", "text/css"],
+      [".json", "application/json"],
+      [".xml", "text/xml"],
+      [".txt", "text/plain"],
+      [".png", "image/png"],
+      [".jpg", "image/jpeg"],
+      [".jpeg", "image/jpeg"],
+      [".svg", "image/svg+xml"],
+      [".webp", "image/webp"],
+      [".gif", "image/gif"],
+      [".m4a", "audio/mp4"],
+      [".mp3", "audio/mpeg"],
+      [".mp4", "video/mp4"],
+      [".ttf", "application/font-sfnt"],
+      [".htm", "text/html"],
+      [".scon", "application/json"],
+      [".scml", "text/xml"],
+      [".csv", "text/csv"],
+      [".tsv", "text/tab-separated-values"],
+      [".md", "text/markdown"],
+      [".ini", "text/x-ini"],
+      [".apng", "image/apng"],
+      [".jxl", "image/jxl"],
+      [".tif", "image/tiff"],
+      [".tiff", "image/tiff"],
+      [".bmp", "image/bmp"],
+      [".ico", "image/x-icon"],
+      [".avif", "image/avif"],
+      [".avifs", "image/avif"],
+      [".opus", "audio/ogg; codecs=opus"],
+      [".ogg", "audio/ogg; codecs=vorbis"],
+      [".wav", "audio/wav"],
+      [".flac", "audio/flac"],
+      [".mid", "audio/midi"],
+      [".midi", "audio/midi"],
+      [".kar", "audio/midi"],
+      [".ogv", "video/ogg"],
+      [".mpg", "video/mpeg"],
+      [".mpeg", "video/mpeg"],
+      [".mov", "video/quicktime"],
+      [".qt", "video/quicktime"],
+      [".avi", "video/avi"],
+      [".woff", "application/font-woff"],
+      [".woff2", "font/woff2"],
+      [".otf", "application/font-sfnt"],
+      [".eot", "application/vnd.ms-fontobject"],
+      [".pdf", "application/pdf"],
+      [".zip", "application/zip"],
+      [".c3p", "application/zip"],
+      [".capx", "application/zip"],
+      [".wasm", "application/wasm"],
+      [".wast", "application/wast"],
+      [".mem", "application/octet-stream"],
+      [".c3addon", "application/x-construct3-addon"],
+      [".c2addon", "application/x-construct2-addon"],
+      [".glb", "model/glb"],
+      [".gltf", "model/gltf"],
+      [".fbx", "model/fbx"],
+      [".obj", "model/obj"],
+    ];
+    expect(pairs).to.have.length(60);
+    const sections = Object.keys(C3_FILE_INFO_KEYS) as C3FileSection[];
+    expect(sections).to.have.length(7);
+    for (const [ext, type] of pairs) {
+      expect(fileTypeForName(`x${ext}`), `x${ext}`).to.equal(type);
+      for (const section of sections) {
+        expect(fileTypeForSection(section, `x${ext}`), `${section}/x${ext}`).to.equal(type);
+      }
+    }
   });
 
   it("FE14: every canonical-fixture rootFileFolders entry carries its section's info key and no other", function () {
