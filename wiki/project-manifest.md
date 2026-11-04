@@ -205,7 +205,8 @@ sections are not checked: neither their manifest walk nor their disk walk
 runs, and the result has no `rootFileFolders.*` entry in `sections`,
 `duplicates` or `links`. A skipped section is absent and is not listed in
 `degraded`. `inSync` keeps its definition, and no result field records the
-skip. The option interacts with the shape of the manifest in four ways:
+skip. Which file and folder walks run depends on the option and on the
+shape of the manifest:
 
 - with `rootFileFolders` absent, the file sections are not walked;
 - with `rootFileFolders: {}`, they are walked;

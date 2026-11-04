@@ -99,7 +99,8 @@ inherit automatically since they delegate to those same functions[^claude-md].
 cached manifest — avoiding a second read of `project.c3proj` — and forwards
 `options` (`ManifestDriftOptions`, for example `skipFileSections`; see [ADR
 0039](/decisions/0039-drift-skip-file-sections-option.md)). `detectImageDrift()`
-passes only the project root, so the free function reads the manifest itself.
+passes only the project root; the free function reads no manifest, only the
+object-type files and `images/`.
 `detectStrayFiles()` also passes **no** manifest — it works even on a project whose
 `project.c3proj` is missing or malformed[^claude-md][^api-guide-project].
 `detectReferenceIntegrity(options?)` delegates the same way, passing the

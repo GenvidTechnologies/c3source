@@ -1148,8 +1148,8 @@ function diffFolderPaths(
  * never drift and never affects `inSync`. A tree with no such link has no `links` key.
  *
  * `options.skipFileSections` ({@link ManifestDriftOptions}) is the supported way to skip the seven
- * `rootFileFolders.<cat>` sections. Without it, the file sections are walked only when the manifest
- * has a `rootFileFolders` key: with `rootFileFolders` absent they are not walked, with
+ * `rootFileFolders.<cat>` sections. Without it, the file sections are walked only when the manifest's
+ * `rootFileFolders` is truthy: with `rootFileFolders` absent they are not walked, with
  * `rootFileFolders: {}` they are walked (each category read as empty), and with a name-section key
  * absent its folder is still walked.
  */
