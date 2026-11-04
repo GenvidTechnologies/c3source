@@ -85,7 +85,7 @@ describe("file-entry-type classifier (probe 10)", () => {
     expect(entry.status).to.equal("MATCH");
   });
 
-  it("reports an absent recorded type as undefined", () => {
+  it("reports an absent recorded type as undefined, and a keyed entry without one as MISMATCH", () => {
     const [entry] = classifyOne("general", "a.json", undefined);
     expect(entry.type).to.equal(undefined);
     expect(entry.status).to.equal("MISMATCH");

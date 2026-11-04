@@ -84,8 +84,8 @@ is validated*.
    `scripts/*.mjs` is unlinted, untypechecked and not in CI, and the scanner
    is untested apart from the file-entry `type` classifier (probe 10, moved
    to `scripts/file-entry-type.mjs` and covered by
-   `test/fileEntryTypeProbe.test.ts`; #116, #117), so a
-   probe bug must yield odd-looking evidence a human notices, not a wrong
+   `test/fileEntryTypeProbe.test.ts`; #116, #117). So a probe bug must
+   yield odd-looking evidence a human notices, not a wrong
    conclusion baked into a table[^claude-md]. Every verdict line carries its
    own observation count, and zero observations prints `NOT EXERCISED`,
    never a pass — a probe once printed "NO CONTRADICTIONS" having scanned

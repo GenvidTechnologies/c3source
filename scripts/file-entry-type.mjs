@@ -53,7 +53,9 @@ function isKeyedExtension(lib, section, ext) {
  *
  * `lib` carries the accessor and the two tables instead of this module importing them. The
  * scanner passes its `dist/` imports. The test passes the `src/` exports, because a dev
- * script cannot import `.ts` and a test cannot import `dist/` before the build.
+ * script cannot import `.ts` and a test cannot import `dist/` before the build. The two
+ * tables must be the ones `fileTypeForSection` reads: the keyed decision uses `lib`'s tables
+ * and the expected value uses the accessor's own, so other tables would mix the two.
  *
  * @param {{ fileTypeForSection: (section: string, name: string) => string,
  *   EXTENSION_FILE_TYPES: object, SECTION_EXTENSION_FILE_TYPES: object }} lib
