@@ -21,6 +21,7 @@ sources:
 **Date:** 2026-10-01
 **Issue:** [#86](https://github.com/GenvidTechnologies/c3source/issues/86)
 **Amended by:** [ADR 0036](0036-section-aware-file-entry-type-and-info-keys.md) — (#113) the type comes from the editor's MIME registry by extension plus a section hint, so it is not flat across sections (`.webm` is `video/webm` in `video`); the table and `fileTypeForName` stand
+**Amended by:** [ADR 0038](/decisions/0038-bundle-predicted-file-entry-types.md) — (#115) the table gains a third tier, BUNDLE-PREDICTED, for values read from the bundle with no editor save, and 45 rows
 
 ## Context
 

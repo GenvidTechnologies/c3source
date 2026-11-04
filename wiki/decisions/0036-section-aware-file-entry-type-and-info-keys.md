@@ -24,6 +24,7 @@ sources:
 **Status:** accepted
 **Date:** 2026-11-02
 **Issue:** [#113](https://github.com/GenvidTechnologies/c3source/issues/113)
+**Amended by:** [ADR 0038](/decisions/0038-bundle-predicted-file-entry-types.md) — (#115) the flat table grows by the 45 single-registration registry extensions, the `.ogv` and `.mov` section rows move to it, and the freeze and the fallback gap end
 
 Amends [ADR 0027](/decisions/0027-file-entry-type-writer-fact.md): its mechanism note and its "flat across sections" claim. The `EXTENSION_FILE_TYPES` table, `C3_DEFAULT_FILE_TYPE` and `fileTypeForName` stand unchanged.
 

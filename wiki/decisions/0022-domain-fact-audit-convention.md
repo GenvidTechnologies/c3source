@@ -17,6 +17,7 @@ sources:
 **Status:** accepted
 **Date:** 2026-08-04
 **Issue:** #68
+**Amended by:** [ADR 0038](/decisions/0038-bundle-predicted-file-entry-types.md) — (#115) adds the label BUNDLE-PREDICTED for observation-count tiers
 
 Migrated verbatim from the `docs/decisions/` ADR record[^adr-0022].
 
