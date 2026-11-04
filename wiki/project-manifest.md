@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-11-03T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-04T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -35,6 +35,10 @@ sources:
     resource: ../raw/issue-113-video-section-editor-save-2026-11-02.md
     title: "Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)"
     last_modified: 2026-11-02
+  - id: issue-115-registry-capture
+    resource: ../raw/issue-115-mime-registry-r506-3-and-type-paths-2026-11-04.md
+    title: "Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)"
+    last_modified: 2026-11-04
 ---
 
 # Project Manifest
@@ -134,13 +138,15 @@ records on a `rootFileFolders` file entry — for a tool that *writes* entries.
 `fileTypeForName(name)` resolves a bare name or a `/`- or `\`-separated path
 case-insensitively and falls back to `C3_DEFAULT_FILE_TYPE`
 (`application/octet-stream`); indexing the table directly gives `undefined`
-instead. The table holds across sections except where
-`SECTION_EXTENSION_FILE_TYPES` overrides it (the `video` section: `.webm`,
-`.ogv`, `.mov`); `fileTypeForSection(section, name)` applies that override
-first and then falls back to `fileTypeForName`, which is unchanged. The table
-is `KNOWN INCOMPLETE`, and split into AUDITED and UNVALIDATED tiers; see [ADR
+instead. `SECTION_EXTENSION_FILE_TYPES` holds only the cells whose type differs
+by section, which today is `video` `.webm`[^issue-115-registry-capture]. Every other extension resolves
+through the flat table in every section. `fileTypeForSection(section, name)`
+applies the section cell first and then falls back to `fileTypeForName`, so the
+two functions differ at that one cell only. The table is `KNOWN INCOMPLETE`,
+and split into AUDITED, UNVALIDATED and BUNDLE-PREDICTED tiers; see [ADR
 0027](/decisions/0027-file-entry-type-writer-fact.md), [ADR
-0036](/decisions/0036-section-aware-file-entry-type-and-info-keys.md) and [C3
+0036](/decisions/0036-section-aware-file-entry-type-and-info-keys.md), [ADR
+0038](/decisions/0038-bundle-predicted-file-entry-types.md) and [C3
 Domain Facts](/c3-domain-facts.md) for the evidence.
 
 The same decision adds the section-keyed exports `C3FileSection` (the seven
@@ -443,4 +449,5 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 [^issue-100-evidence]: Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)
 [^issue-113-bundle-evidence]: Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)
 [^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)
+[^issue-115-registry-capture]: Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)
 </content>

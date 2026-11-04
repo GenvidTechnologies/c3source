@@ -1287,27 +1287,39 @@ export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
  * section hint [bundle r495] [bundle r460]. The table is flat in every `rootFileFolders`
  * section (the r49502 experiment showed general, sound, music and font agree), except
  * where {@link SECTION_EXTENSION_FILE_TYPES} overrides it; resolve a section-aware `type`
- * with {@link fileTypeForSection}. Today the only such cells are the `video` section's
- * `.webm`, `.ogv` and `.mov`, and `.ogv` and `.mov` have no row in this flat table at all.
- * Evidence: `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and
+ * with {@link fileTypeForSection}. Today the only such cell is the `video` section's
+ * `.webm`. Evidence: `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and
  * `raw/issue-113-video-section-editor-save-2026-11-02.md`. Exported so callers
  * can introspect/extend — an open `Record<string, string>`, see ADR 0024 Compromise 5.
  *
- * **KNOWN INCOMPLETE** — this table is not exhaustive and never claims to be.
+ * **KNOWN INCOMPLETE** — this table is not exhaustive and never claims to be. The registry
+ * grows across releases: r509 registers `.mtl`, which has no row [bundle r509].
  *
  * **AUDITED** (observed in two or more independent editor-saved projects): `.css`,
  * `.html`, `.json`, `.png`, `.js`, `.ts`, `.ttf`, `.webm`, `.plist`.
  *
  * **UNVALIDATED** (seen in one project or one editor save): `.txt`, `.xml`, `.vtt`,
- * `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.mp4`, `.mp3`, `.m4a`.
+ * `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.mp4`, `.mp3`, `.m4a`. `.ogv` and `.mov` have
+ * one save each, in `video` [editor save r50603].
+ *
+ * **BUNDLE-PREDICTED** (the value is what the editor bundle's own lookup returns for the
+ * extension, which has exactly one MIME registration, so no section hint or browser
+ * `File.type` can change it, and the r495 trace of the entry paths found none that can; no
+ * editor-saved project has recorded it; a row moves to UNVALIDATED at its first editor save
+ * that records the value): `.htm`, `.scon`, `.scml`,
+ * `.csv`, `.tsv`, `.md`, `.ini`, `.apng`, `.jxl`, `.tif`, `.tiff`, `.bmp`, `.ico`, `.avif`,
+ * `.avifs`, `.opus`, `.ogg`, `.wav`, `.flac`, `.mid`, `.midi`, `.kar`, `.mpg`, `.mpeg`, `.qt`,
+ * `.avi`, `.woff`, `.woff2`, `.otf`, `.eot`, `.pdf`, `.zip`, `.c3p`, `.capx`, `.wasm`,
+ * `.wast`, `.mem`, `.c3addon`, `.c2addon`, `.glb`, `.gltf` [bundle r495] [bundle r506-3];
+ * `.fbx` and `.obj` [bundle r506-3] (absent from the r495 registry).
  *
  * **Observed, not specified:** the registry lives in the editor bundle and is not a
- * documented contract, so these values are observed editor outputs (C3 r49502).
- * The video case is covered by {@link SECTION_EXTENSION_FILE_TYPES} and by one editor save
- * at r506.3. Other OSes are untested.
+ * documented contract. AUDITED and UNVALIDATED values are observed editor outputs
+ * (C3 r49502); BUNDLE-PREDICTED values are read from the registry. Other OSes are untested.
  *
- * **Blast radius:** a silently wrong `type` is written into `project.c3proj`; whether
- * C3 re-derives it on load is unknown.
+ * **Blast radius:** a silently wrong `type` is written into `project.c3proj`. The editor
+ * keeps a registered stored `type` on load and does not re-derive it from the extension, so
+ * a wrong registered `type` survives a project load [bundle r495].
  *
  * **Fallback policy**, contrasted with both siblings: {@link IMAGE_FILE_TYPE_EXTENSIONS}
  * throws on an unknown key (via its accessor), and {@link SCRIPT_FILE_TYPE_EXTENSIONS}
@@ -1338,9 +1350,58 @@ export const EXTENSION_FILE_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".mp3": "audio/mpeg",
   ".m4a": "audio/mp4",
+  ".ogv": "video/ogg",
+  ".mov": "video/quicktime",
+  // BUNDLE-PREDICTED
+  ".htm": "text/html",
+  ".scon": "application/json",
+  ".scml": "text/xml",
+  ".csv": "text/csv",
+  ".tsv": "text/tab-separated-values",
+  ".md": "text/markdown",
+  ".ini": "text/x-ini",
+  ".apng": "image/apng",
+  ".jxl": "image/jxl",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
+  ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
+  ".avif": "image/avif",
+  ".avifs": "image/avif",
+  ".opus": "audio/ogg; codecs=opus",
+  ".ogg": "audio/ogg; codecs=vorbis",
+  ".wav": "audio/wav",
+  ".flac": "audio/flac",
+  ".mid": "audio/midi",
+  ".midi": "audio/midi",
+  ".kar": "audio/midi",
+  ".mpg": "video/mpeg",
+  ".mpeg": "video/mpeg",
+  ".qt": "video/quicktime",
+  ".avi": "video/avi",
+  ".woff": "application/font-woff",
+  ".woff2": "font/woff2",
+  ".otf": "application/font-sfnt",
+  ".eot": "application/vnd.ms-fontobject",
+  ".pdf": "application/pdf",
+  ".zip": "application/zip",
+  ".c3p": "application/zip",
+  ".capx": "application/zip",
+  ".wasm": "application/wasm",
+  ".wast": "application/wast",
+  ".mem": "application/octet-stream",
+  ".c3addon": "application/x-construct3-addon",
+  ".c2addon": "application/x-construct2-addon",
+  ".glb": "model/glb",
+  ".gltf": "model/gltf",
+  ".fbx": "model/fbx",
+  ".obj": "model/obj",
 };
 
-/** The `type` {@link fileTypeForName} returns for an extension absent from {@link EXTENSION_FILE_TYPES}. */
+/**
+ * The `type` {@link fileTypeForName} returns for an extension absent from {@link EXTENSION_FILE_TYPES}.
+ * It equals the registry's fallback type for an unregistered extension [bundle r495].
+ */
 export const C3_DEFAULT_FILE_TYPE = "application/octet-stream";
 
 /**
@@ -1394,20 +1455,16 @@ export const C3_DEFAULT_FILE_INFO_PURPOSE = "none";
  * Per-section extension overrides of {@link EXTENSION_FILE_TYPES}, keyed by section, then by
  * dotted lowercase extension. Read through {@link fileTypeForSection}.
  *
- * Only the `video` `.webm` cell is a true section override: the section hint `video/` selects
- * the second `.webm` registration, `video/webm`, over the first,
- * `audio/webm; codecs=opus` [bundle r495]. The `.ogv` and `.mov` rows are section-scoped
- * additions for extensions the flat table lacks. The bundle registers each of them once,
- * `video/ogg` and `video/quicktime`, independent of section [bundle r495]; the editor recorded
- * `video/quicktime` for a `.mov` in the video section [editor save r50603].
- * The `.webm`, `.ogv` and `.mov` cells are confirmed by one editor save at r506.3
- * [editor save r50603], so they are UNVALIDATED (one save). The imported `.webm` also
+ * It holds only the cells whose type differs by section; today that is the `video` `.webm`
+ * cell. The section hint `video/` selects the second `.webm` registration, `video/webm`, over
+ * the first, `audio/webm; codecs=opus` [bundle r495]. The cell is confirmed by one editor save
+ * at r506.3 [editor save r50603], so it is UNVALIDATED (one save). The imported `.webm` also
  * recorded `video/webm`, which depends on the browser's `File.type`. Evidence:
  * `raw/issue-113-video-section-bundle-evidence-2026-11-02.md` and
  * `raw/issue-113-video-section-editor-save-2026-11-02.md`.
  */
 export const SECTION_EXTENSION_FILE_TYPES: Partial<Record<C3FileSection, Record<string, string>>> = {
-  video: { ".webm": "video/webm", ".ogv": "video/ogg", ".mov": "video/quicktime" },
+  video: { ".webm": "video/webm" },
 };
 
 /**
@@ -1444,19 +1501,15 @@ export const C3_VIDEO_IMPORT_EXTENSIONS = [".webm", ".ogv", ".mp4"] as const;
  * {@link fileTypeForName}`(name)`. Name parsing is the same as {@link fileTypeForName}: only
  * the basename of a `/`- or `\`-separated path counts, case-insensitively.
  *
- * **Known gap:** an extension in neither table falls back to {@link C3_DEFAULT_FILE_TYPE},
- * because the flat table is frozen. The editor registry has a single registration for some
- * of them, so it would record a `video/*` type: `fileTypeForSection("general", "x.mov")`,
- * `("sound", "x.ogv")` and `("video", "x.avi")` all return `application/octet-stream`.
- *
- * The section overrides come from the bundle [bundle r495]. The `.webm`, `.ogv` and `.mov`
- * cells are confirmed by one editor save at r506.3 [editor save r50603], so they are
- * UNVALIDATED (one save). See `raw/issue-113-video-section-bundle-evidence-2026-11-02.md`
+ * The section override comes from the bundle [bundle r495]. The `.webm` cell is confirmed by
+ * one editor save at r506.3 [editor save r50603], so it is UNVALIDATED (one save). See
+ * `raw/issue-113-video-section-bundle-evidence-2026-11-02.md`
  * and `raw/issue-113-video-section-editor-save-2026-11-02.md`.
  *
  * @example
  * fileTypeForSection("video", "intro.webm"); // "video/webm"
  * fileTypeForSection("sound", "intro.webm"); // "audio/webm; codecs=opus"
+ * fileTypeForSection("general", "x.mov"); // "video/quicktime"
  */
 export function fileTypeForSection(section: C3FileSection, name: string): string {
   const base = name.slice(Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\")) + 1).toLowerCase();

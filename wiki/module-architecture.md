@@ -5,7 +5,7 @@ description: c3source's logic is split across seven per-area modules imported in
 tags: [architecture, modules, esm, api-surface, build]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-11-02T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-04T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -19,6 +19,10 @@ sources:
     resource: ../raw/wiki-review-module-architecture-library-overview-2026-11-02.md
     title: "Wiki review of module-architecture.md and library-overview.md against main (2026-11-02 capture)"
     last_modified: 2026-11-02
+  - id: issue-115
+    resource: https://github.com/GenvidTechnologies/c3source/issues/115
+    title: "c3source#115 — acceptance evidence, V15 amendment (api-surface diff, 2026-11-04)"
+    last_modified: 2026-11-04
 ---
 
 # Module Architecture
@@ -107,6 +111,7 @@ even though no signature changed[^claude-md]. Specifically:
 |---|---|
 | Interface or type member | Yes — its doc comment travels with it |
 | Top-level `const` | No — the entry is the bare type signature only |
+| Top-level `function` | No — the entry is the bare signature only[^issue-115] |
 
 For example, editing a top-level `const`'s doc comment (a version-pin
 comment, say) moves nothing in the dump — the entry stays the bare type
@@ -129,9 +134,25 @@ the `src/` change from everything else in the working tree so the two dumps
 differ by nothing else[^jsdoc-asymmetry-experiment]. A baseline taken today
 is better built without touching the working tree, from `git show
 <base>:<path>` or a scratch worktree, because stashing can disturb
-uncommitted work. The practical rule this
+uncommitted work.
+
+A base build that needs neither a worktree nor a `node_modules` junction:
+extract `git archive <base> src tsconfig.json package.json` into a new
+untracked directory **inside** the repo, so module resolution finds the
+checkout's `node_modules` by walking up. Then run the checkout's `tsc` with
+`-p <dir>/tsconfig.json` and dump `<dir>/dist/index.d.ts`. Remove the
+directory afterwards. The positive control for such a comparison is an export
+appended to a base `.d.ts`, which must then show in the diff. Put the export
+on its own line: `tsc` writes no final newline, so a bare append joins the
+closing `//# sourceMappingURL` comment and the export becomes invisible. A
+top-level JSDoc edit cannot serve as that control, because it never reaches
+the dump. On #115 a pledged row assumed it could, and was amended as
+defective[^issue-115].
+
+The practical rule this
 yields: to predict a dump delta, count only the comments attached to
-interface/type members — const comments are free[^jsdoc-asymmetry-experiment].
+interface/type members — top-level `const` and `function` comments are
+free[^jsdoc-asymmetry-experiment][^issue-115].
 And the empty JSDoc-stripped diff, not the raw one, is the real "no signature
 changed" proof — a non-empty raw diff on a doc-carrying change is expected,
 not a failure signal[^jsdoc-asymmetry-experiment].
@@ -164,3 +185,4 @@ genuinely leave comments alone.
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^jsdoc-asymmetry-experiment]: Controlled api-surface JSDoc-asymmetry experiment (2026-08-20 capture)
 [^wiki-review]: Wiki review of module-architecture.md and library-overview.md against main (2026-11-02 capture), section 1
+[^issue-115]: c3source#115, acceptance evidence, V15 amendment: the branch edited the JSDoc of the top-level function `fileTypeForSection` and of three top-level constants, and the base and branch dumps were byte-identical (2026-11-04)
