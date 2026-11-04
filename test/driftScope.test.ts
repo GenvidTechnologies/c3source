@@ -141,7 +141,7 @@ describe("detectManifestDrift options (#119)", () => {
     expect(manifest.rootFileFolders).to.not.equal(undefined);
   });
 
-  it("#119 S4 the skipped disk walk does not run: a regular file named scripts raises ENOTDIR only without the option", () => {
+  it("#119 S4 a regular file named scripts throws ENOTDIR only when the file sections are walked", () => {
     const root = makeRoot();
     put(root, "scripts", "not a directory");
     const manifest = baseManifest();
