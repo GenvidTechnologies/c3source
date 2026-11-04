@@ -5,7 +5,7 @@ description: Reusable engineering patterns c3source has settled on — single-so
 tags: [design-patterns, traversal, validation, testing, drift]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-11-03T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-04T12:00:00Z }
 sources:
   - id: docs-design-patterns
     resource: ../raw/docs-design-patterns-2026-08-20.md
@@ -351,6 +351,17 @@ hand-written `.d.mts` sibling, and let the script call it. Under
 directly at test time. First instance: `findGitlinkDrift` in
 `scripts/gitlink-drift.mjs`, tested by `test/gitlinkDrift.test.ts` (#88; see
 [ADR 0028](/decisions/0028-prep-fixture-warns-on-gitlink-drift.md)).
+
+Second instance: `classifyFileEntries` in `scripts/file-entry-type.mjs`
+(probe 10 of `scripts/scan-domain-facts.mjs`), tested by
+`test/fileEntryTypeProbe.test.ts` (#116, #117). It imports nothing and takes
+the library values (`lib`, including `fileTypeForSection` and the
+`SECTION_EXTENSION_FILE_TYPES` and `EXTENSION_FILE_TYPES` tables) as an
+argument, because its two callers load the library from different places. The
+scanner passes its `dist/` imports. The test passes the `src/` exports, since
+a dev `.mjs` script cannot import `.ts` and `commands.validate` runs `test`
+before `build`. The scanner itself still cannot be imported: it awaits
+`../dist/index.js` and exits when `dist/` is missing.
 
 **Trade-off.** The declaration is kept in sync with the module by hand, and
 nothing checks that it is. The script body itself stays unchecked: eslint's

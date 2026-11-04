@@ -6,7 +6,8 @@
 // SCRIPT_FILE_TYPE_EXTENSIONS, C3_SECTION_ITEM_EXTENSION (via
 // isSectionItemName), and EXTENSION_FILE_TYPES together with its per-section
 // override table SECTION_EXTENSION_FILE_TYPES (probe 10, fileEntryType, which
-// walks every `rootFileFolders` section of the manifest). The section-item
+// walks every `rootFileFolders` section of the manifest; its classifier is
+// `classifyFileEntries` in `scripts/file-entry-type.mjs`). The section-item
 // probe additionally doubles as the STRAY-FILE INVENTORY (src/manifest.ts's
 // `detectStrayFiles`), since it walks the seven name-section roots with that
 // exact same predicate.
@@ -58,6 +59,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { classifyFileEntries } from "./file-entry-type.mjs";
 
 const distEntry = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 if (!existsSync(distEntry)) {
@@ -82,6 +84,7 @@ const {
   SCRIPT_SOURCE_EXTENSIONS,
   SECTION_EXTENSION_FILE_TYPES,
   comparisonSymbol,
+  fileTypeForSection,
   find_all_files_path,
   hasActions,
   hasConditions,
@@ -533,32 +536,6 @@ function scanSectionItem(result, projectDir, release) {
 
 // ─── probe 10: fileEntryType ────────────────────────────────────────────────
 
-/**
- * Structural walk over one `rootFileFolders` section's `{items, subfolders}` tree,
- * returning each item's raw `name` and `type` (MIME, or undefined when absent).
- */
-function collectFileEntryNodes(folder) {
-  const nodes = [];
-  if (!folder || typeof folder !== "object") return nodes;
-  for (const item of Array.isArray(folder.items) ? folder.items : []) {
-    nodes.push({
-      name: item && typeof item === "object" ? item.name : undefined,
-      type: item && typeof item === "object" ? item.type : undefined,
-    });
-  }
-  for (const sub of Array.isArray(folder.subfolders) ? folder.subfolders : []) {
-    nodes.push(...collectFileEntryNodes(sub));
-  }
-  return nodes;
-}
-
-/** Lowercased extension of a bare or path-like entry name, `(none)` when it has no extension. */
-function fileEntryExt(name) {
-  const base = String(name).slice(Math.max(String(name).lastIndexOf("/"), String(name).lastIndexOf("\\")) + 1).toLowerCase();
-  const dot = base.lastIndexOf(".");
-  return dot === -1 || dot === base.length - 1 ? "(none)" : base.slice(dot);
-}
-
 function bumpFileEntryType(map, ext, section, type, status, projectDir) {
   const key = [ext, section, type, status].join("\t");
   let e = map.get(key);
@@ -573,36 +550,24 @@ function bumpFileEntryType(map, ext, section, type, status, projectDir) {
 /**
  * Walks EVERY section of the MANIFEST's `rootFileFolders` (recursively through
  * `subfolders`) and buckets each file entry by lowercased extension x section x
- * recorded `type` x status against two imported tables: the flat
- * `EXTENSION_FILE_TYPES` and the per-section `SECTION_EXTENSION_FILE_TYPES`. An
- * extension is keyed when it is in the entry's section row or in the flat table;
- * the expected value is the section row's when it has the extension, otherwise
- * the flat row's. MATCH (extension is keyed and the expected value equals the
- * recorded `type`), MISMATCH (keyed, value differs), UNMAPPED (not keyed). Reports
+ * recorded `type` x status. An extension is keyed when it is in the entry's
+ * section row of the imported `SECTION_EXTENSION_FILE_TYPES` or in the flat
+ * `EXTENSION_FILE_TYPES` (a membership test); the expected value comes from the
+ * imported `fileTypeForSection`, which owns the section-then-flat precedence.
+ * MATCH (extension is keyed and the expected value equals the recorded `type`),
+ * MISMATCH (keyed, value differs), UNMAPPED (not keyed). Reports
  * partitions only; the AUDITED-tier verdict (>=2 independent projects) is the
- * maintainer's, recomputed from the per-bucket distinct-project counts.
+ * maintainer's, recomputed from the per-bucket distinct-project counts. The
+ * classification itself lives in `./file-entry-type.mjs`, which a test imports.
  */
 function scanFileEntryType(result, projectDir, manifest) {
-  const folders = manifest && typeof manifest === "object" ? manifest.rootFileFolders : undefined;
-  if (!folders || typeof folders !== "object") return;
-  for (const [section, folder] of Object.entries(folders)) {
-    for (const node of collectFileEntryNodes(folder)) {
-      result.fileEntryTypeCount++;
-      const ext = fileEntryExt(node.name);
-      const type = node.type === undefined ? ABSENT : String(node.type);
-      const has = (table, key) => Object.prototype.hasOwnProperty.call(table, key);
-      const sectionRow = has(SECTION_EXTENSION_FILE_TYPES, section)
-        ? SECTION_EXTENSION_FILE_TYPES[section]
-        : undefined;
-      const expected =
-        sectionRow && has(sectionRow, ext)
-          ? sectionRow[ext]
-          : has(EXTENSION_FILE_TYPES, ext)
-            ? EXTENSION_FILE_TYPES[ext]
-            : undefined;
-      const status = expected === undefined ? "UNMAPPED" : expected === node.type ? "MATCH" : "MISMATCH";
-      bumpFileEntryType(result.fileEntryType, ext, section, type, status, projectDir);
-    }
+  for (const entry of classifyFileEntries(
+    { fileTypeForSection, EXTENSION_FILE_TYPES, SECTION_EXTENSION_FILE_TYPES },
+    manifest,
+  )) {
+    result.fileEntryTypeCount++;
+    const type = entry.type === undefined ? ABSENT : String(entry.type);
+    bumpFileEntryType(result.fileEntryType, entry.ext, entry.section, type, entry.status, projectDir);
   }
 }
 

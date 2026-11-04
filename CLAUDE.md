@@ -95,8 +95,8 @@ chain (`npm run lint && npm run typecheck && npm run test && npm run build`),
 and `typecheck` only `.ts` files, so the `.mjs` tooling under `scripts/` is
 neither linted nor typechecked. A script helper that a test imports gets its
 types from a hand-written `.d.mts` sibling, kept in sync by hand
-(`scripts/gitlink-drift.d.mts` is the first). That constrains the callers, not
-the script body.
+(`scripts/gitlink-drift.d.mts` and `scripts/file-entry-type.d.mts`). That
+constrains the callers, not the script body.
 
 Run a single test file or filter by name:
 
