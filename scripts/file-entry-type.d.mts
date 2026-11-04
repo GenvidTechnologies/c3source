@@ -4,7 +4,10 @@ export interface FileEntryNode {
 	type: unknown;
 }
 
-export interface FileEntryTables {
+export interface FileEntryLib {
+	// Method syntax on purpose: the library narrows `section` to C3FileSection, and method
+	// parameters are bivariant, so the library function is assignable here.
+	fileTypeForSection(section: string, name: string): string;
 	EXTENSION_FILE_TYPES: Readonly<Record<string, string>>;
 	SECTION_EXTENSION_FILE_TYPES: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
@@ -21,4 +24,4 @@ export interface ClassifiedFileEntry {
 
 export function collectFileEntryNodes(folder: unknown): FileEntryNode[];
 export function fileEntryExt(name: unknown): string;
-export function classifyFileEntries(lib: FileEntryTables, manifest: unknown): ClassifiedFileEntry[];
+export function classifyFileEntries(lib: FileEntryLib, manifest: unknown): ClassifiedFileEntry[];

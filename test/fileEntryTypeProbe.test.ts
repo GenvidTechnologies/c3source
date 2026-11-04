@@ -1,9 +1,9 @@
 import { describe, it } from "mocha";
 import { expect } from "chai";
-import { EXTENSION_FILE_TYPES, SECTION_EXTENSION_FILE_TYPES } from "../src/c3source.js";
+import { EXTENSION_FILE_TYPES, SECTION_EXTENSION_FILE_TYPES, fileTypeForSection } from "../src/c3source.js";
 import { classifyFileEntries } from "../scripts/file-entry-type.mjs";
 
-const lib = { EXTENSION_FILE_TYPES, SECTION_EXTENSION_FILE_TYPES };
+const lib = { fileTypeForSection, EXTENSION_FILE_TYPES, SECTION_EXTENSION_FILE_TYPES };
 
 /** One-section manifest holding the given items at the top level of that section. */
 function classifyOne(section: string, name: string | undefined, type: string | undefined) {

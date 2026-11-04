@@ -84,6 +84,7 @@ const {
   SCRIPT_SOURCE_EXTENSIONS,
   SECTION_EXTENSION_FILE_TYPES,
   comparisonSymbol,
+  fileTypeForSection,
   find_all_files_path,
   hasActions,
   hasConditions,
@@ -549,18 +550,21 @@ function bumpFileEntryType(map, ext, section, type, status, projectDir) {
 /**
  * Walks EVERY section of the MANIFEST's `rootFileFolders` (recursively through
  * `subfolders`) and buckets each file entry by lowercased extension x section x
- * recorded `type` x status against two imported tables: the flat
- * `EXTENSION_FILE_TYPES` and the per-section `SECTION_EXTENSION_FILE_TYPES`. An
- * extension is keyed when it is in the entry's section row or in the flat table;
- * the expected value is the section row's when it has the extension, otherwise
- * the flat row's. MATCH (extension is keyed and the expected value equals the
- * recorded `type`), MISMATCH (keyed, value differs), UNMAPPED (not keyed). Reports
+ * recorded `type` x status. An extension is keyed when it is in the entry's
+ * section row of the imported `SECTION_EXTENSION_FILE_TYPES` or in the flat
+ * `EXTENSION_FILE_TYPES` (a membership test); the expected value comes from the
+ * imported `fileTypeForSection`, which owns the section-then-flat precedence.
+ * MATCH (extension is keyed and the expected value equals the recorded `type`),
+ * MISMATCH (keyed, value differs), UNMAPPED (not keyed). Reports
  * partitions only; the AUDITED-tier verdict (>=2 independent projects) is the
  * maintainer's, recomputed from the per-bucket distinct-project counts. The
  * classification itself lives in `./file-entry-type.mjs`, which a test imports.
  */
 function scanFileEntryType(result, projectDir, manifest) {
-  for (const entry of classifyFileEntries({ EXTENSION_FILE_TYPES, SECTION_EXTENSION_FILE_TYPES }, manifest)) {
+  for (const entry of classifyFileEntries(
+    { fileTypeForSection, EXTENSION_FILE_TYPES, SECTION_EXTENSION_FILE_TYPES },
+    manifest,
+  )) {
     result.fileEntryTypeCount++;
     const type = entry.type === undefined ? ABSENT : String(entry.type);
     bumpFileEntryType(result.fileEntryType, entry.ext, entry.section, type, entry.status, projectDir);
