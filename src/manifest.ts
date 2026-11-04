@@ -165,7 +165,8 @@ export interface ManifestDrift {
   /**
    * Present only when a best-effort sub-detector threw; absent on a fully-verified
    * run. `inSync === true` with a populated `degraded` means "no drift among the
-   * sections that were checked", not "no drift".
+   * sections that were checked", not "no drift". A section the caller skipped through
+   * `ManifestDriftOptions` is also absent, and is not listed here.
    */
   degraded?: DriftDegradation[];
   /**
@@ -190,6 +191,19 @@ export interface ManifestDrift {
    * Ordered by the walk order of sections, then pre-order with sorted names within a section.
    */
   links?: SkippedLink[];
+}
+
+/** Options scoping a {@link detectManifestDrift} call. Every field is optional; `{}` equals no options. */
+export interface ManifestDriftOptions {
+  /**
+   * When true, the seven `rootFileFolders.<cat>` sections are not checked. Neither their manifest walk
+   * nor their disk walk runs, so a filesystem error under a file folder (e.g. `scripts` being a
+   * regular file) is not raised. The result then holds no `rootFileFolders.*` entry in `sections`,
+   * `duplicates` or `links`. `inSync` keeps its definition and counts only the sections that were
+   * checked. The manifest object is not read differently or modified. When `manifest` is omitted it is
+   * still read and validated in full. Default false: identical to a call without options.
+   */
+  skipFileSections?: boolean;
 }
 
 /** A symbolic link or junction found below a section root and not followed. Advisory, never drift. */
@@ -1132,8 +1146,18 @@ function diffFolderPaths(
  * A symbolic link or junction below a section root is not followed: it is not an item, not a
  * folder and not a stray. Each one is listed in the advisory {@link ManifestDrift.links}, which is
  * never drift and never affects `inSync`. A tree with no such link has no `links` key.
+ *
+ * `options.skipFileSections` ({@link ManifestDriftOptions}) is the supported way to skip the seven
+ * `rootFileFolders.<cat>` sections. Without it, the file sections are walked only when the manifest's
+ * `rootFileFolders` is truthy: with `rootFileFolders` absent they are not walked, with
+ * `rootFileFolders: {}` they are walked (each category read as empty), and with a name-section key
+ * absent its folder is still walked.
  */
-export function detectManifestDrift(projectDir: string, manifest?: C3ProjectManifest): ManifestDrift {
+export function detectManifestDrift(
+  projectDir: string,
+  manifest?: C3ProjectManifest,
+  options?: ManifestDriftOptions,
+): ManifestDrift {
   const m = manifest ?? readProjectManifest(path.join(projectDir, PROJECT_MANIFEST_FILE));
   const sections: SectionDrift[] = [];
   const duplicates: DuplicateName[] = [];
@@ -1155,7 +1179,7 @@ export function detectManifestDrift(projectDir: string, manifest?: C3ProjectMani
     if (entries.length) sections.push({ section, folder: folderName, entries });
     duplicates.push(...collectDuplicateNames(section, folderName, "section", declared, onDisk));
   }
-  const rff = m.rootFileFolders;
+  const rff = options?.skipFileSections ? undefined : m.rootFileFolders;
   if (rff)
     for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
       const folder = rff[cat as keyof C3RootFileFolders];

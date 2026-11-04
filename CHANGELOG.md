@@ -68,6 +68,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   when empty and never counted by `inSync`. One type added, none removed
   ([#114](https://github.com/GenvidTechnologies/c3source/issues/114)) — see
   [ADR 0037](wiki/decisions/0037-link-safe-disk-walks.md).
+- **`detectManifestDrift` option `skipFileSections`.** `detectManifestDrift`
+  takes a third parameter, the new exported `ManifestDriftOptions`
+  (`skipFileSections?: boolean`). When it is true, the seven `rootFileFolders`
+  sections are not checked: neither their manifest walk nor their disk walk
+  runs, and the result has no `rootFileFolders.*` entry in `sections`,
+  `duplicates` or `links`. `C3Project.detectManifestDrift(options?)` forwards
+  the options. Without the option, the result is unchanged. One type added,
+  none removed
+  ([#119](https://github.com/GenvidTechnologies/c3source/issues/119)) — see
+  [ADR 0039](wiki/decisions/0039-drift-skip-file-sections-option.md).
 
 ### Fixed
 

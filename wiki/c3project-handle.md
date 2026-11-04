@@ -5,7 +5,7 @@ description: openProject(root) is a no-I/O-at-construction, root-bound handle ov
 tags: [c3project, openproject, handle, manifest-cache]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-08-20T15:48:57Z }
+generated: { by: process:maintain-wiki, at: 2026-11-04T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -95,10 +95,13 @@ inherit automatically since they delegate to those same functions[^claude-md].
 
 ## Drift delegation
 
-`detectManifestDrift()` and `detectImageDrift()` delegate to the free
-functions, passing the cached manifest — avoiding a second read of
-`project.c3proj`. `detectStrayFiles()` delegates likewise but, unlike those
-two, passes **no** manifest — it works even on a project whose
+`detectManifestDrift(options?)` delegates to the free function, passing the
+cached manifest — avoiding a second read of `project.c3proj` — and forwards
+`options` (`ManifestDriftOptions`, for example `skipFileSections`; see [ADR
+0039](/decisions/0039-drift-skip-file-sections-option.md)). `detectImageDrift()`
+passes only the project root; the free function reads no manifest, only the
+object-type files and `images/`.
+`detectStrayFiles()` also passes **no** manifest — it works even on a project whose
 `project.c3proj` is missing or malformed[^claude-md][^api-guide-project].
 `detectReferenceIntegrity(options?)` delegates the same way, passing the
 project root and the cached manifest. See [Project Manifest](/project-manifest.md)

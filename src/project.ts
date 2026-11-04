@@ -20,6 +20,7 @@ import {
   C3_SECTION_FOLDERS,
   IMAGES_FOLDER,
   ManifestDrift,
+  ManifestDriftOptions,
   ManifestReadResult,
   PROJECT_MANIFEST_FILE,
   SectionDrift,
@@ -269,9 +270,10 @@ export interface C3Project {
   /**
    * Detect manifest drift for this project.
    * Delegates to {@link detectManifestDrift} with the project root and the handle's
-   * cached manifest (reuses the already-parsed manifest instead of re-reading disk).
+   * cached manifest (reuses the already-parsed manifest instead of re-reading disk),
+   * and forwards `options` to it unchanged.
    */
-  detectManifestDrift(): ManifestDrift;
+  detectManifestDrift(options?: ManifestDriftOptions): ManifestDrift;
 
   /**
    * Detect image-derived drift for this project.
@@ -475,10 +477,10 @@ export function openProject(root: string): C3Project {
       return findInSection(models3dDir, sub, find_all_section_items_path);
     },
 
-    detectManifestDrift(): ManifestDrift {
+    detectManifestDrift(options?: ManifestDriftOptions): ManifestDrift {
       // Pass the handle's cached manifest as the second arg so the free function reuses
       // the already-parsed manifest instead of re-reading project.c3proj from disk.
-      return freeDetectManifestDrift(root, this.manifest());
+      return freeDetectManifestDrift(root, this.manifest(), options);
     },
 
     detectImageDrift(): SectionDrift | null {
