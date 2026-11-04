@@ -1293,7 +1293,7 @@ export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
  * can introspect/extend — an open `Record<string, string>`, see ADR 0024 Compromise 5.
  *
  * **KNOWN INCOMPLETE** — this table is not exhaustive and never claims to be. The registry
- * grows across releases: r509 registers `.mtl`, which has no row.
+ * grows across releases: r509 registers `.mtl`, which has no row [bundle r509].
  *
  * **AUDITED** (observed in two or more independent editor-saved projects): `.css`,
  * `.html`, `.json`, `.png`, `.js`, `.ts`, `.ttf`, `.webm`, `.plist`.
@@ -1303,9 +1303,10 @@ export const SCRIPT_FILE_TYPE_EXTENSIONS: Record<string, string> = {
  * one save each, in `video` [editor save r50603].
  *
  * **BUNDLE-PREDICTED** (the value is what the editor bundle's own lookup returns for the
- * extension, which has exactly one MIME registration, so no section hint, browser `File.type`
- * or entry path can change it; no editor-saved project has recorded it; a row moves to
- * UNVALIDATED at its first editor save that records the value): `.htm`, `.scon`, `.scml`,
+ * extension, which has exactly one MIME registration, so no section hint or browser
+ * `File.type` can change it, and the r495 trace of the entry paths found none that can; no
+ * editor-saved project has recorded it; a row moves to UNVALIDATED at its first editor save
+ * that records the value): `.htm`, `.scon`, `.scml`,
  * `.csv`, `.tsv`, `.md`, `.ini`, `.apng`, `.jxl`, `.tif`, `.tiff`, `.bmp`, `.ico`, `.avif`,
  * `.avifs`, `.opus`, `.ogg`, `.wav`, `.flac`, `.mid`, `.midi`, `.kar`, `.mpg`, `.mpeg`, `.qt`,
  * `.avi`, `.woff`, `.woff2`, `.otf`, `.eot`, `.pdf`, `.zip`, `.c3p`, `.capx`, `.wasm`,

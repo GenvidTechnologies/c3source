@@ -61,7 +61,7 @@ The tiers of [ADR 0027](/decisions/0027-file-entry-type-writer-fact.md) count ed
 - **NOT CORPUS-AUDITABLE.** A different label. Such rows can never be checked against the corpus, and the label must name the source that would check them. A BUNDLE-PREDICTED row can be checked by the corpus and by an editor save. Nothing has observed it yet, but nothing prevents it.
 - **KNOWN INCOMPLETE.** It stays a label on the whole table, independent of the row tiers. Its reason changes: the registry grows between releases, and r509 adds `.mtl`.
 
-**Scope.** The label applies where a table's tiers are defined by observation counts, as ADR 0027 defines them. Other tables already say "AUDITED against the editor bundle", for example `SCRIPT_FILE_TYPE_EXTENSIONS`. They are not relabelled, and that inconsistency is left alone.
+**Scope.** The label applies where a table's tiers are defined by observation counts, as ADR 0027 defines them. Other tables already apply AUDITED to a value checked against the editor bundle, for example `SCRIPT_FILE_TYPE_EXTENSIONS`, whose JSDoc says it "matches C3's own editor bundle". They are not relabelled, and that inconsistency is left alone.
 
 **Evidence tag: `[bundle r506-3]`.** The segment is the release's URL path segment on editor.construct.net, in the same form as `[bundle r495]`. `[editor save r50603]` is a different tag for a different channel and is not interchangeable with it.
 
@@ -91,7 +91,7 @@ The tiers of [ADR 0027](/decisions/0027-file-entry-type-writer-fact.md) count ed
 
 ## Consequences
 
-- **`fileTypeForName` output changes for 45 extensions.** It returned `application/octet-stream` and now returns the registry type. This is a behaviour change for direct callers. Every existing row is unchanged, and the table was already labelled KNOWN INCOMPLETE. The change ships in a minor release with a "Behaviour change for direct callers" note, as #114 did ([ADR 0037](/decisions/0037-link-safe-disk-walks.md)).
+- **`fileTypeForName` output changes for 45 extensions.** It returned `application/octet-stream` and now returns the registry type. This is a behaviour change for direct callers. Every existing row is unchanged, and the table was already labelled KNOWN INCOMPLETE. The change ships in a minor release with a "Behaviour change for direct callers" note in `CHANGELOG.md`, as the #114 entry there does.
 - **`fileTypeForSection` differs from `fileTypeForName` at one cell.** Only (`video`, `.webm`) differs. Every other extension resolves through the flat table in every section.
 - **construct3-chef is affected.** Its `inferMimeType` and its `MIME_MAP`, which is the same object as `EXTENSION_FILE_TYPES`, change for the 45 extensions. The sync sets a type only when it creates a new item, so existing entries are not re-typed. A heads-up issue follows the release.
 - **The corpus probe needs no edit.** Probe 10 of `scripts/scan-domain-facts.mjs` reads the flat table, so an entry with one of the 45 extensions now reports MATCH or MISMATCH and no longer UNMAPPED. A MISMATCH is the first observation that falsifies a BUNDLE-PREDICTED row. A MATCH on a project saved by the editor is the evidence that promotes it.

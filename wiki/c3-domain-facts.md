@@ -545,7 +545,7 @@ update this doc's **numbers** — never the JSDoc labels.
 
 ## Related
 
-- [ADR 0027 — File-entry type as a writer-direction domain fact](/decisions/0027-file-entry-type-writer-fact.md) — why `EXTENSION_FILE_TYPES` is an open table with an accessor and two tiers.
+- [ADR 0027 — File-entry type as a writer-direction domain fact](/decisions/0027-file-entry-type-writer-fact.md) — why `EXTENSION_FILE_TYPES` is an open table with an accessor and three tiers.
 - [ADR 0036 — Section-aware file-entry type and info keys](/decisions/0036-section-aware-file-entry-type-and-info-keys.md) — why `fileTypeForSection` overrides the flat table for the `video` section.
 - [ADR 0038 — BUNDLE-PREDICTED file-entry types](/decisions/0038-bundle-predicted-file-entry-types.md) — why the flat table grew by the single-registration extensions, and the tier label's definition.
 - [ADR 0031 — An empty stem is not a section item](/decisions/0031-empty-stem-is-not-a-section-item.md) — the decision behind the empty-stem boundary above.
