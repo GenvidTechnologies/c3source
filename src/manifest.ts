@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import {
+  C3_TS_DEFS_FOLDER,
   find_all_files_path,
   find_all_section_items_path,
   isEditorLocalPath,
@@ -1719,6 +1720,66 @@ export interface RescanEntry {
  * `.ts` twin the project already registers; `section` is a file whose type is not of the section.
  */
 export type RescanAdmissionIssue = { kind: "name" | "reserved-root-name" | "ts-defs" | "ts-twin" | "section" };
+
+/**
+ * The editor's file-name check (`nsi`) for a rescanned entry, as a refusal test. It refuses and
+ * never strips: the length, forbidden-character and edge tests run on the code points of the NFC
+ * form, and the device test runs on the raw name lower-cased, as the editor does.
+ */
+function rescanNameRefused(name: string): boolean {
+  if (!name) return true;
+  const chars = [...name.normalize()];
+  if (chars.length >= ITEM_NAME_LENGTH_LIMIT) return true;
+  if (chars.some((c) => ITEM_NAME_FORBIDDEN.has(c))) return true;
+  const first = chars[0];
+  const last = chars[chars.length - 1];
+  if (first === "." || ITEM_NAME_WHITESPACE.has(first)) return true;
+  if (last === "." || ITEM_NAME_WHITESPACE.has(last)) return true;
+  return ITEM_NAME_DEVICES.has(name.toLowerCase());
+}
+
+/**
+ * The editor's decision for one unlisted entry when it rescans a folder project's `rootFileFolders`
+ * section. Returns the first refusal in the editor's order, or `undefined` when the editor admits
+ * the entry. Throws on a section that is not a key of {@link C3_ROOT_FILE_FOLDERS}.
+ *
+ * - **AUDITED against the C3 editor bundle at r495 and r506-3.** The name check: the editor refuses
+ *   an empty name, a name of 200 or more code points after NFC, a name holding one of ten forbidden
+ *   characters, a first or last code point that is `.` or one of 23 whitespace code points, and a
+ *   device name (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`) compared on the raw name
+ *   lower-cased. It applies to files and folders, and it refuses without stripping. Blast radius:
+ *   a rule too loose lists an entry the editor skips; a rule too strict hides an entry the editor
+ *   admits. See `raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md`.
+ * - **AUDITED against the C3 editor bundle at r495 and r506-3.** The reserved root names: a file
+ *   directly in the Files (`general`) root whose lower-cased name is in
+ *   {@link C3_GENERAL_ROOT_RESERVED_FILE_NAMES} is refused. The rule does not apply to folders,
+ *   to a Files subfolder, or to another section. Blast radius: a missing name lists a file the
+ *   editor skips; an extra name hides a file the editor admits. See the same capture.
+ * - **AUDITED against the C3 editor bundle at r495 and r506-3.** The `ts-defs` folder: a folder named
+ *   exactly `ts-defs` directly in the `script` root is refused, before the name check. A `ts-defs`
+ *   folder below that root or in another section is not refused by this rule. Blast radius: a
+ *   caller that matches the name loosely hides a folder the editor admits. See the same capture.
+ */
+export function rescanAdmissionIssue(section: C3FileSection, entry: RescanEntry): RescanAdmissionIssue | undefined {
+  if (!Object.prototype.hasOwnProperty.call(C3_ROOT_FILE_FOLDERS, section)) {
+    throw new Error(`rescanAdmissionIssue: unknown file section '${section}'`);
+  }
+  if (entry.kind === "folder") {
+    if (section === "script" && entry.atSectionRoot && entry.name === C3_TS_DEFS_FOLDER) return { kind: "ts-defs" };
+    return rescanNameRefused(entry.name) ? { kind: "name" } : undefined;
+  }
+  if (rescanNameRefused(entry.name)) return { kind: "name" };
+  if (
+    section === "general" &&
+    entry.atSectionRoot &&
+    C3_GENERAL_ROOT_RESERVED_FILE_NAMES.includes(entry.name.toLowerCase())
+  ) {
+    return { kind: "reserved-root-name" };
+  }
+  // Not yet written: the editor's per-section extension and type rules, and the refusal of a
+  // `.js` file whose `.ts` twin the project registers. Until then every other file is admitted.
+  return undefined;
+}
 
 /**
  * **AUDITED against the C3 editor bundle at r495-2.**
