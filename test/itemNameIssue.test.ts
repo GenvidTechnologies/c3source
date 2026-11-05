@@ -193,7 +193,7 @@ describe("itemNameIssue", () => {
         expect(itemNameIssue(section, input), `${section} '${input}'`).to.deep.equal({
           kind,
           name: input,
-          message: "name is reserved",
+          message: input.toLowerCase() === "system" ? `object class name '${input}' already used` : "name is reserved",
         });
       }
       expect(itemNameIssue(section, "Times"), `${section} 'Times'`).to.equal(undefined);
@@ -248,6 +248,31 @@ describe("itemNameIssue", () => {
   });
 
   it("IN16: a section that holds no named items throws", () => {
-    expect(() => itemNameIssue("images" as C3NameSection, "x"), "section 'images'").to.throw();
+    expect(() => itemNameIssue("images" as C3NameSection, "x"), "section 'images'").to.throw(
+      /unknown name section 'images'/,
+    );
+  });
+
+  it("IN17: object-class names are normalised to NFC first", () => {
+    for (const section of ["objectTypes", "families"] as const) {
+      expect(itemNameIssue(section, String.fromCodePoint(0x65, 0x301)), `${section} e + U+0301`).to.deep.equal({
+        kind: "rewritten",
+        name: String.fromCodePoint(0xe9),
+      });
+    }
+  });
+
+  it("IN18: the length limit counts code points, not UTF-16 units", () => {
+    const emoji = String.fromCodePoint(0x1f600);
+    expect(itemNameIssue("layouts", "a".repeat(198) + emoji), "199 code points").to.equal(undefined);
+    expect(itemNameIssue("layouts", "a".repeat(199) + emoji)?.kind, "200 code points").to.equal("too-long");
+  });
+
+  it("IN19: the length check uses the NFC form of the stripped name", () => {
+    const input = "a".repeat(198) + "e~" + String.fromCodePoint(0x301);
+    expect(itemNameIssue("layouts", input)).to.deep.equal({
+      kind: "rewritten",
+      name: "a".repeat(198) + "e" + String.fromCodePoint(0x301),
+    });
   });
 });

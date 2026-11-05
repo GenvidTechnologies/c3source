@@ -27,6 +27,10 @@ const names = [];
 for (const category of Object.values(data[key])) {
 	for (const expression of category.expressions ?? []) names.push(expression.expressionName);
 }
+if (names.some((n) => typeof n !== "string" || n === "")) {
+	console.error(`System plugin entry "${key}" has an expressionName that is not a non-empty string in ${file}`);
+	process.exit(1);
+}
 if (names.length === 0) {
 	console.error(`System plugin entry "${key}" has 0 expressions in ${file}`);
 	process.exit(1);

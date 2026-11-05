@@ -1550,8 +1550,9 @@ export function fileTypeForSection(section: C3FileSection, name: string): string
  *
  * The System plugin's expression names (`expressionName` in the release's `plugins/allAces.json`),
  * deprecated ones included. The C3 editor reserves an object-class name that matches one of them,
- * ignoring letter case (the System plugin's expression lookup). At this release no other code path
- * adds names to that lookup for System [bundle r495-2]. See
+ * ignoring letter case (the System plugin's expression lookup). The capability flags that add common
+ * expressions to that lookup are all off for System at r495-2 (observed in the bundle). Other routes
+ * to the System plugin-info object were not traced. See
  * `raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md`.
  *
  * The table is pinned to r495-2: a later release can reserve names it lacks. Regenerate it with
@@ -1699,7 +1700,7 @@ export const C3_SYSTEM_EXPRESSION_NAMES: readonly string[] = [
   "ColorToHexString",
 ];
 
-/** A name-section key: one of the seven manifest sections whose items are `<name>.json` files. */
+/** A name-section key: a manifest section whose items are `<name>.json` files. */
 export type C3NameSection = keyof typeof C3_SECTION_FOLDERS;
 
 /**
@@ -1782,13 +1783,13 @@ function normalizeObjectClassItemName(name: string): string {
   }
   const kept = chars.filter((c) => !OBJECT_CLASS_DROPPED.has(c) && !ITEM_NAME_WHITESPACE.has(c));
   while (kept.length && kept[0] === "_") kept.shift();
-  return kept.every((c) => c >= "0" && c <= "9") ? "" : kept.join("");
+  return kept.every((c) => /^[0-9]$/.test(c)) ? "" : kept.join("");
 }
 
 /**
  * **AUDITED against the C3 editor bundle at r495-2.**
  *
- * What the C3 editor does with an item name in the five strip sections (`layouts`, `eventSheets`,
+ * What the C3 editor does with an item name in the strip sections (`layouts`, `eventSheets`,
  * `timelines`, `flowcharts`, `models3d`) and in `objectTypes` and `families`. r379 and r402 are not
  * traced for these rules. The rules are quoted in
  * `raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md` [bundle r495-2].
@@ -1796,20 +1797,29 @@ function normalizeObjectClassItemName(name: string): string {
  * Returns the first issue in the editor's order, or `undefined` when the editor stores the name
  * unchanged. `rewritten` is not a refusal: the editor's rename UI accepts it with a warning, and a
  * stricter caller may refuse it. `issue?.name ?? name` is the stored name when the name is not refused.
+ * The setter returns early, without checks, when the new name equals the current one; that case is
+ * not modelled.
  *
  * - Strip sections: strip the name (NFC, forbidden characters, edge dots and whitespace, cut to 200
- *   code points), then refuse an empty name, a name of 200 or more code points, or a device name.
- *   The `message` is the section's setter text with the input name in it.
- * - Object classes: models the rename setter. The name is transformed, then refused when empty
- *   (`invalid name`) or reserved (`name is reserved`): a device name, then `self`/`true`/`false`/`system`
- *   ignoring case, then a System expression name ({@link C3_SYSTEM_EXPRESSION_NAMES}) ignoring case.
+ *   code points), then refuse an empty name, a name of 200 or more code points (counted on the NFC
+ *   form of the stripped name, because removing a character can bring a base letter next to a
+ *   combining mark), or a device name. The `name` of a result is the stripped name, which is what the
+ *   setter stores. The `message` is the section's setter text with the input name in it.
+ * - Object classes: models the rename setter (and the constructor's result for an empty name), not the
+ *   object-type loader. The name is transformed, then refused when empty (`invalid name`) or reserved
+ *   (`name is reserved`): a device name, then `self`/`true`/`false`/`system` ignoring case, then a
+ *   System expression name ({@link C3_SYSTEM_EXPRESSION_NAMES}) ignoring case. `System` is reported as
+ *   `reserved-word` with the setter's already-used text (`object class name 'System' already used`),
+ *   because the setter checks "already used" before "reserved" and the System object class is always
+ *   registered.
  *
  * The object-class create path (the object-class constructor) differs from the setter. An exact
  * `System` is exempt from its reserved check, the reserved check is skipped while the project is
  * loading (inferred from the code, not run), and it checks reserved before used. The object-type
- * loader gives a literal empty stem an automatic name rather than throwing; the family loader throws
- * `invalid name` (observed in the r495-2 bundle). `System` itself is already registered in every
- * project, so a create or rename to `System` fails as already used (observed).
+ * loader gives a literal empty stem an automatic name rather than throwing, so `empty` is not the
+ * loader's result; the family loader throws `invalid name` (observed in the r495-2 bundle). `System`
+ * itself is already registered in every project, so a create or rename to `System` fails as already
+ * used (observed).
  *
  * Uniqueness (`already used`, case-insensitive, shared by `objectTypes` and `families`) needs project
  * state and is not checked; see issue #125. {@link validateProjectManifest} does not call
@@ -1823,7 +1833,7 @@ function normalizeObjectClassItemName(name: string): string {
  * Residual, inferred: `normalize` and `toUpperCase` follow the JS engine's Unicode version, which may
  * differ from the editor's browser for newly assigned code points.
  *
- * @throws Error when `section` is not one of the seven name sections (a JS caller can pass any string).
+ * @throws Error when `section` is not a name section (a JS caller can pass any string).
  *
  * @example
  * itemNameIssue("layouts", "a/b"); // { kind: "rewritten", name: "ab" }
@@ -1834,15 +1844,20 @@ export function itemNameIssue(section: C3NameSection, name: string): ItemNameIss
     const stripped = stripItemName(name);
     const message = `invalid ${STRIP_SECTION_LABELS[section]} name '${name}'`;
     if (stripped === "") return { kind: "empty", name: stripped, message };
-    if ([...stripped].length >= ITEM_NAME_LENGTH_LIMIT) return { kind: "too-long", name: stripped, message };
+    if ([...stripped.normalize()].length >= ITEM_NAME_LENGTH_LIMIT) {
+      return { kind: "too-long", name: stripped, message };
+    }
     if (ITEM_NAME_DEVICES.has(stripped.toLowerCase())) return { kind: "device-name", name: stripped, message };
     return stripped !== name ? { kind: "rewritten", name: stripped } : undefined;
   }
   if (section === "objectTypes" || section === "families") {
     const n = normalizeObjectClassItemName(name);
     if (n === "") return { kind: "empty", name: n, message: "invalid name" };
-    const message = "name is reserved";
     const lower = n.toLowerCase();
+    if (lower === "system") {
+      return { kind: "reserved-word", name: n, message: `object class name '${n}' already used` };
+    }
+    const message = "name is reserved";
     if (ITEM_NAME_DEVICES.has(lower)) return { kind: "device-name", name: n, message };
     if (OBJECT_CLASS_RESERVED_WORDS.has(lower)) return { kind: "reserved-word", name: n, message };
     if (SYSTEM_EXPRESSION_NAMES_LOWER.has(lower)) return { kind: "system-expression", name: n, message };
