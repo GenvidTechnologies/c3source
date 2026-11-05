@@ -5,7 +5,7 @@ description: c3source models project.c3proj with strict and tolerant parse paths
 tags: [manifest, project.c3proj, drift-detection, c3-domain-facts]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-11-04T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-05T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -201,7 +201,9 @@ itemNameIssue("objectTypes", "Time"); // { kind: "system-expression", name: "Tim
 
 Limits:
 
-- Uniqueness is not checked, because it needs project state (issue #125).
+- `itemNameIssue` checks one name alone. Uniqueness needs project state, so
+  `detectManifestDrift` reports it as
+  [`duplicates`](#duplicate-names-are-advisory).
 - `validateProjectManifest` does not call `itemNameIssue`.
 - The rules are pinned to r495-2. r379 and r402 are not traced. The table is
   regenerated with `scripts/system-expression-names.mjs`.
@@ -281,15 +283,39 @@ item-name uniqueness](/c3-domain-facts.md#item-name-uniqueness-scope).
 
 ### Duplicate names are advisory
 
-`ManifestDrift.duplicates?: DuplicateName[]` reports a name repeated within a
-section (`DuplicateName`: `section`, `folder`, `name`, `manifestPaths`,
-`diskPaths`, both path lists sorted). The scope differs by section: in the
-seven name sections a name occurring more than once anywhere in the section, on
-either side, is a duplicate; in `rootFileFolders.<cat>` and `images` only two
-occurrences in the **same folder** count. Comparison is case-sensitive. Like
-`degraded` and `strays`, the field is omitted when empty and **never counted
-by `inSync`** — a duplicate is advisory, not drift. The per-section scope and
-the case sensitivity are **UNVALIDATED**[^issue-97-101-evidence].
+`ManifestDrift.duplicates?: DuplicateName[]` reports a name that the editor's
+name lookup treats as one name, repeated within a uniqueness scope. A
+`DuplicateName` is `{scope, key, manifest, disk}`. `manifest` and `disk` are
+lists of `DuplicateOccurrence`, `{section, folder, name, path}`. `key` is
+`name.normalize().toLowerCase()` in a folded scope, and the name itself
+otherwise. A repeat is tested on each side alone, and the disk side is folded
+the same way as the manifest side.
+
+| Scope | Comparison | Reach |
+|---|---|---|
+| `layouts`, `eventSheets` | folded | the whole section |
+| `objectClasses` (`objectTypes` and `families` together) | folded | the whole scope |
+| `timelines`, `flowcharts`, `models3d` | exact | the whole section |
+| `rootFileFolders.<cat>`, `images` | exact | the same folder only |
+
+An object type and a family with the same name are a duplicate. The drift
+keying in `diffNameMaps` stays exact, so a rename that only changes case reads
+as `missing` plus `untracked`. A user object class named `System` is not
+reported, because the built-in `System` is not in the manifest; `itemNameIssue`
+reports it as reserved. The list is ordered by scope (name scopes in walk order,
+with `objectClasses` at the position of `objectTypes`, then the file sections,
+then `images`), then by `key` in code point order.
+
+Like `degraded` and `strays`, the field is omitted when empty and is
+**never counted by `inSync`**. A duplicate is advisory, not drift. The seven name
+sections are **AUDITED** against the editor bundle at r495-2. That is a code
+reading: r379 and r402 were not traced, no editor was run, and the project load
+path was not traced. The per-folder scope of `rootFileFolders.<cat>` and
+`images` is **UNVALIDATED**[^issue-97-101-evidence]. See [C3 Domain Facts —
+item-name uniqueness scope](/c3-domain-facts.md#item-name-uniqueness-scope).
+
+The shape changed in 4.0.0, a breaking change: the earlier `section`, `folder`,
+`name`, `manifestPaths` and `diskPaths` fields are gone.
 
 ### Links are not followed
 
