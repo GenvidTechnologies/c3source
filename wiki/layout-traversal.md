@@ -163,7 +163,9 @@ because `detectStrayFiles` is the exact complement of the predicate. A
 breaking change in behaviour, not signature (3.0.0); see [ADR
 0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain Facts
 — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary)
-for the evidence, including the objectTypes and families gap[^issue-95-evidence].
+for the evidence. The objectTypes and families name rules (empty name,
+uniqueness, rename) are traced at r495-2; r379 and r402 are not
+traced[^issue-95-evidence].
 
 ### The 2.0.0 narrowing, and how to recover the old behaviour
 

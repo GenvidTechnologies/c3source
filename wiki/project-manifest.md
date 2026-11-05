@@ -165,6 +165,45 @@ depth-first order; `collectManifestItemNames` returns item strings (layout
 names, event sheet names), `collectManifestFileNames` returns file `name`
 fields (filenames like `"main.ts"`)[^api-guide-manifest].
 
+## Item-name rules
+
+`itemNameIssue(section, name)` reports what the C3 editor does with an item
+name. `section` is a `C3NameSection`, one of the seven name sections. It
+returns the first issue in the editor's order, or `undefined` when the editor
+stores the name unchanged. An `ItemNameIssue` has one of six kinds:
+
+- `rewritten` carries the `name` the editor stores instead of the input. It is
+  not a refusal: the editor accepts it with a warning. A stricter caller may
+  refuse it.
+- `empty`, `too-long`, `device-name`, `reserved-word` and `system-expression`
+  are refusals. They carry the transformed `name` the editor checked and the
+  `message` the editor throws.
+
+The rules come in two families. The five strip sections (`layouts`,
+`eventSheets`, `timelines`, `flowcharts`, `models3d`) strip forbidden
+characters and edge dots and whitespace, then refuse an empty name, a name at
+the length limit, or a device name. `objectTypes` and `families` model the
+object-class rename path: the name is transformed, then refused when empty or
+reserved. `C3_SYSTEM_EXPRESSION_NAMES` is the table of System expression names
+that `system-expression` checks, ignoring case.
+
+```ts
+itemNameIssue("layouts", "a/b"); // { kind: "rewritten", name: "ab" }
+itemNameIssue("objectTypes", "Time"); // { kind: "system-expression", name: "Time", message: "name is reserved" }
+```
+
+Limits:
+
+- Uniqueness is not checked, because it needs project state (issue #125).
+- `validateProjectManifest` does not call `itemNameIssue`.
+- The rules are pinned to r495-2. r379 and r402 are not traced. The table is
+  regenerated with `scripts/system-expression-names.mjs`.
+
+See [C3 Domain Facts — item-name uniqueness
+scope](/c3-domain-facts.md#item-name-uniqueness-scope) and [the empty-stem
+boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary) for the
+evidence.
+
 ## Drift detection
 
 `detectManifestDrift(projectDir, manifest?, options?)` compares declared membership
@@ -225,8 +264,9 @@ path: each manifest path with no equal disk path is `missing`, each disk path
 with no equal manifest path is `untracked`. Entries carry a total sort
 tiebreak (kind, then name, then path). Name uniqueness is **not assumed**: the
 traced editor name setters (layouts, event sheets, timelines, flowcharts and
-models3d) refuse a repeat, but the objectTypes and families setters are
-untraced, hand-written trees and bad merges produce repeats, and the same file
+models3d) refuse a repeat, and the objectTypes and families setters are traced
+at r495-2 for the empty name and uniqueness (r379 and r402 are not traced).
+Hand-written trees and bad merges still produce repeats, and the same file
 name in different `rootFileFolders` folders is
 legitimate[^issue-97-101-evidence]. See [ADR
 0033](/decisions/0033-drift-keys-on-name-and-path.md) and [C3 Domain Facts —
