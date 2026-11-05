@@ -47,6 +47,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-05
+
 ### Added
 
 - **Section-aware file-entry `type` and info keys.** `fileTypeForSection(section,
@@ -578,7 +580,8 @@ meaningful library content. There are two of these — one under `@genvid` at th
 project's start, and one under `@genvidtech` when the scope rename at 1.6.0
 needed the new name claimed the same way.
 
-[Unreleased]: https://github.com/GenvidTechnologies/c3source/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/GenvidTechnologies/c3source/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/GenvidTechnologies/c3source/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/GenvidTechnologies/c3source/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/GenvidTechnologies/c3source/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/GenvidTechnologies/c3source/compare/v2.0.1...v2.1.0
