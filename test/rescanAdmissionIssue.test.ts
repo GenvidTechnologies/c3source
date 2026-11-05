@@ -186,4 +186,134 @@ describe("rescanAdmissionIssue", () => {
     expect(rescanAdmissionIssue("script", folder("ts-defs ", true))).to.deep.equal(NAME);
     expect(rescanAdmissionIssue("script", folder("ts-defs2", true))).to.equal(undefined);
   });
+
+  const TWIN = { kind: "ts-twin" };
+  const SECTION = { kind: "section" };
+  const registered = (...names: string[]) => ({ hasRegisteredFile: (n: string) => names.includes(n) });
+  // The r495 extension lists by category (capture section 8.2), with the dot.
+  const AUDIO = ".opus .ogg .webm .m4a .wav .flac .mp3 .mid .midi .kar".split(" ");
+  const VIDEO = ".webm .ogv .mp4 .mpg .mpeg .mov .qt .avi".split(" ");
+  const IMAGE = ".png .apng .jpg .jpeg .jxl .svg .webp .gif .tif .tiff .bmp .ico .avif .avifs".split(" ");
+
+  it("ts twin: refuses a script .js whose .ts twin is registered", () => {
+    expect(rescanAdmissionIssue("script", file("a.js", true, registered("a.ts")))).to.deep.equal(TWIN);
+    expect(rescanAdmissionIssue("script", file("a.js", false, registered("a.ts")))).to.deep.equal(TWIN);
+  });
+
+  it("ts twin: admits a script .js with no registered twin", () => {
+    expect(rescanAdmissionIssue("script", file("a.js", true, registered("b.ts")))).to.equal(undefined);
+    expect(rescanAdmissionIssue("script", file("a.js", true, registered()))).to.equal(undefined);
+  });
+
+  it("ts twin: refuses a general .js whose twin is registered and admits one without", () => {
+    expect(rescanAdmissionIssue("general", file("a.js", false, registered("a.ts")))).to.deep.equal(TWIN);
+    expect(rescanAdmissionIssue("general", file("a.js", false, registered()))).to.equal(undefined);
+  });
+
+  it("ts twin: asks for the name with the last extension replaced by ts", () => {
+    const asked: string[] = [];
+    const spy = {
+      hasRegisteredFile: (n: string) => {
+        asked.push(n);
+        return false;
+      },
+    };
+    rescanAdmissionIssue("script", file("A.JS", true, spy));
+    rescanAdmissionIssue("general", file("x.min.js", false, spy));
+    expect(asked).to.deep.equal(["A.ts", "x.min.ts"]);
+  });
+
+  it("ts twin: does not call the lookup for a file that is not .js", () => {
+    let calls = 0;
+    const spy = {
+      hasRegisteredFile: () => {
+        calls++;
+        return true;
+      },
+    };
+    expect(rescanAdmissionIssue("general", file("a.txt", false, spy))).to.equal(undefined);
+    expect(rescanAdmissionIssue("script", file("a.ts", true, spy))).to.deep.equal(SECTION);
+    expect(rescanAdmissionIssue("sound", file("a.js", true, spy))).to.deep.equal(SECTION);
+    expect(rescanAdmissionIssue("general", folder("a.js", false))).to.equal(undefined);
+    expect(calls).to.equal(0);
+  });
+
+  it("ts twin: throws when a .js needs the lookup and none is given", () => {
+    for (const s of ["script", "general"] as C3FileSection[]) {
+      expect(() => rescanAdmissionIssue(s, file("a.js", false)), s).to.throw(/rescanAdmissionIssue.*hasRegisteredFile/);
+    }
+    expect(rescanAdmissionIssue("general", file("a.txt", false))).to.equal(undefined);
+  });
+
+  it("section category: script admits only a .js extension, ignoring case", () => {
+    const opts = registered();
+    for (const n of ["a.js", "a.JS", "a.Js"]) {
+      expect(rescanAdmissionIssue("script", file(n, true, opts)), n).to.equal(undefined);
+    }
+    for (const n of ["a.ts", "a.mjs", "a.json", "a", "a.js.map"]) {
+      expect(rescanAdmissionIssue("script", file(n, true, opts)), n).to.deep.equal(SECTION);
+    }
+  });
+
+  it("section category: general admits a file of any extension", () => {
+    for (const n of ["a.txt", "a.png", "a", "a.ts", "a.webm", "a.mov"]) {
+      expect(rescanAdmissionIssue("general", file(n, false)), n).to.equal(undefined);
+    }
+  });
+
+  it("section category: sound and music admit every r495 audio extension", () => {
+    for (const s of ["sound", "music"] as C3FileSection[]) {
+      for (const e of AUDIO) expect(rescanAdmissionIssue(s, file("a" + e)), `${s} ${e}`).to.equal(undefined);
+      expect(rescanAdmissionIssue(s, file("a.png")), s).to.deep.equal(SECTION);
+    }
+  });
+
+  it("section category: video admits every r495 video extension", () => {
+    for (const e of VIDEO) expect(rescanAdmissionIssue("video", file("a" + e)), e).to.equal(undefined);
+    expect(rescanAdmissionIssue("video", file("a.mp3"))).to.deep.equal(SECTION);
+  });
+
+  it("section category: icon admits every r495 image extension", () => {
+    for (const e of IMAGE) expect(rescanAdmissionIssue("icon", file("a" + e)), e).to.equal(undefined);
+    expect(rescanAdmissionIssue("icon", file("a.mp4"))).to.deep.equal(SECTION);
+  });
+
+  it("section category: refuses an extension of another category or none", () => {
+    for (const s of ["sound", "music", "video", "font", "icon"] as C3FileSection[]) {
+      for (const n of ["a.txt", "a", "a.json", "a.js"]) {
+        expect(rescanAdmissionIssue(s, file(n)), `${s}/${n}`).to.deep.equal(SECTION);
+      }
+    }
+    expect(rescanAdmissionIssue("sound", file("a.mp4"))).to.deep.equal(SECTION);
+    expect(rescanAdmissionIssue("video", file("a.png"))).to.deep.equal(SECTION);
+    expect(rescanAdmissionIssue("icon", file("a.wav"))).to.deep.equal(SECTION);
+  });
+
+  it("section category: does not apply the editor-local filter", () => {
+    expect(rescanAdmissionIssue("general", folder("uistate", true))).to.equal(undefined);
+    expect(rescanAdmissionIssue("general", file("x.uistate.json", false))).to.equal(undefined);
+  });
+
+  it("section category: throws on an unknown section", () => {
+    expect(() => rescanAdmissionIssue("bogus" as C3FileSection, file("a.js"))).to.throw(/unknown file section 'bogus'/);
+    expect(() => rescanAdmissionIssue("toString" as C3FileSection, folder("a"))).to.throw(/unknown file section/);
+  });
+
+  it("font flag: admits .ttf, .otf, .woff, .woff2 and .eot", () => {
+    for (const e of [".ttf", ".otf", ".woff", ".woff2", ".eot", ".TTF"]) {
+      expect(rescanAdmissionIssue("font", file("a" + e)), e).to.equal(undefined);
+    }
+  });
+
+  it("font flag: refuses a type without the font flag", () => {
+    for (const n of ["a.png", "a.txt", "a.mp3", "a", "a.js", "a.svg"]) {
+      expect(rescanAdmissionIssue("font", file(n)), n).to.deep.equal(SECTION);
+    }
+  });
+
+  it("font flag: every C3_FONT_FILE_TYPES member is an EXTENSION_FILE_TYPES value", () => {
+    const known = new Set(Object.values(EXTENSION_FILE_TYPES));
+    expect(C3_FONT_FILE_TYPES).to.have.length(4);
+    for (const type of C3_FONT_FILE_TYPES) expect(known.has(type), type).to.equal(true);
+  });
 });
