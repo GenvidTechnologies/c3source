@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-11-05
 
+* **Creation**: decisions/0042-rescan-admission-per-entry-function.md (and its entry in decisions/index.md); **Update**: project-manifest.md (a new `## Rescan admission` section for `rescanAdmissionIssue`, `RescanEntry` and the two tables) and c3-domain-facts.md (the rescan admission rule as a platform fact, read versus inferred versus not confirmed; inventory rows for `C3_GENERAL_ROOT_RESERVED_FILE_NAMES` and `C3_FONT_FILE_TYPES`, not corpus-scanned; a pointer from the `video` section); driven by `raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md` (issue #130).
 * **Creation**: decisions/0041-duplicate-names-follow-editor-lookups.md (and its entry in decisions/index.md); **Update**: c3-domain-facts.md (the per-section duplicate lookups; the timeline and models3d reading corrected; drift-code assumptions per scope; status AUDITED at r495-2 for the name sections) and project-manifest.md (the new `DuplicateName` shape and scope table); driven by `raw/issue-125-duplicate-name-lookups-bundle-evidence-2026-11-04.md` (issue #125).
 * **Update**: design-patterns.md (advisory lists sort in UTF-16 code unit order, not code point order; the `byCodePoint` helper is a misnomer); driven by the code review of issue #125.
 

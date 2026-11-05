@@ -47,6 +47,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **The editor's rescan admission rule.** `rescanAdmissionIssue(section, entry)`
+  reports what the C3 editor does with one disk entry that a `rootFileFolders`
+  section does not list, when it rescans a folder project: `undefined` when the
+  editor adds it, or the first refusal in the editor's order, as one of five
+  kinds (`ts-defs`, `name`, `reserved-root-name`, `section`, `ts-twin`). The caller passes the
+  entry as a `RescanEntry` and answers the `.ts`-twin lookup through
+  `hasRegisteredFile`. New tables: `C3_GENERAL_ROOT_RESERVED_FILE_NAMES` (the
+  17 file names the editor reserves in the Files root) and `C3_FONT_FILE_TYPES`
+  (the types that carry the editor's font flag). The rules are read from the
+  editor bundle at r495, and at r506-3 where the rescan code is the same; only
+  the `video` rule was seen in an editor save. This is the rescan rule only: it
+  does not decide load membership, and it is not the Import Files dialog. See
+  [ADR 0042](wiki/decisions/0042-rescan-admission-per-entry-function.md) and the
+  `## Rescan admission` section of
+  [`wiki/project-manifest.md`](wiki/project-manifest.md) (#130).
+
 ## [4.0.0] - 2026-11-05
 
 ### Added
