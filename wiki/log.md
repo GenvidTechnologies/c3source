@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-11-05
+
+* **Creation**: decisions/0041-duplicate-names-follow-editor-lookups.md (and its entry in decisions/index.md); **Update**: c3-domain-facts.md (the per-section duplicate lookups; the timeline and models3d reading corrected; drift-code assumptions per scope; status AUDITED at r495-2 for the name sections) and project-manifest.md (the new `DuplicateName` shape and scope table); driven by `raw/issue-125-duplicate-name-lookups-bundle-evidence-2026-11-04.md` (issue #125).
+
 ## 2026-11-04
 
 * **Update**: c3-domain-facts.md (the objectTypes and families name setters are traced at r495-2; the object-class and layout uniqueness rules; the r495-2 versus r506.3 empty-name conflict, stated and not resolved; an inventory row for `C3_SYSTEM_EXPRESSION_NAMES` and `itemNameIssue` with the corpus run of 2,285 names and 0 issues; a regeneration note); driven by `raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md` (`issue-123-item-name-rules-bundle-evidence-2026-11-04`, issue #123).
