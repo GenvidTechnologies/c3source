@@ -1639,6 +1639,88 @@ export function fileTypeForSection(section: C3FileSection, name: string): string
 }
 
 /**
+ * **AUDITED against the C3 editor bundle at r495 and r506-3.**
+ *
+ * The file names the editor skips when a file with that name is directly in the Files
+ * (`general`) root, ignoring letter case: the editor lower-cases the name before the lookup.
+ * The editor also refuses these names when a file is added or imported to the Files root, so
+ * this is a Files-root file-name rule and not only a rescan rule. A file in a subfolder of the
+ * Files root, or in another section, is not subject to it. The set is read equal at both
+ * releases, in the same order. See `raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md`.
+ *
+ * The table is pinned to r495 and r506-3: a later release can reserve names it lacks.
+ *
+ * **Blast radius:** a name missing from the table lets a caller list a Files-root file the
+ * editor skips on rescan or refuses on add. An extra name hides a file the editor would admit.
+ */
+export const C3_GENERAL_ROOT_RESERVED_FILE_NAMES: readonly string[] = [
+  "appmanifest.json",
+  "c2runtime.js",
+  "c3runtime.js",
+  "c3main.js",
+  "data.json",
+  "debug.html",
+  "index.html",
+  "local.html",
+  "modernjscheck.js",
+  "offline.json",
+  "offlineclient.js",
+  "register-sw.js",
+  "javascriptinevents.js",
+  "typescriptinevents.js",
+  "start.js",
+  "style.css",
+  "sw.js",
+];
+
+/**
+ * **AUDITED against the C3 editor bundle at r495.**
+ *
+ * The MIME types whose registry entry carries the editor's font flag. Each equals a value of
+ * {@link EXTENSION_FILE_TYPES}. The flag is set on four registrations: `.woff`, `.woff2`,
+ * `.ttf` and `.otf` (one shared type), and `.eot`. The registry was read at r495 only; it was
+ * not re-derived at r506-3. See `raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md`.
+ *
+ * The table is pinned to r495: a later release can flag types it lacks.
+ *
+ * **Blast radius:** a type missing from the table makes a caller refuse a `font` file the
+ * editor's rescan admits. An extra type makes it admit a file the editor skips.
+ */
+export const C3_FONT_FILE_TYPES: readonly string[] = [
+  "application/font-woff",
+  "font/woff2",
+  "application/font-sfnt",
+  "application/vnd.ms-fontobject",
+];
+
+/** One directory entry offered to the editor's rescan of a `rootFileFolders` section. */
+export interface RescanEntry {
+  /** Whether the entry is a file or a folder. */
+  kind: "file" | "folder";
+  /** The entry's name, with its extension for a file. */
+  name: string;
+  /** Whether the entry is directly in the section's root folder. */
+  atSectionRoot: boolean;
+  /**
+   * Asks whether the project registers a file at a path. Called only for a `.js` file in the
+   * `script` or `general` section, with the twin name: the text after the entry's last dot
+   * replaced by `ts`, the letter case of the stem kept (`A.JS` gives `A.ts`). It returns true
+   * when the project registers a non-deleted file whose full prefixed path equals the entry's
+   * folder prefix plus that name, compared ignoring letter case after NFC. In practice that is
+   * the same folder. It is a path comparison over the whole project, not a search by file name.
+   */
+  hasRegisteredFile?: (tsName: string) => boolean;
+}
+
+/**
+ * Why the editor's rescan refuses an entry. `name` is a name the editor's file-name check
+ * refuses; `reserved-root-name` is a name in {@link C3_GENERAL_ROOT_RESERVED_FILE_NAMES} at the
+ * Files root; `ts-defs` is a `ts-defs` folder at the script root; `ts-twin` is a `.js` file whose
+ * `.ts` twin the project already registers; `section` is a file whose type is not of the section.
+ */
+export type RescanAdmissionIssue = { kind: "name" | "reserved-root-name" | "ts-defs" | "ts-twin" | "section" };
+
+/**
  * **AUDITED against the C3 editor bundle at r495-2.**
  *
  * The System plugin's expression names (`expressionName` in the release's `plugins/allAces.json`),
