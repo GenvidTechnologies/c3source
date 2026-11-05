@@ -207,7 +207,7 @@ export interface ManifestDrift {
    * **Advisory, never drift**: never counted by {@link ManifestDrift.inSync}. Present only when
    * non-empty — same convention as {@link ManifestDrift.degraded} and {@link ManifestDrift.strays}.
    * Ordered by scope (the name scopes in walk order, with `objectClasses` at the position of `objectTypes`,
-   * then the file sections, then `images`), then by `key` (code point).
+   * then the file sections, then `images`), then by `key` (UTF-16 code unit order).
    */
   duplicates?: DuplicateName[];
   /**

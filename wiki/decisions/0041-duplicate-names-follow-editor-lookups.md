@@ -66,7 +66,7 @@ export interface DuplicateOccurrence {
 | `rootFileFolders.<cat>`, `images` | exact | the same folder only | UNVALIDATED, unchanged from ADR 0033 |
 
 - **A repeat is tested on each side alone.** A name that occurs once in the manifest and once on disk is not a repeat. The disk side is folded the same way as the manifest side.
-- **Ordering.** Records are ordered by scope, then by `key` in code point order. The name scopes come in walk order, with `objectClasses` at the position of `objectTypes`. The `rootFileFolders` scopes follow, then `images`. Inside a record, occurrences are ordered by section walk order, then path key, then name.
+- **Ordering.** Records are ordered by scope, then by `key` in UTF-16 code unit order. The name scopes come in walk order, with `objectClasses` at the position of `objectTypes`. The `rootFileFolders` scopes follow, then `images`. Inside a record, occurrences are ordered by section walk order, then path key, then name.
 - **Drift keying stays exact.** `diffNameMaps` is not folded. A rename that only changes case reads as `missing` plus `untracked`, while `duplicates` folds the same names. The two differ on purpose: `moved` is a claim about one stored name, and the lookups compare stored names.
 - **No stored-name transform.** The lookups compare the stored names, so the library does not apply the editor's name transforms (the layout-rule strip or the object-class normalizer) before comparing. The only change before comparing is the fold in a folded scope. A name the editor would store differently is `itemNameIssue`'s finding.
 - **Claim limit.** The wording is "the editor's r495-2 name lookup treats these as one name". The library does not claim that the editor refuses, rewrites or fails to open such a project.

@@ -304,7 +304,7 @@ as `missing` plus `untracked`. A user object class named `System` is not
 reported, because the built-in `System` is not in the manifest; `itemNameIssue`
 reports it as reserved. The list is ordered by scope (name scopes in walk order,
 with `objectClasses` at the position of `objectTypes`, then the file sections,
-then `images`), then by `key` in code point order.
+then `images`), then by `key` in UTF-16 code unit order.
 
 Like `degraded` and `strays`, the field is omitted when empty and is
 **never counted by `inSync`**. A duplicate is advisory, not drift. The seven name
@@ -314,7 +314,7 @@ path was not traced. The per-folder scope of `rootFileFolders.<cat>` and
 `images` is **UNVALIDATED**[^issue-97-101-evidence]. See [C3 Domain Facts —
 item-name uniqueness scope](/c3-domain-facts.md#item-name-uniqueness-scope).
 
-The shape changed in 4.0.0, a breaking change: the earlier `section`, `folder`,
+The shape changes in 4.0.0, a breaking change: the earlier `section`, `folder`,
 `name`, `manifestPaths` and `diskPaths` fields are gone.
 
 ### Links are not followed
