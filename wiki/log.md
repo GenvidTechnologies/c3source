@@ -18,6 +18,7 @@ the full maintenance schema.
 ## 2026-11-05
 
 * **Creation**: decisions/0041-duplicate-names-follow-editor-lookups.md (and its entry in decisions/index.md); **Update**: c3-domain-facts.md (the per-section duplicate lookups; the timeline and models3d reading corrected; drift-code assumptions per scope; status AUDITED at r495-2 for the name sections) and project-manifest.md (the new `DuplicateName` shape and scope table); driven by `raw/issue-125-duplicate-name-lookups-bundle-evidence-2026-11-04.md` (issue #125).
+* **Update**: design-patterns.md (advisory lists sort in UTF-16 code unit order, not code point order; the `byCodePoint` helper is a misnomer); driven by the code review of issue #125.
 
 ## 2026-11-04
 
