@@ -208,6 +208,7 @@ describe("rescanAdmissionIssue", () => {
   it("ts twin: refuses a general .js whose twin is registered and admits one without", () => {
     expect(rescanAdmissionIssue("general", file("a.js", false, registered("a.ts")))).to.deep.equal(TWIN);
     expect(rescanAdmissionIssue("general", file("a.js", false, registered()))).to.equal(undefined);
+    expect(rescanAdmissionIssue("general", file("x.JS", false, registered("x.ts")))).to.deep.equal(TWIN);
   });
 
   it("ts twin: asks for the name with the last extension replaced by ts", () => {
@@ -271,6 +272,7 @@ describe("rescanAdmissionIssue", () => {
   it("section category: video admits every r495 video extension", () => {
     for (const e of VIDEO) expect(rescanAdmissionIssue("video", file("a" + e)), e).to.equal(undefined);
     expect(rescanAdmissionIssue("video", file("a.mp3"))).to.deep.equal(SECTION);
+    expect(rescanAdmissionIssue("video", file("A.WEBM"))).to.equal(undefined);
   });
 
   it("section category: icon admits every r495 image extension", () => {

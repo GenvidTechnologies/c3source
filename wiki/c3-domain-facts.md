@@ -551,7 +551,7 @@ platform fact, validated by reading the editor bundle, not by a corpus scan[^iss
 **Read in the bundle, at r495 and r506-3.** The rescan is one method of the
 folder class, called when a folder project opens and by the reload command. The
 code was read as text and not run. The r506-3 method equals the r495 method after
-the minifier's renaming, token for token, and so do the rules it depends on that
+the minifier's renaming (two token-by-token comparisons found no difference), and so do the rules it depends on that
 were compared:
 
 - the file-name check, which refuses and never strips;

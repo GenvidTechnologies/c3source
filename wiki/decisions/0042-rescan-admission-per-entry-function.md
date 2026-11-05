@@ -49,7 +49,7 @@ export type RescanAdmissionIssue = { kind: "name" | "reserved-root-name" | "ts-d
 export function rescanAdmissionIssue(section: C3FileSection, entry: RescanEntry): RescanAdmissionIssue | undefined;
 ```
 
-The public surface grows by two values and two types. Nothing is removed.
+The public surface grows by three values and two types. Nothing is removed.
 
 - **It follows the `itemNameIssue` and `fileTypeForSection` precedents** ([ADR 0040](/decisions/0040-item-name-rules-section-keyed-issue.md), [ADR 0036](/decisions/0036-section-aware-file-entry-type-and-info-keys.md)). The function is keyed by section, returns the first issue in the editor's order, and returns `undefined` when the editor admits the entry. The returned `kind` says which rule refused the entry.
 - **The caller supplies position and twin lookup; c3source builds the twin name.** `atSectionRoot` says whether the entry is directly in the section root. `hasRegisteredFile` is called only for a `.js` file in `script` or `general`, with the twin name: the text after the last dot replaced by `ts`, the stem's letter case kept. The callback is required for such a file, and the function throws without it, because a silent "no twin" would be a false accept.
@@ -79,7 +79,7 @@ The public surface grows by two values and two types. Nothing is removed.
 
 - New exports, all additive: `rescanAdmissionIssue`, `RescanEntry`, `RescanAdmissionIssue`, `C3_GENERAL_ROOT_RESERVED_FILE_NAMES` and `C3_FONT_FILE_TYPES`. The shipped behaviour is in [Project Manifest](/project-manifest.md#rescan-admission), and the domain facts are in [C3 Domain Facts](/c3-domain-facts.md#rescan-admission).
 - The two tables are pinned: the reserved names to r495 and r506-3, the font types to r495 only. A later release can reserve or flag more.
-- construct3-chef's planned tripwire, as issue #130 states it, is `/admi(t|ssion)|rescan/i` over the exported names. It matches `rescanAdmissionIssue`. That tripwire was not on chef's main when this record was written.
+- construct3-chef's planned tripwire, as issue #130 states it, is `/admi(t|ssion)|rescan/i` over the exported names. It matches `rescanAdmissionIssue`. That tripwire was not yet in construct3-chef when this record was written: a clone of its `main` branch (commit 079b522) on 2026-11-05 had no match for that pattern in `src/` or `test/`.
 - Residuals, as the JSDoc states them:
   - whether the browser's directory listing hides any entry is not known, because the bundle has no source for it;
   - a case-only collision is not a refusal here: the editor soft-deletes the listed entry and adds the disk one (read in the bundle, not run), and when both stay live the add throws for that entry only (inferred);

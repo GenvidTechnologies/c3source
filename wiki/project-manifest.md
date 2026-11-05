@@ -238,8 +238,11 @@ The entry is a `RescanEntry`:
   file in `script` or `general`, with the twin name: the text after the last dot
   replaced by `ts`, the letter case of the stem kept (`A.JS` asks for `A.ts`).
   The lookup must answer for the entry's folder prefix plus that name, compared
-  ignoring letter case after NFC, over every file section of the project. A
-  `.js` file without the lookup throws.
+  ignoring letter case after NFC, over every file section of the project. The
+  folder prefix is the editor's path for the entry's folder: `scripts/project/`
+  plus the subfolder path for `script`, and the subfolder path alone (no
+  prefix) for `general`, each subfolder followed by `/`. A `.js` file without the
+  lookup throws.
 
 The five refusal kinds, in the editor's order:
 
@@ -272,6 +275,8 @@ r495 only. Neither was corpus-scanned.
 
 ```ts
 // A consumer's walk of one section folder. The consumer decides what is unlisted.
+// `registeredPaths` holds every registered file's prefixed path, normalized and lower-cased.
+const prefix = "scripts/project/" + subfolderPath; // "" + subfolderPath for `general`
 for (const e of unlistedEntries) {
   const issue = rescanAdmissionIssue("script", {
     kind: e.isDirectory ? "folder" : "file",

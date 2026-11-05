@@ -1710,6 +1710,9 @@ export interface RescanEntry {
    * when the project registers a non-deleted file whose full prefixed path equals the entry's
    * folder prefix plus that name, compared ignoring letter case after NFC. In practice that is
    * the same folder. It is a path comparison over the whole project, not a search by file name.
+   * The folder prefix is the editor's path for the entry's folder: `scripts/project/` followed by
+   * the subfolder path in `script`, and the subfolder path alone in `general` (empty at its root),
+   * each subfolder name followed by `/`.
    */
   hasRegisteredFile?: (tsName: string) => boolean;
 }
@@ -1739,7 +1742,12 @@ function rescanNameRefused(name: string): boolean {
   return ITEM_NAME_DEVICES.has(name.toLowerCase());
 }
 
-/** The editor's extension parse (`VHt`): the text from the last dot, or "" when the only dot is at index 0 or none. */
+/**
+ * The editor's extension parse (`VHt`): the text from the last dot, or "" when the only dot is at
+ * index 0 or none. `fileTypeForSection` parses the extension its own way; the two agree on every
+ * name that reaches the section switch, because the name check has already refused a leading dot
+ * and the `/` and `\` characters.
+ */
 function lastDotExtension(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot < 1 ? "" : name.slice(dot);

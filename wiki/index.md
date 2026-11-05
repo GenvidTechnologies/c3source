@@ -38,7 +38,7 @@ as plain text, not links, because an out-of-bundle link is a lint finding.
 ## Layouts & Manifest
 
 * [Layout Traversal](layout-traversal.md) - find_all_files_path is the single canonical recursive disk walk underneath c3source's layout, section-item, and script-source collectors, with provenance, reachability, and item-hood kept as three deliberately orthogonal axes, plus the layer-visitor mutation contract built on the same walk pattern.
-* [Project Manifest](project-manifest.md) - c3source models project.c3proj with strict and tolerant parse paths that share one shape-rule collector, a byte-faithful serializer/writer, and structured drift detection covering missing/untracked/moved items, timeline transitions, image derivation, and stray files.
+* [Project Manifest](project-manifest.md) - c3source models project.c3proj with strict and tolerant parse paths that share one shape-rule collector, a byte-faithful serializer/writer, and structured drift detection covering missing/untracked/moved items, timeline transitions, image derivation, and stray files, plus the editor's rescan admission rule for unlisted disk entries in file sections.
 * [C3Project Handle](c3project-handle.md) - openProject(root) is a no-I/O-at-construction, root-bound handle over the full canonical set of C3 on-disk subfolders, wrapping the free-function finders and detectors and adding a write-through, never-invalidate manifest cache.
 
 ## Event Sheets
