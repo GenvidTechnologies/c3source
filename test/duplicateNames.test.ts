@@ -9,6 +9,7 @@ import {
   type C3FileFolder,
   type C3NameFolder,
   type DriftEntry,
+  type DuplicateOccurrence,
 } from "../src/c3source.js";
 import { makeTempImageProject, makeTempProject } from "./fixtureHelpers.js";
 
@@ -29,6 +30,14 @@ describe("same item name at more than one path (#101)", () => {
     }) as C3FileFolder;
 
   const empty = (): C3NameFolder => nameFolder([]);
+
+  /** An expected duplicate occurrence; the folder defaults to the section name. */
+  const occ = (section: string, name: string, p: string[], folder: string = section): DuplicateOccurrence => ({
+    section,
+    folder,
+    name,
+    path: p,
+  });
 
   /** A manifest with the given layouts and scripts folders; everything else empty. */
   const manifestOf = (layouts: C3NameFolder, scripts: C3FileFolder = fileFolder([])) =>
@@ -93,7 +102,12 @@ describe("same item name at more than one path (#101)", () => {
     expect(drift.inSync).to.equal(true);
     expect(drift.sections).to.deep.equal([]);
     expect(drift.duplicates).to.deep.equal([
-      { section: "layouts", folder: "layouts", name: "X", manifestPaths: [["a"], ["b"]], diskPaths: [["a"], ["b"]] },
+      {
+        scope: "layouts",
+        key: "X",
+        manifest: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["b"])],
+        disk: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["b"])],
+      },
     ]);
   });
 
@@ -102,7 +116,12 @@ describe("same item name at more than one path (#101)", () => {
     const drift = detectManifestDrift(dir, manifestOf(nameFolder([], [a(["X", "X"])])));
     expect(drift.inSync).to.equal(true);
     expect(drift.duplicates).to.deep.equal([
-      { section: "layouts", folder: "layouts", name: "X", manifestPaths: [["a"], ["a"]], diskPaths: [["a"]] },
+      {
+        scope: "layouts",
+        key: "X",
+        manifest: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["a"])],
+        disk: [occ("layouts", "X", ["a"])],
+      },
     ]);
   });
 
@@ -112,11 +131,13 @@ describe("same item name at more than one path (#101)", () => {
     const drift = detectManifestDrift(dir, manifestOf(empty(), scripts));
     expect(drift.duplicates).to.deep.equal([
       {
-        section: "rootFileFolders.script",
-        folder: "scripts",
-        name: "x.ts",
-        manifestPaths: [["a"], ["a"]],
-        diskPaths: [["a"]],
+        scope: "rootFileFolders.script",
+        key: "x.ts",
+        manifest: [
+          occ("rootFileFolders.script", "x.ts", ["a"], "scripts"),
+          occ("rootFileFolders.script", "x.ts", ["a"], "scripts"),
+        ],
+        disk: [occ("rootFileFolders.script", "x.ts", ["a"], "scripts")],
       },
     ]);
   });
@@ -135,7 +156,12 @@ describe("same item name at more than one path (#101)", () => {
     tempRoots.push(present);
     expect(detectImageDrift(present)?.entries).to.deep.equal([]);
     expect(detectManifestDrift(present, manifestOf(empty())).duplicates).to.deep.equal([
-      { section: "images", folder: "images", name: "a-b-c-000.png", manifestPaths: [[], []], diskPaths: [[]] },
+      {
+        scope: "images",
+        key: "a-b-c-000.png",
+        manifest: [occ("images", "a-b-c-000.png", []), occ("images", "a-b-c-000.png", [])],
+        disk: [occ("images", "a-b-c-000.png", [])],
+      },
     ]);
 
     const absent = makeTempImageProject(objectTypes, []);
@@ -156,7 +182,12 @@ describe("same item name at more than one path (#101)", () => {
     const dir = project(["layouts/a/X.json", "layouts/b/X.json"]);
     const drift = detectManifestDrift(dir, manifestOf(nameFolder([], [a(["X"]), b([])])));
     expect(drift.duplicates).to.deep.equal([
-      { section: "layouts", folder: "layouts", name: "X", manifestPaths: [["a"]], diskPaths: [["a"], ["b"]] },
+      {
+        scope: "layouts",
+        key: "X",
+        manifest: [occ("layouts", "X", ["a"])],
+        disk: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["b"])],
+      },
     ]);
   });
 
