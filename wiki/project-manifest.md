@@ -43,6 +43,10 @@ sources:
     resource: ../raw/issue-115-mime-registry-r506-3-and-type-paths-2026-11-04.md
     title: "Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)"
     last_modified: 2026-11-04
+  - id: issue-130-evidence
+    resource: ../raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md
+    title: "Issue #130 rescan admission rule for rootFileFolders sections, editor bundle evidence at r495 and r506-3 (capture, 2026-11-05)"
+    last_modified: 2026-11-05
 ---
 
 # Project Manifest
@@ -212,6 +216,103 @@ See [C3 Domain Facts — item-name uniqueness
 scope](/c3-domain-facts.md#item-name-uniqueness-scope) and [the empty-stem
 boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary) for the
 evidence.
+
+## Rescan admission
+
+`rescanAdmissionIssue(section, entry)` reports what the C3 editor does with one
+entry that is on disk in a `rootFileFolders` section but not listed in the
+manifest, when the editor rescans a folder project. It returns the first
+refusal in the editor's order, as a `RescanAdmissionIssue` (`{kind}`), or
+`undefined` when the editor admits the entry. `section` is a `C3FileSection`;
+any other string throws. This is the file-section counterpart of
+[`itemNameIssue`](#item-name-rules).
+
+The entry is a `RescanEntry`:
+
+- `kind` is `"file"` or `"folder"`.
+- `name` is the entry's name, with its extension for a file.
+- `atSectionRoot` says whether the entry is directly in the section's root
+  folder. It matters for the `ts-defs` folder and for the reserved names.
+- `hasRegisteredFile(tsName)` is optional. It asks whether the project
+  registers a non-deleted file at a path. The function calls it only for a `.js`
+  file in `script` or `general`, with the twin name: the text after the last dot
+  replaced by `ts`, the letter case of the stem kept (`A.JS` asks for `A.ts`).
+  The lookup must answer for the entry's folder prefix plus that name, compared
+  ignoring letter case after NFC, over every file section of the project. A
+  `.js` file without the lookup throws.
+
+The five refusal kinds, in the editor's order:
+
+1. `ts-defs`: a folder named exactly `ts-defs` directly in the `script` root.
+   The editor checks it before the name check. A `ts-defs` folder deeper down,
+   or in another section, is not refused by this rule.
+2. `name`: the editor's file-name check, for a file or a folder. It refuses an
+   empty name, a name of 200 or more code points after NFC, one of ten forbidden
+   characters, a first or last code point that is `.` or whitespace, and a device
+   name. It refuses and never strips.
+3. `reserved-root-name`: a file directly in the Files (`general`) root whose
+   lower-cased name is in `C3_GENERAL_ROOT_RESERVED_FILE_NAMES`. The rule does
+   not apply to folders, to a Files subfolder or to another section. The editor
+   also refuses these names when a file is added or imported to the Files root,
+   so it is a Files-root file-name rule and not only a rescan rule.
+4. `section`: the file is not of the section. `script` admits only the
+   lower-cased extension `.js`. `sound` and `music` admit the registry category
+   `audio`, `video` admits `video`, and `icon` admits `image`, where the type
+   comes from `fileTypeForSection` and the category is the text before its first
+   `/`. `font` admits a type in `C3_FONT_FILE_TYPES`. `general` admits every
+   extension.
+5. `ts-twin`: a `.js` file in `script` or `general` whose `.ts` twin the project
+   already registers. In `script` the extension test of `section` runs first.
+
+The two tables are `C3_GENERAL_ROOT_RESERVED_FILE_NAMES` (17 lower-case names)
+and `C3_FONT_FILE_TYPES` (four types: `application/font-woff`, `font/woff2`,
+`application/font-sfnt`, `application/vnd.ms-fontobject`). The first is
+**AUDITED** at r495 and r506-3, read equal at both. The second is **AUDITED** at
+r495 only. Neither was corpus-scanned.
+
+```ts
+// A consumer's walk of one section folder. The consumer decides what is unlisted.
+for (const e of unlistedEntries) {
+  const issue = rescanAdmissionIssue("script", {
+    kind: e.isDirectory ? "folder" : "file",
+    name: e.name,
+    atSectionRoot: e.parentIsSectionRoot,
+    hasRegisteredFile: (tsName) => registeredPaths.has((prefix + tsName).normalize().toLowerCase()),
+  });
+  if (issue) continue; // the editor skips it; do not descend into a refused folder
+  // the editor adds it
+}
+```
+
+Scope and the caller's part:
+
+- This is the rescan rule only. It does not decide load membership: on load the
+  editor keeps every listed entry. It is also not the Import Files dialog:
+  `C3_VIDEO_IMPORT_EXTENSIONS` answers that question for `video`, and the two
+  answers differ.
+- The caller decides which entries are unlisted. The editor matches listed items
+  by exact name at that folder level.
+- The editor does not descend into a refused folder, so a caller that walks the
+  disk stops there.
+- The function does not apply c3source's editor-local filter; a `uistate` folder
+  in `general` is admitted. A caller that wants the filter composes
+  `isEditorLocalPath`.
+
+Residuals:
+
+- Whether the browser's directory listing hides any entry is not known; the
+  bundle holds no source for it.
+- A case-only collision (disk `A.js`, listed `a.js`) is not a refusal here. By
+  the code the editor soft-deletes the listed entry and adds the disk one; that
+  is a reading, not an editor run.
+- The `section` rule follows `EXTENSION_FILE_TYPES`, which is `KNOWN INCOMPLETE`.
+  A row added there for an audio, video or image extension widens the rule.
+- The twin lookup is a full-path comparison over the whole project, so a path
+  that collides across sections also counts. That is inferred from the bundle.
+- The category and font rules were read at r495 only.
+
+See [C3 Domain Facts — rescan
+admission](/c3-domain-facts.md#rescan-admission) for the evidence[^issue-130-evidence].
 
 ## Drift detection
 
@@ -541,4 +642,5 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 [^issue-113-bundle-evidence]: Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)
 [^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)
 [^issue-115-registry-capture]: Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)
+[^issue-130-evidence]: Issue #130 rescan admission rule for rootFileFolders sections, editor bundle evidence at r495 and r506-3 (capture, 2026-11-05)
 </content>
