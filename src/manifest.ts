@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import {
+  C3_TS_DEFS_FOLDER,
   find_all_files_path,
   find_all_section_items_path,
   isEditorLocalPath,
@@ -1595,7 +1596,8 @@ export const SECTION_EXTENSION_FILE_TYPES: Partial<Record<C3FileSection, Record<
  *   by extension with the section hint `video/` [bundle r495]. This is not a list of
  *   extensions. For example `.mpg`, `.mov` and `.avi` have `video/` registry types, so the
  *   bundle predicts a rescan can admit them although the dialog does not offer them. Only
- *   `.mov` was observed being admitted [editor save r50603].
+ *   `.mov` was observed being admitted [editor save r50603]. {@link rescanAdmissionIssue}
+ *   applies this rescan rule.
  *
  * The content checks (`Acs` and `Ocs` in the bundle) appear in the folder-import dialog's
  * `_us` callback, while the rescan computes admission by registry category [bundle r495].
@@ -1636,6 +1638,238 @@ export function fileTypeForSection(section: C3FileSection, name: string): string
     ? SECTION_EXTENSION_FILE_TYPES[section]
     : undefined;
   return rows && Object.prototype.hasOwnProperty.call(rows, ext) ? rows[ext] : fileTypeForName(name);
+}
+
+/**
+ * **AUDITED against the C3 editor bundle at r495 and r506-3.**
+ *
+ * The file names the editor skips when a file with that name is directly in the Files
+ * (`general`) root, ignoring letter case: the editor lower-cases the name before the lookup.
+ * The editor also refuses these names when a file is added or imported to the Files root, so
+ * this is a Files-root file-name rule and not only a rescan rule. A file in a subfolder of the
+ * Files root, or in another section, is not subject to it. The set is read equal at both
+ * releases, in the same order. See `raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md`.
+ *
+ * The table is pinned to r495 and r506-3: a later release can reserve names it lacks.
+ *
+ * **Blast radius:** a name missing from the table lets a caller list a Files-root file the
+ * editor skips on rescan or refuses on add. An extra name hides a file the editor would admit.
+ */
+export const C3_GENERAL_ROOT_RESERVED_FILE_NAMES: readonly string[] = [
+  "appmanifest.json",
+  "c2runtime.js",
+  "c3runtime.js",
+  "c3main.js",
+  "data.json",
+  "debug.html",
+  "index.html",
+  "local.html",
+  "modernjscheck.js",
+  "offline.json",
+  "offlineclient.js",
+  "register-sw.js",
+  "javascriptinevents.js",
+  "typescriptinevents.js",
+  "start.js",
+  "style.css",
+  "sw.js",
+];
+
+/**
+ * **AUDITED against the C3 editor bundle at r495.**
+ *
+ * The MIME types whose registry entry carries the editor's font flag. Each equals a value of
+ * {@link EXTENSION_FILE_TYPES}. The flag is set on four registrations: `.woff`, `.woff2`,
+ * `.ttf` and `.otf` (one shared type), and `.eot`. The registry was read at r495 only; it was
+ * not re-derived at r506-3. See `raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md`.
+ *
+ * The table is pinned to r495: a later release can flag types it lacks.
+ *
+ * **Blast radius:** a type missing from the table makes a caller refuse a `font` file the
+ * editor's rescan admits. An extra type makes it admit a file the editor skips.
+ */
+export const C3_FONT_FILE_TYPES: readonly string[] = [
+  "application/font-woff",
+  "font/woff2",
+  "application/font-sfnt",
+  "application/vnd.ms-fontobject",
+];
+
+/** One directory entry offered to the editor's rescan of a `rootFileFolders` section. */
+export interface RescanEntry {
+  /** Whether the entry is a file or a folder. */
+  kind: "file" | "folder";
+  /** The entry's name, with its extension for a file. */
+  name: string;
+  /** Whether the entry is directly in the section's root folder. */
+  atSectionRoot: boolean;
+  /**
+   * Asks whether the project registers a file at a path. Called only for a `.js` file in the
+   * `script` or `general` section, with the twin name: the text after the entry's last dot
+   * replaced by `ts`, the letter case of the stem kept (`A.JS` gives `A.ts`). It returns true
+   * when the project registers a non-deleted file whose full prefixed path equals the entry's
+   * folder prefix plus that name, compared ignoring letter case after NFC. In practice that is
+   * the same folder. It is a path comparison over the whole project, not a search by file name.
+   * The folder prefix is the editor's path for the entry's folder: `scripts/project/` followed by
+   * the subfolder path in `script`, and the subfolder path alone in `general` (empty at its root),
+   * each subfolder name followed by `/`.
+   */
+  hasRegisteredFile?: (tsName: string) => boolean;
+}
+
+/**
+ * Why the editor's rescan refuses an entry. `name` is a name the editor's file-name check
+ * refuses; `reserved-root-name` is a name in {@link C3_GENERAL_ROOT_RESERVED_FILE_NAMES} at the
+ * Files root; `ts-defs` is a `ts-defs` folder at the script root; `ts-twin` is a `.js` file whose
+ * `.ts` twin the project already registers; `section` is a file whose type is not of the section.
+ */
+export type RescanAdmissionIssue = { kind: "name" | "reserved-root-name" | "ts-defs" | "ts-twin" | "section" };
+
+/**
+ * The editor's file-name check (`nsi`) for a rescanned entry, as a refusal test. It refuses and
+ * never strips: the length, forbidden-character and edge tests run on the code points of the NFC
+ * form, and the device test runs on the raw name lower-cased, as the editor does.
+ */
+function rescanNameRefused(name: string): boolean {
+  if (!name) return true;
+  const chars = [...name.normalize()];
+  if (chars.length >= ITEM_NAME_LENGTH_LIMIT) return true;
+  if (chars.some((c) => ITEM_NAME_FORBIDDEN.has(c))) return true;
+  const first = chars[0];
+  const last = chars[chars.length - 1];
+  if (first === "." || ITEM_NAME_WHITESPACE.has(first)) return true;
+  if (last === "." || ITEM_NAME_WHITESPACE.has(last)) return true;
+  return ITEM_NAME_DEVICES.has(name.toLowerCase());
+}
+
+/**
+ * The editor's extension parse (`VHt`): the text from the last dot, or "" when the only dot is at
+ * index 0 or none. `fileTypeForSection` parses the extension its own way; the two agree on every
+ * name that reaches the section switch, because the name check has already refused a leading dot
+ * and the `/` and `\` characters.
+ */
+function lastDotExtension(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot < 1 ? "" : name.slice(dot);
+}
+
+/** The category of a registry type: its text before the first `/`. */
+function category(type: string): string {
+  return type.split("/")[0];
+}
+
+/**
+ * Whether the project registers the `.ts` twin of a `.js` entry. The twin name is the editor's `fsi`:
+ * the text after the last dot replaced by `ts`, the stem's letter case kept.
+ */
+function rescanTwinRegistered(entry: RescanEntry): boolean {
+  if (!entry.hasRegisteredFile) {
+    throw new Error("rescanAdmissionIssue: a .js file needs RescanEntry.hasRegisteredFile to check its .ts twin");
+  }
+  const dot = entry.name.lastIndexOf(".");
+  const twinName = dot === -1 ? entry.name + ".ts" : entry.name.slice(0, dot + 1) + "ts";
+  return entry.hasRegisteredFile(twinName);
+}
+
+/**
+ * The editor's decision for one unlisted entry when it rescans a folder project's `rootFileFolders`
+ * section. Returns the first refusal in the editor's order, or `undefined` when the editor admits
+ * the entry. Throws on a section that is not a key of {@link C3_ROOT_FILE_FOLDERS}.
+ *
+ * - **AUDITED against the C3 editor bundle at r495 and r506-3.** The name check: the editor refuses
+ *   an empty name, a name of 200 or more code points after NFC, a name holding one of ten forbidden
+ *   characters, a first or last code point that is `.` or one of 23 whitespace code points, and a
+ *   device name (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`) compared on the raw name
+ *   lower-cased. It applies to files and folders, and it refuses without stripping. Blast radius:
+ *   a rule too loose lists an entry the editor skips; a rule too strict hides an entry the editor
+ *   admits. See `raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md`.
+ * - **AUDITED against the C3 editor bundle at r495 and r506-3.** The reserved root names: a file
+ *   directly in the Files (`general`) root whose lower-cased name is in
+ *   {@link C3_GENERAL_ROOT_RESERVED_FILE_NAMES} is refused. The rule does not apply to folders,
+ *   to a Files subfolder, or to another section. Blast radius: a missing name lists a file the
+ *   editor skips; an extra name hides a file the editor admits. See the same capture.
+ * - **AUDITED against the C3 editor bundle at r495 and r506-3.** The `ts-defs` folder: a folder named
+ *   exactly `ts-defs` directly in the `script` root is refused, before the name check. A `ts-defs`
+ *   folder below that root or in another section is not refused by this rule. Blast radius: a
+ *   caller that matches the name loosely hides a folder the editor admits. See the same capture.
+ * - **AUDITED against the C3 editor bundle at r495 and r506-3.** The `.js` rules and the `.ts` twin.
+ *   In `script` a file is refused unless its extension, lower-cased, is `.js` (the extension is the
+ *   text from the last dot; a dot only at index 0 gives none). In `script` and in `general` a `.js`
+ *   file is also refused when the project registers its `.ts` twin: the name with the text after the
+ *   last dot replaced by `ts`, the stem's letter case kept (`A.JS` asks for `A.ts`). `general`
+ *   admits every other extension. The lookup `RescanEntry.hasRegisteredFile` is called only for such
+ *   a `.js` file, and it throws when the entry lacks it. It matches the editor's check: a full-path
+ *   comparison over the whole project, ignoring letter case after NFC. The rescan loop is read equal
+ *   at both releases. Blast radius: a missed twin lists a `.js` file the editor skips; a false twin
+ *   hides a `.js` file the editor admits. See the same capture.
+ * - **AUDITED against the C3 editor bundle at r495.** The category rule. `sound` and `music` admit a
+ *   file whose registry type has the category `audio`, `video` admits `video`, and `icon` admits
+ *   `image`. The type comes from {@link fileTypeForSection} for the file name, and the category is
+ *   the text before the first `/`. For `video`, one editor save at r506.3 admitted `.webm` and `.mov`
+ *   [editor save r50603] (`raw/issue-113-video-section-editor-save-2026-11-02.md`). Blast radius: a
+ *   category read too wide lists a file the editor skips; one read too narrow hides a file the
+ *   editor admits. See the same capture.
+ * - **AUDITED against the C3 editor bundle at r495.** The font rule: a `font` file is admitted when
+ *   its type is in {@link C3_FONT_FILE_TYPES}, which covers `.ttf`, `.otf`, `.woff`, `.woff2` and
+ *   `.eot`. Blast radius: a type missing from the table hides a font the editor admits; an extra type
+ *   lists a file the editor skips. See the same capture.
+ *
+ * This is the rescan rule only: it does not decide load membership (load keeps every listed entry),
+ * and it is not the Import Files dialog's extension sets.
+ *
+ * A refused folder is not descended into by the editor, so a caller that walks the disk stops there.
+ *
+ * The caller decides which entries are "unlisted": the editor matches listed items by exact name at
+ * that folder level. This function is the editor's rule alone and does not apply c3source's
+ * editor-local filter (a `uistate` folder in `general` is admitted); a caller that wants that filter
+ * composes {@link isEditorLocalPath} itself.
+ *
+ * Residuals. Whether the browser's directory listing hides any entry is not known: the bundle has no
+ * source for it. A case-only collision (disk `A.js`, listed `a.js`) is not a refusal here: the editor
+ * soft-deletes the listed entry and adds the disk one (read in the bundle, not seen in an editor
+ * run), and when both stay live the editor's add throws for that entry only (inferred).
+ * The category rule follows {@link EXTENSION_FILE_TYPES}, which is KNOWN INCOMPLETE: a row added there
+ * for an audio, video or image extension widens the rule. The twin lookup is by full path over the
+ * whole project, so a path that collides across sections also counts (inferred from the bundle).
+ */
+export function rescanAdmissionIssue(section: C3FileSection, entry: RescanEntry): RescanAdmissionIssue | undefined {
+  if (!Object.prototype.hasOwnProperty.call(C3_ROOT_FILE_FOLDERS, section)) {
+    throw new Error(`rescanAdmissionIssue: unknown file section '${section}'`);
+  }
+  if (entry.kind === "folder") {
+    if (section === "script" && entry.atSectionRoot && entry.name === C3_TS_DEFS_FOLDER) return { kind: "ts-defs" };
+    return rescanNameRefused(entry.name) ? { kind: "name" } : undefined;
+  }
+  if (rescanNameRefused(entry.name)) return { kind: "name" };
+  if (
+    section === "general" &&
+    entry.atSectionRoot &&
+    C3_GENERAL_ROOT_RESERVED_FILE_NAMES.includes(entry.name.toLowerCase())
+  ) {
+    return { kind: "reserved-root-name" };
+  }
+  const ext = lastDotExtension(entry.name).toLowerCase();
+  const type = fileTypeForSection(section, entry.name);
+  switch (section) {
+    case "script":
+      if (ext !== ".js") return { kind: "section" };
+      return rescanTwinRegistered(entry) ? { kind: "ts-twin" } : undefined;
+    case "general":
+      return ext === ".js" && rescanTwinRegistered(entry) ? { kind: "ts-twin" } : undefined;
+    case "sound":
+    case "music":
+      return category(type) === "audio" ? undefined : { kind: "section" };
+    case "video":
+      return category(type) === "video" ? undefined : { kind: "section" };
+    case "icon":
+      return category(type) === "image" ? undefined : { kind: "section" };
+    case "font":
+      return C3_FONT_FILE_TYPES.includes(type) ? undefined : { kind: "section" };
+    default: {
+      const never: never = section;
+      throw new Error(`rescanAdmissionIssue: unknown file section '${String(never)}'`);
+    }
+  }
 }
 
 /**

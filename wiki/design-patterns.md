@@ -457,6 +457,16 @@ harness these checks are run with: each anchor must match exactly once, a no-op
 control runs first, and the file is restored byte-exact and verified with
 `git diff --quiet`.
 
+**Test a bundle port call site by call site.** The domain-facts rule to [port a
+bundle rule call site by call site](/c3-domain-facts.md) keeps each
+`normalize()` and `toLowerCase()` where the editor calls it. Give each such call
+an assertion that fails without it, in every branch that reaches it. An admitted
+case paired with a refused neighbour does not cover a case fold: in issue #130,
+`rescanAdmissionIssue` lower-cases the extension once for the whole section
+switch, and a mutant that dropped that call passed all 37 tests, because only
+the `script` branch had an upper-case extension. An `x.JS` case in `general`
+and an `A.WEBM` case in `video` now make that mutant fail 3 tests.
+
 Assertions whose expected values must stay legible — above all the
 event-counter agreement test — use **small inline fixtures** where the
 expected numbers are obvious (`Outer=1, Inner=2, …`), not a large real

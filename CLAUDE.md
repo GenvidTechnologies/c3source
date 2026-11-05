@@ -21,7 +21,12 @@ public, that list is a floor rather than a census — but it is the set whose
 breakage is *observable from this machine*, so **measure the blast radius of an
 API change by grepping all four**, not by reasoning about what a hypothetical
 caller might do. The consumers' own decision records are evidence too, and can
-be blocking. See [Library Overview](wiki/library-overview.md) for the worked
+be blocking. **The checkouts under `C:\repos` can lag their remotes, and `gh
+search code` misses recent code.** For a claim about a consumer's *current*
+state (a dependency range, a test, a tripwire), read a fresh shallow clone of
+its default branch in the scratchpad (`git clone --depth 1`) and cite the
+commit. In #130 the local construct3-chef checkout gave `^4.0.0` for
+`@genvidtech/c3source`, and chef's `main` at `079b522` had `^3.1.0`. See [Library Overview](wiki/library-overview.md) for the worked
 examples behind this rule.
 
 ## Knowledge base — read this before answering an architecture question

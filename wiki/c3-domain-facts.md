@@ -51,6 +51,10 @@ sources:
     resource: ../raw/issue-125-duplicate-name-lookups-bundle-evidence-2026-11-04.md
     title: "Issue #125 duplicate-name lookups per section, editor bundle evidence at r495-2 (capture, 2026-11-04)"
     last_modified: 2026-11-04
+  - id: issue-130-evidence
+    resource: ../raw/issue-130-rescan-admission-bundle-evidence-2026-11-05.md
+    title: "Issue #130 rescan admission rule for rootFileFolders sections, editor bundle evidence at r495 and r506-3 (capture, 2026-11-05)"
+    last_modified: 2026-11-05
 ---
 
 # C3 Domain Facts
@@ -180,7 +184,10 @@ groups were not scanned together and should not be read as equally
 fresh[^domain-fact-audit][^issue-86-evidence]. `C3_SYSTEM_EXPRESSION_NAMES`
 (issue #123, 2026-11-04) is in the table below but is not counted in those ten:
 it was checked against the bundle and one corpus run, not by
-`scripts/scan-domain-facts.mjs`.
+`scripts/scan-domain-facts.mjs`. `C3_GENERAL_ROOT_RESERVED_FILE_NAMES` and
+`C3_FONT_FILE_TYPES` (issue #130, 2026-11-05) are in the table below and are not
+counted either: they were read from the bundle and not corpus-scanned, so the
+number of corpus-scanned tables stays ten.
 
 | Table | Predicate/accessor | Corpus verdict | Blast radius if wrong |
 |---|---|---|---|
@@ -196,6 +203,8 @@ it was checked against the bundle and one corpus run, not by
 | `C3_SYSTEM_EXPRESSION_NAMES` | `itemNameIssue` | AUDITED against the r495-2 bundle (136 names from the System entry of `plugins/allAces.json`; the `Xcs` capability flags that add common expressions are all off for System at r495-2, observed; other routes to the System plugin-info object were not traced)[^issue-123-evidence]. Corpus run 2026-11-04: `itemNameIssue` over every declared item name in the 14 corpus manifests gave 2,285 names and 0 issues (layouts 92, eventSheets 208, objectTypes 1,868, timelines 19, flowcharts 4, families 94); models3d NOT EXERCISED (no corpus project has one). The run shows the rules do not falsely flag names the editor saved. No corpus name exercises a refusal, so it does not test them | A false accept in a strip section can make the project fail to open; a false accept of a rewritten object-class name stores a different name and a later save can lose the file; a false refusal only blocks a name the editor accepts. A name missing from the table accepts one the editor refuses; an extra name refuses one it accepts |
 | `TIMELINE_TRANSITIONS_FOLDER` | — | CORPUS-VALIDATED by the 2026-10-28 raw capture: out of 24 unique manifests, 14 have an empty transitions container and no `timelines/transitions/` dir, 8 have a non-empty container with the dir (below) | A false `folder-missing` on every healthy timeline project, or a sync tool that deletes the container |
 | `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, three tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
+| `C3_GENERAL_ROOT_RESERVED_FILE_NAMES` | `rescanAdmissionIssue` | AUDITED against the editor bundle at r495 and r506-3 (17 names, read equal at both releases, same order). NOT corpus-scanned: a corpus holds listed entries and cannot show what a rescan refuses. No editor run of a reserved name[^issue-130-evidence] | A name missing from the table lists a Files-root file the editor skips on rescan or refuses on add; an extra name hides a file the editor admits |
+| `C3_FONT_FILE_TYPES` | `rescanAdmissionIssue` | AUDITED against the editor bundle at r495 only (four types carrying the registry's font flag; not re-derived at r506-3). NOT corpus-scanned. No editor run of a font rescan[^issue-130-evidence] | A type missing from the table hides a font file the editor admits; an extra type lists a file the editor skips |
 
 The corpus is 14 Genvid-authored projects spanning 8 releases (`37900,
 38802, 39700, 40702, 44002, 44902, 47604, 49500`), skewed heavily toward
@@ -496,7 +505,8 @@ Only an extension with several registrations needs a section row ([ADR
   `.mpg` and `.avi` are admitted the same way; only `.mov` was observed. The
   content checks sit in the folder-import dialog's `_us` callback, and the rescan
   computes admission by registry category. Inference: the rescan runs no content
-  check, a reading from absence.
+  check, a reading from absence. The whole rescan rule, for every section, is in
+  [Rescan admission](#rescan-admission).
 - **Coverage of the flat table.** Every extension that the r506-3 registry
   registers once has a flat row, so `("general", "x.mov")`, `("sound",
   "x.ogv")` and `("video", "x.avi")` all return the registry type. An
@@ -529,6 +539,63 @@ capture); the entry-path trace is at r495 only. The save attests r506.3 output o
 the Import dialog was not recorded, so the `video/webm` of `clip_import.webm`
 is consistent with a browser `File.type` of `video/webm`, not proof of
 it[^issue-113-editor-save].
+
+## Rescan admission
+
+When the editor rescans a folder project, it decides for each entry on disk but
+not listed in a `rootFileFolders` section whether to add it. `rescanAdmissionIssue`
+exports that decision; see [Project Manifest — rescan
+admission](/project-manifest.md#rescan-admission) for the API. The decision is a
+platform fact, validated by reading the editor bundle, not by a corpus scan[^issue-130-evidence].
+
+**Read in the bundle, at r495 and r506-3.** The rescan is one method of the
+folder class, called when a folder project opens and by the reload command. The
+code was read as text and not run. The r506-3 method equals the r495 method after
+the minifier's renaming (two token-by-token comparisons found no difference), and so do the rules it depends on that
+were compared:
+
+- the file-name check, which refuses and never strips;
+- the 17 reserved Files-root names, the same set in the same order, lower-cased
+  before the lookup;
+- the `ts-defs` skip, which applies only at the `script` root;
+- the section hint, the folder prefix and the `.ts` twin lookup;
+- the per-section switch.
+
+The reserved-name test is also made when a file is added or imported to the
+Files root, so the list is a Files-root file-name fact and the rescan applies it
+by skipping.
+
+**Read at r495 only.** The category lists of the registry (audio, video and image)
+and the font flag, which four registrations carry (`.woff`, `.woff2`, the shared
+`.ttf` and `.otf` type, and `.eot`). The r506-3 registry is recorded in the #115
+capture, but these lists were not re-derived against the rescan switch at
+r506-3[^issue-115-registry-capture]. So `C3_FONT_FILE_TYPES` is pinned to r495.
+The folder name setter's second check, a per-class list of refused names, was
+read at r495 only; it is empty for file-section folders, so by inference it adds
+no refusal beyond the name check.
+
+**Observed in an editor.** One run, already recorded for the `video` section: a
+disk scan on project open admitted `clip_disk.webm` and `clip.mov` into `video`
+at r506.3[^issue-113-editor-save]. It agrees with the `video` branch of the
+switch, because both extensions are in the video category. This is the only
+editor observation of rescan admission. No editor run showed what the editor
+does for a refused name, a reserved root name or a case-twin.
+
+**Inferred.** The twin lookup is a path comparison over the whole project, so a
+path can collide across sections that share a prefix. A case-only collision
+(disk `A.js`, listed `a.js`) does not throw: the rescan soft-deletes the listed
+entry before the add runs. When both case-twins stay live, the add throws for
+that one entry and the rest of the batch continues. The rescan runs no content
+check, a reading from absence.
+
+**Not confirmed.** Whether the browser's directory listing hides any entry. The
+category and font rules at r506-3. Case-only collisions between folders. Case
+sensitive file systems.
+
+**Corpus.** Neither `C3_GENERAL_ROOT_RESERVED_FILE_NAMES` nor `C3_FONT_FILE_TYPES`
+was corpus-scanned. A corpus holds listed entries, so it cannot show what a
+rescan refuses. The tables are pinned to the releases read and are not
+scanner-refreshable; re-verify them against `editor.construct.net/r{NNN}/`.
 
 ## Two defects the audit found and fixed
 
@@ -669,3 +736,4 @@ them[^issue-123-evidence].
 [^issue-115-registry-capture]: Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)
 [^issue-123-evidence]: Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)
 [^issue-125-evidence]: Issue #125 duplicate-name lookups per section, editor bundle evidence at r495-2 (capture, 2026-11-04)
+[^issue-130-evidence]: Issue #130 rescan admission rule for rootFileFolders sections, editor bundle evidence at r495 and r506-3 (capture, 2026-11-05)
