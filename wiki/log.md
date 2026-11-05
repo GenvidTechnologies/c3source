@@ -17,6 +17,7 @@ the full maintenance schema.
 
 ## 2026-11-04
 
+* **Update**: c3-domain-facts.md (the objectTypes and families name setters are traced at r495-2; the object-class and layout uniqueness rules; the r495-2 versus r506.3 empty-name conflict, stated and not resolved; an inventory row for `C3_SYSTEM_EXPRESSION_NAMES` and `itemNameIssue` with the corpus run of 2,285 names and 0 issues; a regeneration note); driven by `raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md` (`issue-123-item-name-rules-bundle-evidence-2026-11-04`, issue #123).
 * **Creation**: decisions/0039-drift-skip-file-sections-option.md (and its entry in decisions/index.md); **Update**: project-manifest.md (the `options` parameter and `skipFileSections`, with the absent versus empty `rootFileFolders` asymmetry) and c3project-handle.md (`detectManifestDrift(options?)` forwards `options`; `detectImageDrift()` passes no manifest); driven by issue #119 and ADR 0039.
 * **Update**: design-patterns.md (a second instance of the `scripts/*.mjs` helper pattern, with the passed-in library values) and c3-domain-facts.md (rule 3 no longer calls all of `scripts/*.mjs` untested); driven by issues #116 and #117.
 * **Update**: module-architecture.md (the JSDoc-in-dump table gains top-level functions; a base-build recipe without a worktree, and the appended-export control with its no-final-newline trap); driven by the V15 amendment recorded in issue #115.

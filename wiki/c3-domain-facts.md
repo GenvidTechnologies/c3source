@@ -43,6 +43,10 @@ sources:
     resource: ../raw/issue-115-mime-registry-r506-3-and-type-paths-2026-11-04.md
     title: "Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)"
     last_modified: 2026-11-04
+  - id: issue-123-item-name-rules-bundle-evidence-2026-11-04
+    resource: ../raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md
+    title: "Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)"
+    last_modified: 2026-11-04
 ---
 
 # C3 Domain Facts
@@ -153,7 +157,10 @@ six were scanned 2026-08-04 for issue #68; `SCRIPT_SOURCE_EXTENSIONS`/
 `C3_SECTION_ITEM_EXTENSION` was added 2026-08-11 for issue #76;
 `EXTENSION_FILE_TYPES` was added 2026-10-01 for issue #86 — the four
 groups were not scanned together and should not be read as equally
-fresh[^domain-fact-audit][^issue-86-evidence].
+fresh[^domain-fact-audit][^issue-86-evidence]. `C3_SYSTEM_EXPRESSION_NAMES`
+(issue #123, 2026-11-04) is in the table below but is not counted in those ten:
+it was checked against the bundle and one corpus run, not by
+`scripts/scan-domain-facts.mjs`.
 
 | Table | Predicate/accessor | Corpus verdict | Blast radius if wrong |
 |---|---|---|---|
@@ -165,7 +172,8 @@ fresh[^domain-fact-audit][^issue-86-evidence].
 | `C3_MINIFIED_SOURCE_SUFFIXES` | `isMinifiedSourcePath` | NO CONTRADICTIONS across 2,605 `.json` files | Cosmetic — write-form only |
 | `SCRIPT_SOURCE_EXTENSIONS` | `isScriptSourceName` | NO GAPS at value level; `.ts`→r433 bundle-pinned | Silent over/under-collection in script discovery, never a throw |
 | `SCRIPT_FILE_TYPE_EXTENSIONS` | — | NO GAPS; same corpus as above | Silent miss in manifest interpretation, never a throw — the explicit inverse of `IMAGE_FILE_TYPE_EXTENSIONS` |
-| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters NOT TRACED in the bundle; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below). Declared `""`: LIVE-EDITOR r506.3, a separate channel from the bundle — open crashed for layouts/eventSheets and failed for timelines/families; objectTypes opened and a save wrote `Text3` in its place; flowcharts loaded the nameless item; models3d not tested[^issue-100-evidence] | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
+| `C3_SECTION_ITEM_EXTENSION` | `isSectionItemName` | NO STRAYS in 6 of 7 sections; `models3d` NOT EXERCISED (no corpus project has one). Empty-stem exclusion: AUDITED against the editor bundle (layouts, event sheets, timelines, flowcharts, models3d); objectTypes and families setters traced at r495-2 only (r379 and r402 not traced)[^issue-123-evidence]; 0 `.json` dotfiles and 0 declared `""` in the 14-project corpus (below). Declared `""`: LIVE-EDITOR r506.3, a separate channel from the bundle — open crashed for layouts/eventSheets and failed for timelines/families; objectTypes opened and a save wrote `Text3` in its place; flowcharts loaded the nameless item; models3d not tested[^issue-100-evidence] | Silent mis-partition between "section item" and "stray"; a real nameless item would become a stray plus `missing` drift, never a throw |
+| `C3_SYSTEM_EXPRESSION_NAMES` | `itemNameIssue` | AUDITED against the r495-2 bundle (136 names from the System entry of `plugins/allAces.json`; the `Xcs` capability flags add none for System)[^issue-123-evidence]. Corpus run 2026-11-04: `itemNameIssue` over every declared item name in the 14 corpus manifests gave 2,285 names and 0 issues (layouts 92, eventSheets 208, objectTypes 1,868, timelines 19, flowcharts 4, families 94); models3d NOT EXERCISED (no corpus project has one). The run shows the rules do not falsely flag names the editor saved. No corpus name exercises a refusal, so it does not test them | A false accept in a strip section can make the project fail to open; a false accept of a rewritten object-class name stores a different name and a later save can lose the file; a false refusal only blocks a name the editor accepts. A name missing from the table accepts one the editor refuses; an extra name refuses one it accepts |
 | `TIMELINE_TRANSITIONS_FOLDER` | — | CORPUS-VALIDATED by the 2026-10-28 raw capture: out of 24 unique manifests, 14 have an empty transitions container and no `timelines/transitions/` dir, 8 have a non-empty container with the dir (below) | A false `folder-missing` on every healthy timeline project, or a sync tool that deletes the container |
 | `EXTENSION_FILE_TYPES` | `fileTypeForName` | NO MISMATCHES across 567 file entries; **writer direction**, `KNOWN INCOMPLETE`, three tiers (below) | A silently wrong `type` is written into `project.c3proj`; unmapped keys are `undefined` directly, the default via the accessor |
 
@@ -192,10 +200,13 @@ name setters of layouts, event sheets, timelines and flowcharts call it and
 throw at all three releases, and models3d does at r495 (the section does not
 exist in the r379 and r402 bundles). The section loaders open
 `folder + <manifest item name> + ".json"` and never list the folder, so a
-`.json` no manifest item names is never opened. **Not traced:** the objectTypes
-and families name setters (their loaders were read, their setters were not
-found), and what the editor does with a manifest that declares `""`, which the
-bundle capture left as a live-editor question. The matched snippets are verbatim
+`.json` no manifest item names is never opened. The objectTypes and families
+name setters are traced at r495-2: the object-class constructor and rename
+setter throw `invalid name` on an empty transformed name, and the loaders differ
+for a literal empty stem (see [Item-name uniqueness
+scope](#item-name-uniqueness-scope))[^issue-123-evidence]. What the editor does
+with a manifest that declares `""` was a live-editor question that the bundle
+capture left open, answered by #100 below. The matched snippets are verbatim
 in the raw capture[^issue-95-evidence]. This evidence is not scanner-refreshable;
 re-verify it against `editor.construct.net/r{NNN}/`.
 
@@ -289,9 +300,44 @@ enforces:** the name setters of layouts, event sheets, timelines and flowcharts
 throw `<kind> name '…' already used` when the new name is already taken in that
 section, at r379, r402 and r495; models3d does so at r495. The setters traced
 are those listed in the [empty-stem
-capture](#item-hood-at-the-empty-stem-boundary)[^issue-95-evidence]. The
-objectTypes and families setters were **not traced**. Nothing was traced for
-`rootFileFolders` or `images`.
+capture](#item-hood-at-the-empty-stem-boundary)[^issue-95-evidence]. Nothing
+was traced for `rootFileFolders` or `images`.
+
+**Traced at r495-2 (issue #123).** The label is r495-2, not r495: the two
+bundles are different files[^issue-123-evidence]. These are code readings
+(observed), not editor runs.
+
+- Object types and families share one name namespace. Both classes extend one
+  object-class base, and its constructor and rename setter refuse a name that
+  another object class already holds, ignoring letter case. The error text is
+  `object class name '…' already used`. A create through the plugin step
+  throws `object type name '…' already used` instead. The project registers its
+  built-in `System` object class under the key `system` at construction, so a
+  second object class named `System` fails the same test.
+- Layout names are unique ignoring letter case (`layout name '…' already used`).
+  The timeline and models3d setters use the same comparison. The event-sheet
+  and flowchart case rule was not re-read.
+- Empty names, observed. The object-class constructor and the rename setter
+  throw `invalid name` when the name transform empties a non-empty name (for
+  example `123`, which is all digits). The object-type loader passes a literal
+  empty stem to the plugin step. That step takes a different branch for an
+  empty string: it gives the object an automatic name and does not throw. The
+  family loader calls the family constructor directly, so an empty family name
+  throws `invalid name`.
+- **Not traced:** r379 and r402 for the object-class rules. Only r495-2 was
+  read for them.
+
+**Conflict with the live editor, not resolved.** The #100 run at r506.3 opened
+a project whose objectTypes item was `""`, and after a save the manifest read
+`Text3` in its place[^issue-100-evidence]. The r495-2 bundle shows an
+automatic-name branch for a literal empty stem. The releases differ, and no
+r506.3 code was read. That the automatic-name branch explains `Text3` is
+inferred and unconfirmed. This page does not choose between the two records.
+
+**`detectManifestDrift` is unchanged.** Its duplicate check still compares
+names case-sensitively, per section, and the `DuplicateName` type keeps its
+current scope description. Aligning them with the case-insensitive editor rule
+and the shared object-class namespace is issue #125, not done here.
 
 **What the drift code assumes**, per scope:
 
@@ -546,6 +592,13 @@ copy skews every count[^issue-86-evidence].
 On any future C3 version bump, re-run it and
 update this doc's **numbers** — never the JSDoc labels.
 
+`C3_SYSTEM_EXPRESSION_NAMES` is not scanner-refreshable. Regenerate it from a
+release's `plugins/allAces.json` with `scripts/system-expression-names.mjs`.
+The bundle facts behind `itemNameIssue` (the strip, the object-class
+transform, the reserved test, the loader paths) are code readings. They need a
+fresh read of that release's bundle. The scanner cannot confirm
+them[^issue-123-evidence].
+
 ## Related
 
 - [ADR 0027 — File-entry type as a writer-direction domain fact](/decisions/0027-file-entry-type-writer-fact.md) — why `EXTENSION_FILE_TYPES` is an open table with an accessor and three tiers.
@@ -569,3 +622,4 @@ update this doc's **numbers** — never the JSDoc labels.
 [^issue-113-bundle-evidence]: Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)
 [^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)
 [^issue-115-registry-capture]: Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)
+[^issue-123-evidence]: Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)
