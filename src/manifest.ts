@@ -1162,6 +1162,8 @@ export function detectManifestDrift(
   const sections: SectionDrift[] = [];
   const duplicates: DuplicateName[] = [];
   const links: SkippedLink[] = [];
+  type NameLeaf = ReturnType<typeof walkDiskNameTree>[number];
+  const nameSides: { section: string; folder: string; declared: NameLeaf[]; onDisk: NameLeaf[] }[] = [];
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
     // timelines exception: the unnamed top-level subfolder is the on-disk transitions/ ("Eases") dir.
@@ -1177,8 +1179,10 @@ export function detectManifestDrift(
     for (const l of skipped) links.push({ section, folder: folderName, name: l.name, diskPath: l.path });
     const entries = sortDriftEntries([...itemEntries, ...folderEntries]);
     if (entries.length) sections.push({ section, folder: folderName, entries });
-    duplicates.push(...collectDuplicateNames(section, folderName, "section", declared, onDisk));
+    nameSides.push({ section, folder: folderName, declared, onDisk });
   }
+  for (const s of nameSides)
+    duplicates.push(...collectDuplicateNames(s.section, s.folder, "section", s.declared, s.onDisk));
   const rff = options?.skipFileSections ? undefined : m.rootFileFolders;
   if (rff)
     for (const [cat, folderName] of Object.entries(C3_ROOT_FILE_FOLDERS)) {
