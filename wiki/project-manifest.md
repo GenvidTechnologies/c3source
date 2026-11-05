@@ -27,6 +27,10 @@ sources:
     resource: ../raw/issue-100-empty-name-live-editor-2026-10-28.md
     title: "Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)"
     last_modified: 2026-10-28
+  - id: issue-123-evidence
+    resource: ../raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md
+    title: "Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)"
+    last_modified: 2026-11-04
   - id: issue-113-bundle-evidence
     resource: ../raw/issue-113-video-section-bundle-evidence-2026-11-02.md
     title: "Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)"
@@ -185,7 +189,10 @@ characters and edge dots and whitespace, then refuse an empty name, a name at
 the length limit, or a device name. `objectTypes` and `families` model the
 object-class rename path: the name is transformed, then refused when empty or
 reserved. `C3_SYSTEM_EXPRESSION_NAMES` is the table of System expression names
-that `system-expression` checks, ignoring case.
+that `system-expression` checks, ignoring case. An object-class name that
+lowercases to `system` returns `reserved-word` with the message
+`object class name '<name>' already used`, the rename setter's text, because
+every project already holds the `System` object class.
 
 ```ts
 itemNameIssue("layouts", "a/b"); // { kind: "rewritten", name: "ab" }
@@ -265,8 +272,8 @@ with no equal manifest path is `untracked`. Entries carry a total sort
 tiebreak (kind, then name, then path). Name uniqueness is **not assumed**: the
 traced editor name setters (layouts, event sheets, timelines, flowcharts and
 models3d) refuse a repeat, and the objectTypes and families setters are traced
-at r495-2 for the empty name and uniqueness (r379 and r402 are not traced).
-Hand-written trees and bad merges still produce repeats, and the same file
+at r495-2 for the empty name and uniqueness (r379 and r402 are not
+traced)[^issue-123-evidence]. Hand-written trees and bad merges still produce repeats, and the same file
 name in different `rootFileFolders` folders is
 legitimate[^issue-97-101-evidence]. See [ADR
 0033](/decisions/0033-drift-keys-on-name-and-path.md) and [C3 Domain Facts —
@@ -504,6 +511,7 @@ Facts — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-st
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
 [^issue-97-101-evidence]: Issues #97 and #101 manifest drift evidence (capture, 2026-10-28)
 [^issue-100-evidence]: Issue #100 live editor run on a declared empty item name (capture, 2026-10-28)
+[^issue-123-evidence]: Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)
 [^issue-113-bundle-evidence]: Issue #113 editor bundle evidence for file-entry type, info keys and the video section (capture, 2026-11-02)
 [^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)
 [^issue-115-registry-capture]: Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)
