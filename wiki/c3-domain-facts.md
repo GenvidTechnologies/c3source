@@ -5,7 +5,7 @@ description: c3source owns exported tables naming undocumented C3 platform facts
 tags: [domain-facts, c3-domain-facts, corpus-scan, editor-bundle, audit]
 status: stable
 stale_after: 2027-02-20
-generated: { by: process:maintain-wiki, at: 2026-11-04T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-05T12:00:00Z }
 sources:
   - id: claude-md
     resource: ../raw/claude-md-2026-08-20.md
@@ -46,6 +46,10 @@ sources:
   - id: issue-123-item-name-rules-bundle-evidence-2026-11-04
     resource: ../raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md
     title: "Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)"
+    last_modified: 2026-11-04
+  - id: issue-125-evidence
+    resource: ../raw/issue-125-duplicate-name-lookups-bundle-evidence-2026-11-04.md
+    title: "Issue #125 duplicate-name lookups per section, editor bundle evidence at r495-2 (capture, 2026-11-04)"
     last_modified: 2026-11-04
 ---
 
@@ -331,8 +335,17 @@ bundles are different files[^issue-123-evidence]. These are code readings
   built-in `System` object class under the key `system` at construction, so a
   second object class named `System` fails the same test.
 - Layout names are unique ignoring letter case (`layout name '…' already used`).
-  The timeline and models3d setters use the same comparison. The event-sheet
-  and flowchart case rule was not re-read.
+  The duplicate lookups were read per section in a later capture
+  (issue #125)[^issue-125-evidence]. The layout and event-sheet lookups
+  lowercase the probe and compare it through the case-insensitive helper. One
+  map answers for object types and families together, keyed by
+  `normalize().toLowerCase()`.
+  Timeline, flowchart and models3d names are compared exactly.
+  The setters of those three sections also run a case-insensitive guard, but it
+  compares the new name with the item's own current name, so that a rename that
+  only changes case is not refused. It is not the duplicate lookup. Inferred,
+  not run: in a timeline, flowchart or models3d section, `a` and `A` can sit
+  side by side.
 - Empty names, observed. The object-class constructor and the rename setter
   throw `invalid name` when the name transform empties a non-empty name (for
   example `123`, which is all digits). The object-type loader passes a literal
@@ -350,27 +363,43 @@ automatic-name branch for a literal empty stem. The releases differ, and no
 r506.3 code was read. That the automatic-name branch explains `Text3` is
 inferred and unconfirmed. This page does not choose between the two records.
 
-**`detectManifestDrift` is unchanged.** Its duplicate check still compares
-names case-sensitively, per section, and the `DuplicateName` type keeps its
-current scope description. Aligning them with the case-insensitive editor rule
-and the shared object-class namespace is issue #125, not done here.
+**What the drift code assumes**, per scope. `ManifestDrift.duplicates`
+reports a repeat on either side, and a repeat is tested on each side alone:
 
-**What the drift code assumes**, per scope:
+- **`layouts` and `eventSheets`**: a name should occur once in the whole
+  section, whatever folder it sits in, ignoring letter case. The compared form
+  is `normalize().toLowerCase()`.
+- **`objectClasses`**: object types and families together are one scope, folded
+  the same way. An object type and a family with the same name repeat.
+- **`timelines`, `flowcharts` and `models3d`**: a name should occur once in the
+  whole section, compared exactly.
+- **`rootFileFolders.<cat>` and `images`**: a name should occur once per
+  folder, compared exactly. The same file name in different folders is
+  legitimate and is not reported.
+- **Disk side**: folded the same way as the manifest side in a folded scope.
+- **Drift keying**: `diffNameMaps` still keys on the exact name. A rename that
+  only changes case therefore reads as `missing` plus `untracked`.
+- **`System`**: a user object class named `System` is not reported as a
+  duplicate, because the built-in `System` is not in the manifest.
+  `itemNameIssue` reports that name as reserved.
 
-- **Name sections** (the seven): a name should occur once in the whole section,
-  on each side, whatever folder it sits in. A repeat is reported in
-  `ManifestDrift.duplicates`.
-- **`rootFileFolders.<cat>` and `images`**: a name should occur once **per
-  folder**; the same file name in different folders is legitimate and is not
-  reported.
-- **Case**: names compare case-sensitively. A case-insensitive editor rule would
-  make `A` and `a` collide without being reported.
+**Status.** The seven name sections are **AUDITED** against the editor bundle at
+r495-2: the editor's r495-2 name lookup treats these as one name. This is a
+code reading, not an editor run. Residuals: r379 and r402 were not traced; no
+editor was run; the project load path was not traced (the folder-add guards call
+the same lookups, but whether loading a project reaches them was not read); and
+folding once with `normalize().toLowerCase()` may differ from the editor's
+lowercase-then-compare order for some non-ASCII names. Nothing here says the
+editor refuses, rewrites or fails to open a project that holds such a repeat.
+Corpus observation: 14 distinct local C3 projects were scanned with the built
+code, and none held a duplicate under this rule. That is an absence in those
+projects only.
 
-**Status: UNVALIDATED.** The scope per section and the case sensitivity were
-inferred from the setters' behaviour and from real file layouts, not confirmed
-against the editor or the corpus; the post-fix scan found no duplicate
-name in the scanned manifests, which is an absence in those projects only. Hand-written trees and bad merges can
-still produce a repeat, since the setters guard only editor-side edits[^issue-97-101-evidence].
+**Status: UNVALIDATED** for `rootFileFolders.<cat>` and `images`. Their
+per-folder scope was inferred from the setters' behaviour and from real file
+layouts, not confirmed against the editor. Hand-written trees and bad merges can
+still produce a repeat, since the setters guard only editor-side
+edits[^issue-97-101-evidence].
 
 ## EXTENSION_FILE_TYPES: the writer-direction fact
 
@@ -639,3 +668,4 @@ them[^issue-123-evidence].
 [^issue-113-editor-save]: Issue #113 editor save with registered video clips in the video section (capture, 2026-11-02)
 [^issue-115-registry-capture]: Issue #115 editor MIME registry at r506-3 and the paths that set a file entry's type (capture, 2026-11-04)
 [^issue-123-evidence]: Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)
+[^issue-125-evidence]: Issue #125 duplicate-name lookups per section, editor bundle evidence at r495-2 (capture, 2026-11-04)

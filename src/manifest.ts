@@ -123,34 +123,59 @@ export interface DriftDegradation {
 }
 
 /**
- * An item name that occurs more than once in a section, reported by {@link ManifestDrift.duplicates}.
+ * An item name that occurs more than once in a uniqueness scope, reported by {@link ManifestDrift.duplicates}.
+ * A repeat is counted on either side (manifest or disk).
  *
- * What counts as a duplicate depends on the section's scope:
- * - the seven name sections (`layouts`, `objectTypes`, ...): more than one occurrence of the name
- *   anywhere in the section, on either side (manifest or disk), whatever folder it sits in;
- * - `rootFileFolders.<cat>` and `images`: two occurrences of the name in the same folder (the same
- *   path), on either side. The same file name in different folders is legitimate and not reported.
+ * What counts as a duplicate depends on the scope:
+ * - `layouts`: case-insensitive (`normalize().toLowerCase()`), whatever folder the layout sits in;
+ * - `eventSheets`: the same as `layouts`;
+ * - `objectClasses`: `objectTypes` and `families` together, one namespace, case-insensitive. An object
+ *   type and a family with the same name are a duplicate;
+ * - `timelines`, `flowcharts`, `models3d`: exact comparison, whatever folder the item sits in;
+ * - `rootFileFolders.<cat>` and `images`: exact comparison, two occurrences in the same folder (the same
+ *   path) only. The same file name in different folders is legitimate and not reported.
  *   For `images`, the declared side is derived from object-type animation names
  *   (`deriveExpectedImages`), not listed in the manifest. A repeat there is therefore a derivation
  *   collision, such as type `A-B` / anim `C` vs type `A` / anim `B-C`. It is fixed by renaming an
  *   object type or animation, not by editing the manifest.
- * Comparison is case-sensitive.
+ *
+ * Drift keying (`diffNameMaps`) stays exact: a case-only rename reads as `missing` plus `untracked`.
+ *
+ * `System`: a user object class named `System` is not reported here, because the built-in `System` is not
+ * in the manifest. {@link itemNameIssue} reports that name as reserved.
  *
  * **Advisory**: a duplicate is never drift and never affects {@link ManifestDrift.inSync}.
  *
- * **UNVALIDATED**: the uniqueness scope per section and the case sensitivity were inferred, not
- * confirmed against the C3 editor.
+ * **AUDITED against the C3 editor bundle at r495-2**: the editor's r495-2 name lookup treats these as one
+ * name. The capture is `raw/issue-125-duplicate-name-lookups-bundle-evidence-2026-11-04.md`. It covers the
+ * seven name sections. Residual: r379 and r402 were not traced, no editor was run, the project load path
+ * was not traced, and folding once may differ from the editor's lowercase-then-`hM` order for some
+ * non-ASCII names.
+ *
+ * **UNVALIDATED**: for the `rootFileFolders.*` sections and `images` only, the per-folder scope was
+ * inferred, not confirmed against the C3 editor.
  */
 export interface DuplicateName {
-  /** The section, e.g. `"layouts"`, `"rootFileFolders.script"`, `"images"`. */
+  /** The uniqueness scope: a section key, or `"objectClasses"` for objectTypes and families together. */
+  scope: string;
+  /** The compared form: `name.normalize().toLowerCase()` in a folded scope, the name itself otherwise. */
+  key: string;
+  /** Every declared occurrence, sorted by section walk order, then path key, then name. */
+  manifest: DuplicateOccurrence[];
+  /** Every on-disk occurrence, same order. */
+  disk: DuplicateOccurrence[];
+}
+
+/** One occurrence of a repeated name, reported in {@link DuplicateName}. */
+export interface DuplicateOccurrence {
+  /** The section holding the occurrence, e.g. `"objectTypes"`, `"rootFileFolders.script"`, `"images"`. */
   section: string;
-  /** The section's on-disk folder, e.g. `"layouts"`, `"scripts"`, `"images"`. */
+  /** The section's on-disk folder, e.g. `"objectTypes"`, `"scripts"`. */
   folder: string;
+  /** The name as written: the manifest item name, or the on-disk stem or file name. */
   name: string;
-  /** Every declared occurrence, sorted by path key. */
-  manifestPaths: ManifestPathSegment[][];
-  /** Every on-disk occurrence, sorted by path key. */
-  diskPaths: ManifestPathSegment[][];
+  /** The folder path below the section root. */
+  path: ManifestPathSegment[];
 }
 
 /** Result of detectManifestDrift. */
@@ -178,10 +203,11 @@ export interface ManifestDrift {
    */
   strays?: StrayFile[];
   /**
-   * Item names repeated within a section (see {@link DuplicateName} for the per-section scope).
+   * Item names repeated within a uniqueness scope (see {@link DuplicateName} for the scopes).
    * **Advisory, never drift**: never counted by {@link ManifestDrift.inSync}. Present only when
    * non-empty — same convention as {@link ManifestDrift.degraded} and {@link ManifestDrift.strays}.
-   * Ordered by the walk order of sections, then by name.
+   * Ordered by scope (the name scopes in walk order, with `objectClasses` at the position of `objectTypes`,
+   * then the file sections, then `images`), then by `key` (UTF-16 code unit order).
    */
   duplicates?: DuplicateName[];
   /**
@@ -1015,33 +1041,78 @@ export function diffNameMaps(
   return sortDriftEntries(entries);
 }
 
+/** Compare two strings by UTF-16 code unit, with plain `<`/`>`. */
+const byCodePoint = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
+
+/** The form of an item name that a folded scope compares. */
+const foldItemName = (name: string): string => name.normalize().toLowerCase();
+
 /**
- * Report the names repeated on either side of a section. `scope` "section": any name occurring more
- * than once anywhere; "folder": a name occurring twice at the same path. Case-sensitive. Names are
- * ordered with plain `<`/`>`, as are each side's paths (by path key).
+ * Uniqueness scopes of the seven name sections, in walk order; a shared scope sits at its first section.
+ * Every key of C3_SECTION_FOLDERS must be in exactly one scope (test "#125 D8").
+ *
+ * Paired invariant: this table and the bullets of the {@link DuplicateName} JSDoc change together.
+ * The scopes follow the r495-2 editor lookups: `Jpt`/`HU` (layouts), `Qpt`/`JU` (event sheets),
+ * `lU` on `QCn` (object types and families, one map), `q4s`/`O$` (timelines), `Ypt`/`Y$` (flowcharts)
+ * and `xVt`/`vG` (models 3D).
  */
-function collectDuplicateNames(
-  section: string,
-  folder: string,
-  scope: "section" | "folder",
-  manifestItems: Array<{ name: string; path: ManifestPathSegment[] }>,
-  diskItems: Array<{ name: string; path: ManifestPathSegment[] }>,
-): DuplicateName[] {
-  const mByName = groupPathsByName(manifestItems);
-  const dByName = groupPathsByName(diskItems);
-  const byKey = (x: ManifestPathSegment[], y: ManifestPathSegment[]): number => {
-    const kx = pathKey(x);
-    const ky = pathKey(y);
-    return kx < ky ? -1 : kx > ky ? 1 : 0;
+const NAME_DUPLICATE_SCOPES: ReadonlyArray<{ scope: string; sections: readonly C3NameSection[]; fold: boolean }> = [
+  { scope: "layouts", sections: ["layouts"], fold: true },
+  { scope: "eventSheets", sections: ["eventSheets"], fold: true },
+  { scope: "objectClasses", sections: ["objectTypes", "families"], fold: true },
+  { scope: "timelines", sections: ["timelines"], fold: false },
+  { scope: "flowcharts", sections: ["flowcharts"], fold: false },
+  { scope: "models3d", sections: ["models3d"], fold: false },
+];
+
+/** Group occurrences by `keyOf(name)`, keeping every occurrence. */
+function groupOccurrences(
+  items: DuplicateOccurrence[],
+  keyOf: (name: string) => string,
+): Map<string, DuplicateOccurrence[]> {
+  const byKey = new Map<string, DuplicateOccurrence[]>();
+  for (const item of items) {
+    const key = keyOf(item.name);
+    const group = byKey.get(key);
+    if (group) group.push(item);
+    else byKey.set(key, [item]);
+  }
+  return byKey;
+}
+
+/** Order occurrences by section walk order, then path key, then name. */
+function compareOccurrences(a: DuplicateOccurrence, b: DuplicateOccurrence): number {
+  const rank = (section: string): number => {
+    const i = Object.keys(C3_SECTION_FOLDERS).indexOf(section);
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
   };
-  const repeats = (paths: ManifestPathSegment[][]): boolean =>
-    scope === "section" ? paths.length > 1 : new Set(paths.map(pathKey)).size < paths.length;
-  const names = [...new Set([...mByName.keys(), ...dByName.keys()])].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+  return (
+    rank(a.section) - rank(b.section) || byCodePoint(pathKey(a.path), pathKey(b.path)) || byCodePoint(a.name, b.name)
+  );
+}
+
+/**
+ * Report the keys repeated on either side of a scope. `extent` "section": any key occurring more than
+ * once anywhere; "folder": a key occurring twice at the same path. Keys are ordered with plain `<`/`>`.
+ */
+function collectDuplicates(
+  scope: string,
+  extent: "section" | "folder",
+  fold: boolean,
+  manifestItems: DuplicateOccurrence[],
+  diskItems: DuplicateOccurrence[],
+): DuplicateName[] {
+  const keyOf = fold ? foldItemName : (name: string): string => name;
+  const m = groupOccurrences(manifestItems, keyOf);
+  const d = groupOccurrences(diskItems, keyOf);
+  const repeats = (items: DuplicateOccurrence[]): boolean =>
+    extent === "section" ? items.length > 1 : new Set(items.map((o) => pathKey(o.path))).size < items.length;
+  const keys = [...new Set([...m.keys(), ...d.keys()])].sort(byCodePoint);
   const out: DuplicateName[] = [];
-  for (const name of names) {
-    const manifestPaths = [...(mByName.get(name) ?? [])].sort(byKey);
-    const diskPaths = [...(dByName.get(name) ?? [])].sort(byKey);
-    if (repeats(manifestPaths) || repeats(diskPaths)) out.push({ section, folder, name, manifestPaths, diskPaths });
+  for (const key of keys) {
+    const manifest = [...(m.get(key) ?? [])].sort(compareOccurrences);
+    const disk = [...(d.get(key) ?? [])].sort(compareOccurrences);
+    if (repeats(manifest) || repeats(disk)) out.push({ scope, key, manifest, disk });
   }
   return out;
 }
@@ -1141,7 +1212,7 @@ function diffFolderPaths(
  * flips {@link ManifestDrift.inSync}, which stays `sections.length === 0` (#68).
  *
  * The result also carries the advisory {@link ManifestDrift.duplicates}: item names occurring more
- * than once in a section. They never count as drift and never affect `inSync`.
+ * than once in a uniqueness scope (see {@link DuplicateName}). They never count as drift and never affect `inSync`.
  *
  * A symbolic link or junction below a section root is not followed: it is not an item, not a
  * folder and not a stray. Each one is listed in the advisory {@link ManifestDrift.links}, which is
@@ -1162,6 +1233,8 @@ export function detectManifestDrift(
   const sections: SectionDrift[] = [];
   const duplicates: DuplicateName[] = [];
   const links: SkippedLink[] = [];
+  type NameLeaf = ReturnType<typeof walkDiskNameTree>[number];
+  const nameSides = new Map<string, { declared: DuplicateOccurrence[]; onDisk: DuplicateOccurrence[] }>();
   for (const [section, folderName] of Object.entries(C3_SECTION_FOLDERS)) {
     const sectionFolder = m[section] as C3NameFolder | undefined;
     // timelines exception: the unnamed top-level subfolder is the on-disk transitions/ ("Eases") dir.
@@ -1177,7 +1250,21 @@ export function detectManifestDrift(
     for (const l of skipped) links.push({ section, folder: folderName, name: l.name, diskPath: l.path });
     const entries = sortDriftEntries([...itemEntries, ...folderEntries]);
     if (entries.length) sections.push({ section, folder: folderName, entries });
-    duplicates.push(...collectDuplicateNames(section, folderName, "section", declared, onDisk));
+    const occurrences = (items: NameLeaf[]): DuplicateOccurrence[] =>
+      items.map(({ name, path: p }) => ({ section, folder: folderName, name, path: p }));
+    nameSides.set(section, { declared: occurrences(declared), onDisk: occurrences(onDisk) });
+  }
+  for (const { scope, sections: members, fold } of NAME_DUPLICATE_SCOPES) {
+    const sides = members.map((s) => nameSides.get(s));
+    duplicates.push(
+      ...collectDuplicates(
+        scope,
+        "section",
+        fold,
+        sides.flatMap((s) => s?.declared ?? []),
+        sides.flatMap((s) => s?.onDisk ?? []),
+      ),
+    );
   }
   const rff = options?.skipFileSections ? undefined : m.rootFileFolders;
   if (rff)
@@ -1195,7 +1282,11 @@ export function detectManifestDrift(
         links.push({ section: `rootFileFolders.${cat}`, folder: folderName, name: l.name, diskPath: l.path });
       const entries = sortDriftEntries([...diffNameMaps(declared, onDisk), ...folderEntries]);
       if (entries.length) sections.push({ section: `rootFileFolders.${cat}`, folder: folderName, entries });
-      duplicates.push(...collectDuplicateNames(`rootFileFolders.${cat}`, folderName, "folder", declared, onDisk));
+      const fileOcc = (items: Array<{ name: string; path: ManifestPathSegment[] }>): DuplicateOccurrence[] =>
+        items.map(({ name, path: p }) => ({ section: `rootFileFolders.${cat}`, folder: folderName, name, path: p }));
+      const mOcc = fileOcc(declared);
+      const dOcc = fileOcc(onDisk);
+      duplicates.push(...collectDuplicates(`rootFileFolders.${cat}`, "folder", false, mOcc, dOcc));
     }
   const containerEntries = detectContainerDrift(m);
   if (containerEntries.length) sections.push({ section: "containers", folder: "", entries: containerEntries });
@@ -1205,7 +1296,9 @@ export function detectManifestDrift(
     if (lists) {
       const entries = diffNameMaps(lists.expected, lists.actual);
       if (entries.length) sections.push({ section: "images", folder: IMAGES_FOLDER, entries });
-      duplicates.push(...collectDuplicateNames("images", IMAGES_FOLDER, "folder", lists.expected, lists.actual));
+      const imgOcc = (items: Array<{ name: string; path: ManifestPathSegment[] }>): DuplicateOccurrence[] =>
+        items.map(({ name, path: p }) => ({ section: "images", folder: IMAGES_FOLDER, name, path: p }));
+      duplicates.push(...collectDuplicates("images", "folder", false, imgOcc(lists.expected), imgOcc(lists.actual)));
       for (const name of lists.links) links.push({ section: "images", folder: IMAGES_FOLDER, name, diskPath: [] });
     }
   } catch (err) {
@@ -1822,7 +1915,8 @@ function normalizeObjectClassItemName(name: string): string {
  * used (observed).
  *
  * Uniqueness (`already used`, case-insensitive, shared by `objectTypes` and `families`) needs project
- * state and is not checked; see issue #125. {@link validateProjectManifest} does not call
+ * state and is not checked here. {@link detectManifestDrift} reports it in the advisory
+ * {@link ManifestDrift.duplicates}. {@link validateProjectManifest} does not call
  * `itemNameIssue`; its empty check tests the raw string.
  *
  * Blast radius: a false accept in a strip section can make the project fail to open (the setter runs

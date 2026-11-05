@@ -86,7 +86,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `too-long`, `device-name`, `reserved-word`, `system-expression` or
   `rewritten`; `rewritten` is not a refusal, because the editor stores the
   issue's `name` instead of the input. The rules are audited against the C3
-  editor bundle at r495-2. Uniqueness is not checked. New exports: the types
+  editor bundle at r495-2. Uniqueness is not checked here; `detectManifestDrift`
+  reports it in `duplicates` (see Changed — BREAKING). New exports: the types
   `C3NameSection` and `ItemNameIssue`, and `C3_SYSTEM_EXPRESSION_NAMES`, the
   System plugin's expression names at r495-2, which the editor reserves as
   object-class names ignoring letter case. Regenerate that table with the new
@@ -95,6 +96,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   ([#123](https://github.com/GenvidTechnologies/c3source/issues/123)) — see
   [ADR 0040](wiki/decisions/0040-item-name-rules-section-keyed-issue.md), "Item-name
   rules as one section-keyed issue function".
+
+### Changed — BREAKING
+
+- **`ManifestDrift.duplicates` follows the editor's name lookups.**
+  **`DuplicateName` changes shape.** A `DuplicateName` is now
+  `{scope, key, manifest, disk}`, and `manifest` and `disk` list the new
+  exported `DuplicateOccurrence` (`section`, `folder`, `name`, `path`). The fields
+  `section`, `folder`, `name`, `manifestPaths` and `diskPaths` are gone.
+  `layouts` and `eventSheets` compare names after
+  `normalize().toLowerCase()`; `objectTypes` and `families` form one folded
+  scope, `objectClasses`, so an object type and a family with the same name are
+  a duplicate; `timelines`, `flowcharts` and `models3d` compare exactly. The
+  `key` is the folded name in a folded scope. Records are ordered by scope, then
+  by `key`. The name-section scopes are audited against the C3 editor bundle at
+  r495-2; `rootFileFolders.*` and `images` keep their exact, per-folder scope.
+  Drift keying is unchanged: a case-only rename still reads as `missing` plus
+  `untracked`, and `duplicates` stays advisory and never counted by `inSync`.
+  One type added, one type changed
+  ([#125](https://github.com/GenvidTechnologies/c3source/issues/125)) — see
+  [ADR 0041](wiki/decisions/0041-duplicate-names-follow-editor-lookups.md).
 
 ### Fixed
 

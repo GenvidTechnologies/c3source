@@ -5,7 +5,7 @@ description: Reusable engineering patterns c3source has settled on — single-so
 tags: [design-patterns, traversal, validation, testing, drift]
 status: stable
 stale_after: 2027-08-20
-generated: { by: process:maintain-wiki, at: 2026-11-04T12:00:00Z }
+generated: { by: process:maintain-wiki, at: 2026-11-05T12:00:00Z }
 sources:
   - id: docs-design-patterns
     resource: ../raw/docs-design-patterns-2026-08-20.md
@@ -228,6 +228,13 @@ a folder's **structural origin** (`ManifestFolderOrigin`, e.g.
 container and a user-named `transitions` folder share the path
 `["transitions"]`; only the first is exempt from `folder-missing`
 ([ADR 0032](/decisions/0032-transitions-container-never-folder-missing.md))[^issue-97-101-evidence].
+
+**Ordering.** These lists sort names and keys with plain `<` and `>`. On
+JavaScript strings that compares UTF-16 code units, not code points. The two
+orders agree inside the Basic Multilingual Plane and differ above it: an emoji
+(a surrogate pair) sorts before U+FFFD by code unit and after it by code
+point. Call the order "UTF-16 code unit order" in docs. The `byCodePoint`
+helper in `src/manifest.ts` sorts by code unit despite its name.
 
 **Trade-off.** Callers must read the advisory fields deliberately; `inSync` alone
 no longer means "nothing to report".

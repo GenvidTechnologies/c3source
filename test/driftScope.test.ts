@@ -85,7 +85,7 @@ function withoutFileSections(full: ManifestDrift): ManifestDrift {
   const out: ManifestDrift = { sections, inSync: sections.length === 0 };
   if (full.degraded) out.degraded = full.degraded;
   if (full.strays) out.strays = full.strays;
-  const duplicates = (full.duplicates ?? []).filter((d) => !isFile(d.section));
+  const duplicates = (full.duplicates ?? []).filter((d) => !isFile(d.scope));
   if (duplicates.length) out.duplicates = duplicates;
   const links = (full.links ?? []).filter((l) => !isFile(l.section));
   if (links.length) out.links = links;
@@ -110,11 +110,11 @@ describe("detectManifestDrift options (#119)", () => {
     const { root, manifest } = richTree();
     const full = detectManifestDrift(root, manifest);
     expect(full.sections.some((s) => isFile(s.section))).to.equal(true);
-    expect((full.duplicates ?? []).some((d) => isFile(d.section))).to.equal(true);
+    expect((full.duplicates ?? []).some((d) => isFile(d.scope))).to.equal(true);
     expect((full.links ?? []).some((l) => isFile(l.section))).to.equal(true);
     const skipped = detectManifestDrift(root, manifest, { skipFileSections: true });
     expect(skipped.sections.some((s) => isFile(s.section))).to.equal(false);
-    expect((skipped.duplicates ?? []).some((d) => isFile(d.section))).to.equal(false);
+    expect((skipped.duplicates ?? []).some((d) => isFile(d.scope))).to.equal(false);
     expect((skipped.links ?? []).some((l) => isFile(l.section))).to.equal(false);
   });
 
