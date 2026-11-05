@@ -78,6 +78,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   none removed
   ([#119](https://github.com/GenvidTechnologies/c3source/issues/119)) — see
   [ADR 0039](wiki/decisions/0039-drift-skip-file-sections-option.md).
+- **`itemNameIssue`, the C3 editor's item-name rules.** `itemNameIssue(section,
+  name)` applies the editor's naming rules for the five layout-style sections
+  (`layouts`, `eventSheets`, `timelines`, `flowcharts`, `models3d`) and for
+  `objectTypes` and `families`. It returns the first issue, or `undefined` when
+  the editor stores the name unchanged. An issue has the kind `empty`,
+  `too-long`, `device-name`, `reserved-word`, `system-expression` or
+  `rewritten`; `rewritten` is not a refusal, because the editor stores the
+  issue's `name` instead of the input. The rules are audited against the C3
+  editor bundle at r495-2. Uniqueness is not checked. New exports: the types
+  `C3NameSection` and `ItemNameIssue`, and `C3_SYSTEM_EXPRESSION_NAMES`, the
+  System plugin's expression names at r495-2, which the editor reserves as
+  object-class names ignoring letter case. Regenerate that table with the new
+  dev script `scripts/system-expression-names.mjs`. Four names added, none
+  removed
+  ([#123](https://github.com/GenvidTechnologies/c3source/issues/123)) — see
+  [ADR 0040](wiki/decisions/0040-item-name-rules-section-keyed-issue.md), "Item-name
+  rules as one section-keyed issue function".
 
 ### Fixed
 

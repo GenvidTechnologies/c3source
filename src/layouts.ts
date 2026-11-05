@@ -212,8 +212,11 @@ export const C3_SECTION_ITEM_EXTENSION = ".json";
  *
  * Empty-stem exclusion: AUDITED against the C3 editor bundle at r379, r402 and r495
  * for layouts, event sheets, timelines and flowcharts, and at r495 for models3d
- * (absent from the earlier bundles); the objectTypes/families name setters are
- * not traced.
+ * (absent from the earlier bundles). The objectTypes/families name rules are
+ * traced at r495-2 only (see `itemNameIssue`): the object-class constructor and
+ * rename setter refuse a name that normalizes to empty, and the object-type
+ * loader gives a literal empty stem an automatic name. They are not traced at
+ * r379 or r402.
  *
  * **Blast radius:** a real nameless item would become a stray plus `missing`
  * drift — a false negative in discovery, never a throw.

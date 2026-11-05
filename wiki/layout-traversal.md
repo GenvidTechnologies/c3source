@@ -19,6 +19,10 @@ sources:
     resource: ../raw/issue-95-empty-stem-evidence-2026-10-27.md
     title: "Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)"
     last_modified: 2026-10-27
+  - id: issue-123-evidence
+    resource: ../raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md
+    title: "Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)"
+    last_modified: 2026-11-04
 ---
 
 # Layout Traversal
@@ -163,7 +167,9 @@ because `detectStrayFiles` is the exact complement of the predicate. A
 breaking change in behaviour, not signature (3.0.0); see [ADR
 0031](/decisions/0031-empty-stem-is-not-a-section-item.md) and [C3 Domain Facts
 — the empty-stem boundary](/c3-domain-facts.md#item-hood-at-the-empty-stem-boundary)
-for the evidence, including the objectTypes and families gap[^issue-95-evidence].
+for the evidence. The objectTypes and families name rules (empty name,
+uniqueness, rename) are traced at r495-2; r379 and r402 are not
+traced[^issue-123-evidence].
 
 ### The 2.0.0 narrowing, and how to recover the old behaviour
 
@@ -261,4 +267,5 @@ shallow walk previously skipped[^claude-md].
 [^claude-md]: CLAUDE.md (c3source project instructions, 2026-08-20 capture)
 [^api-guide]: docs/api-guide.md (c3source API guide, 2026-08-20 capture)
 [^issue-95-evidence]: Issue #95 empty-stem editor-bundle evidence (capture, 2026-10-27)
+[^issue-123-evidence]: Issue #123 item-name rules, editor bundle evidence at r495-2 (capture, 2026-11-04)
 </content>

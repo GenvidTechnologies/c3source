@@ -1546,6 +1546,327 @@ export function fileTypeForSection(section: C3FileSection, name: string): string
 }
 
 /**
+ * **AUDITED against the C3 editor bundle at r495-2.**
+ *
+ * The System plugin's expression names (`expressionName` in the release's `plugins/allAces.json`),
+ * deprecated ones included. The C3 editor reserves an object-class name that matches one of them,
+ * ignoring letter case (the System plugin's expression lookup). The capability flags that add common
+ * expressions to that lookup are all off for System at r495-2 (observed in the bundle). Other routes
+ * to the System plugin-info object were not traced. See
+ * `raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md`.
+ *
+ * The table is pinned to r495-2: a later release can reserve names it lacks. Regenerate it with
+ * `scripts/system-expression-names.mjs` on that release's `allAces.json`.
+ *
+ * A name missing from the table lets a caller accept an object-class name the editor refuses on
+ * create or rename. An extra name refuses a name the editor would accept.
+ */
+export const C3_SYSTEM_EXPRESSION_NAMES: readonly string[] = [
+  "WindowWidth",
+  "WindowHeight",
+  "OriginalWindowWidth",
+  "OriginalWindowHeight",
+  "OriginalViewportWidth",
+  "OriginalViewportHeight",
+  "LayerScale",
+  "LayerOpacity",
+  "LayerScaleRate",
+  "LayerAngle",
+  "ViewportLeft",
+  "ViewportTop",
+  "ViewportRight",
+  "ViewportBottom",
+  "ViewportWidth",
+  "ViewportHeight",
+  "ViewportMidX",
+  "ViewportMidY",
+  "LayerToCanvasX",
+  "LayerToCanvasY",
+  "CanvasToLayerX",
+  "CanvasToLayerY",
+  "LayerToLayerX",
+  "LayerToLayerY",
+  "LayerScrollX",
+  "LayerScrollY",
+  "LayerParallaxX",
+  "LayerParallaxY",
+  "LayerIndex",
+  "LayerZElevation",
+  "CallMapped",
+  "scrollx",
+  "scrolly",
+  "LayoutWidth",
+  "LayoutHeight",
+  "LayoutScale",
+  "LayoutName",
+  "LayoutAngle",
+  "CanvasSnapshot",
+  "VanishingPointX",
+  "VanishingPointY",
+  "sqrt",
+  "abs",
+  "round",
+  "roundToDp",
+  "floor",
+  "ceil",
+  "sign",
+  "sin",
+  "cos",
+  "tan",
+  "asin",
+  "acos",
+  "atan",
+  "exp",
+  "ln",
+  "log10",
+  "max",
+  "min",
+  "distance",
+  "distance3d",
+  "angle",
+  "lerp",
+  "pi",
+  "anglediff",
+  "anglelerp",
+  "anglerotate",
+  "unlerp",
+  "Infinity",
+  "setbit",
+  "togglebit",
+  "getbit",
+  "qarp",
+  "cubic",
+  "cosp",
+  "imageloadingprogress",
+  "SaveStateJSON",
+  "objectcount",
+  "loopindex",
+  "renderer",
+  "projectversion",
+  "projectid",
+  "projectuniqueid",
+  "loadingprogress",
+  "ImageMemoryUsage",
+  "projectname",
+  "rendererDetail",
+  "CurrentEventSheetName",
+  "CurrentEventNumber",
+  "ProjectFileCount",
+  "ProjectFileNameAt",
+  "len",
+  "newline",
+  "uppercase",
+  "lowercase",
+  "find",
+  "left",
+  "right",
+  "mid",
+  "tokenat",
+  "tokencount",
+  "replace",
+  "StringSub",
+  "trim",
+  "zeropad",
+  "URLEncode",
+  "URLDecode",
+  "RegexSearch",
+  "RegexReplace",
+  "RegexMatchCount",
+  "RegexMatchAt",
+  "findCase",
+  "dt",
+  "wallclockdt",
+  "timescale",
+  "time",
+  "tickcount",
+  "fps",
+  "wallclocktime",
+  "cpuutilisation",
+  "gpuutilisation",
+  "unixtime",
+  "int",
+  "float",
+  "str",
+  "random",
+  "clamp",
+  "choose",
+  "chooseindex",
+  "rgb",
+  "rgbEx",
+  "rgba",
+  "rgbEx255",
+  "rgba255",
+  "HexColor",
+  "ColorToHexString",
+];
+
+/** A name-section key: a manifest section whose items are `<name>.json` files. */
+export type C3NameSection = keyof typeof C3_SECTION_FOLDERS;
+
+/**
+ * One finding from {@link itemNameIssue}. `rewritten` is not a refusal: the editor stores `name`
+ * instead of the input. Every other kind is a refusal; `name` is the transformed name the editor
+ * checked and `message` is the text the editor throws.
+ */
+export type ItemNameIssue =
+  | { kind: "rewritten"; name: string }
+  | {
+      kind: "empty" | "too-long" | "device-name" | "reserved-word" | "system-expression";
+      name: string;
+      message: string;
+    };
+
+const ITEM_NAME_LENGTH_LIMIT = 200;
+const ITEM_NAME_DEVICES: ReadonlySet<string> = new Set([
+  "con",
+  "prn",
+  "aux",
+  "nul",
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `com${n}`),
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `lpt${n}`),
+]);
+const ITEM_NAME_FORBIDDEN: ReadonlySet<string> = new Set([
+  String.fromCharCode(92),
+  "/",
+  ":",
+  "*",
+  "?",
+  '"',
+  "<",
+  ">",
+  "|",
+  "~",
+]);
+const ITEM_NAME_WHITESPACE: ReadonlySet<string> = new Set(
+  [
+    0x0020, 0x0009, 0x000a, 0x000d, 0x00a0, 0x0085, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007,
+    0x2008, 0x2009, 0x200a, 0x200b, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+  ].map((c) => String.fromCodePoint(c)),
+);
+// Characters the object-class transform drops (besides whitespace).
+const OBJECT_CLASS_DROPPED: ReadonlySet<string> = new Set(
+  [
+    ...[0x2e, 0x3002, 0x2c, 0xff0c, 0x22, 0x201c, 0x201d, 0x28, 0xff08, 0x29, 0xff09, 0x3f, 0xff1f, 0x3a, 0xff1a],
+    ...[0x5c, 0x2f, 0x3b, 0x2a, 0x7c, 0x27, 0x2d, 0x60, 0x21, 0xac, 0xa3, 0x24, 0x25, 0x5e, 0x26, 0x2b, 0x3d],
+    ...[0x3c, 0x3e, 0x7b, 0x7d, 0x5b, 0x5d, 0x40, 0x23, 0x7e, 0xad],
+  ].map((c) => String.fromCodePoint(c)),
+);
+const OBJECT_CLASS_RESERVED_WORDS: ReadonlySet<string> = new Set(["self", "true", "false", "system"]);
+const SYSTEM_EXPRESSION_NAMES_LOWER: ReadonlySet<string> = new Set(
+  C3_SYSTEM_EXPRESSION_NAMES.map((n) => n.toLowerCase()),
+);
+
+const STRIP_SECTION_LABELS: Readonly<Record<string, string>> = {
+  layouts: "layout",
+  eventSheets: "event sheet",
+  timelines: "timeline",
+  flowcharts: "flowchart",
+  models3d: "model 3d",
+};
+
+/** The editor's strip for layout-style names: NFC, drop forbidden characters, trim edges, cut to the limit. */
+function stripItemName(name: string): string {
+  const chars = [...name.normalize()].filter((c) => !ITEM_NAME_FORBIDDEN.has(c));
+  while (chars.length && (chars[chars.length - 1] === "." || ITEM_NAME_WHITESPACE.has(chars[chars.length - 1]))) {
+    chars.pop();
+  }
+  while (chars.length && (chars[0] === "." || ITEM_NAME_WHITESPACE.has(chars[0]))) chars.shift();
+  if (chars.length > ITEM_NAME_LENGTH_LIMIT) chars.length = ITEM_NAME_LENGTH_LIMIT;
+  return chars.join("");
+}
+
+/** The editor's object-class transform (`nit(name, true)`). */
+function normalizeObjectClassItemName(name: string): string {
+  const chars = [...name.normalize()];
+  for (let i = 0; i < chars.length - 1; i++) {
+    if (chars[i] === " ") chars[i + 1] = chars[i + 1].toUpperCase();
+  }
+  const kept = chars.filter((c) => !OBJECT_CLASS_DROPPED.has(c) && !ITEM_NAME_WHITESPACE.has(c));
+  while (kept.length && kept[0] === "_") kept.shift();
+  return kept.every((c) => /^[0-9]$/.test(c)) ? "" : kept.join("");
+}
+
+/**
+ * **AUDITED against the C3 editor bundle at r495-2.**
+ *
+ * What the C3 editor does with an item name in the strip sections (`layouts`, `eventSheets`,
+ * `timelines`, `flowcharts`, `models3d`) and in `objectTypes` and `families`. r379 and r402 are not
+ * traced for these rules. The rules are quoted in
+ * `raw/issue-123-item-name-rules-bundle-evidence-2026-11-04.md` [bundle r495-2].
+ *
+ * Returns the first issue in the editor's order, or `undefined` when the editor stores the name
+ * unchanged. `rewritten` is not a refusal: the editor's rename UI accepts it with a warning, and a
+ * stricter caller may refuse it. `issue?.name ?? name` is the stored name when the name is not refused.
+ * The setter returns early, without checks, when the new name equals the current one; that case is
+ * not modelled.
+ *
+ * - Strip sections: strip the name (NFC, forbidden characters, edge dots and whitespace, cut to 200
+ *   code points), then refuse an empty name, a name of 200 or more code points (counted on the NFC
+ *   form of the stripped name, because removing a character can bring a base letter next to a
+ *   combining mark), or a device name. The `name` of a result is the stripped name, which is what the
+ *   setter stores. The `message` is the section's setter text with the input name in it.
+ * - Object classes: models the rename setter (and the constructor's result for an empty name), not the
+ *   object-type loader. The name is transformed, then refused when empty (`invalid name`) or reserved
+ *   (`name is reserved`): a device name, then `self`/`true`/`false`/`system` ignoring case, then a
+ *   System expression name ({@link C3_SYSTEM_EXPRESSION_NAMES}) ignoring case. `System` is reported as
+ *   `reserved-word` with the setter's already-used text (`object class name 'System' already used`),
+ *   because the setter checks "already used" before "reserved" and the System object class is always
+ *   registered.
+ *
+ * The object-class create path (the object-class constructor) differs from the setter. An exact
+ * `System` is exempt from its reserved check, the reserved check is skipped while the project is
+ * loading (inferred from the code, not run), and it checks reserved before used. The object-type
+ * loader gives a literal empty stem an automatic name rather than throwing, so `empty` is not the
+ * loader's result; the family loader throws `invalid name` (observed in the r495-2 bundle). `System`
+ * itself is already registered in every project, so a create or rename to `System` fails as already
+ * used (observed).
+ *
+ * Uniqueness (`already used`, case-insensitive, shared by `objectTypes` and `families`) needs project
+ * state and is not checked; see issue #125. {@link validateProjectManifest} does not call
+ * `itemNameIssue`; its empty check tests the raw string.
+ *
+ * Blast radius: a false accept in a strip section can make the project fail to open (the setter runs
+ * on load; issue #100 saw this live for `""`). A false accept of a rewritten object-class name means
+ * the editor stores a different name, and a later save can lose the file. A false refusal only blocks
+ * a name the editor would accept.
+ *
+ * Residual, inferred: `normalize` and `toUpperCase` follow the JS engine's Unicode version, which may
+ * differ from the editor's browser for newly assigned code points.
+ *
+ * @throws Error when `section` is not a name section (a JS caller can pass any string).
+ *
+ * @example
+ * itemNameIssue("layouts", "a/b"); // { kind: "rewritten", name: "ab" }
+ * itemNameIssue("objectTypes", "Time"); // { kind: "system-expression", name: "Time", message: "name is reserved" }
+ */
+export function itemNameIssue(section: C3NameSection, name: string): ItemNameIssue | undefined {
+  if (Object.prototype.hasOwnProperty.call(STRIP_SECTION_LABELS, section)) {
+    const stripped = stripItemName(name);
+    const message = `invalid ${STRIP_SECTION_LABELS[section]} name '${name}'`;
+    if (stripped === "") return { kind: "empty", name: stripped, message };
+    if ([...stripped.normalize()].length >= ITEM_NAME_LENGTH_LIMIT) {
+      return { kind: "too-long", name: stripped, message };
+    }
+    if (ITEM_NAME_DEVICES.has(stripped.toLowerCase())) return { kind: "device-name", name: stripped, message };
+    return stripped !== name ? { kind: "rewritten", name: stripped } : undefined;
+  }
+  if (section === "objectTypes" || section === "families") {
+    const n = normalizeObjectClassItemName(name);
+    if (n === "") return { kind: "empty", name: n, message: "invalid name" };
+    const lower = n.toLowerCase();
+    if (lower === "system") {
+      return { kind: "reserved-word", name: n, message: `object class name '${n}' already used` };
+    }
+    const message = "name is reserved";
+    if (ITEM_NAME_DEVICES.has(lower)) return { kind: "device-name", name: n, message };
+    if (OBJECT_CLASS_RESERVED_WORDS.has(lower)) return { kind: "reserved-word", name: n, message };
+    if (SYSTEM_EXPRESSION_NAMES_LOWER.has(lower)) return { kind: "system-expression", name: n, message };
+    return n !== name ? { kind: "rewritten", name: n } : undefined;
+  }
+  throw new Error(`itemNameIssue: unknown name section '${String(section)}'`);
+}
+
+/**
  * Resolve the on-disk extension for a C3 image `fileType` MIME string, treating an
  * absent/empty value as malformed (throws) rather than tolerating it as a pre-r402
  * legacy node. Unmapped (present but unrecognized) `fileType` also throws.
