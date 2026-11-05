@@ -126,6 +126,22 @@ history: `fileType`→r402, `functionsName`→r437, and `.ts` script
 support→r433 — the cumulative argument for reaching the bundle
 first[^domain-fact-audit].
 
+**Trace the load path from the loader to its first refusal.** A class's
+constructor and setters say what a create or a rename does. A load can take
+another route. In issue #123, the trace inherited from the issue said that both
+object-class paths throw `invalid name` on an empty name. The object-type
+loader goes through the plugin step first, and that step gives a literal empty
+stem an automatic name and does not throw[^issue-123-evidence]. Read every call
+between the loader and the first throw before stating what a load does.
+
+**Port a bundle rule call site by call site.** Keep each `normalize()` and
+`toLowerCase()` where the editor calls it, even when one looks redundant. The
+editor's layout-name validator normalizes a name that its strip step has
+already normalized, because removing a character can put a base letter next to
+a combining mark. A port that normalized once refused names the editor accepts.
+A design review, a test list and a mutation table all missed it, and a code
+review that read the excerpts line by line found it (issue #123).
+
 ## The two-provenance warning
 
 **A table's findings section carries *two* provenances, and only one half
