@@ -123,23 +123,37 @@ export interface DriftDegradation {
 }
 
 /**
- * An item name that occurs more than once in a section, reported by {@link ManifestDrift.duplicates}.
+ * An item name that occurs more than once in a uniqueness scope, reported by {@link ManifestDrift.duplicates}.
+ * A repeat is counted on either side (manifest or disk).
  *
- * What counts as a duplicate depends on the section's scope:
- * - the seven name sections (`layouts`, `objectTypes`, ...): more than one occurrence of the name
- *   anywhere in the section, on either side (manifest or disk), whatever folder it sits in;
- * - `rootFileFolders.<cat>` and `images`: two occurrences of the name in the same folder (the same
- *   path), on either side. The same file name in different folders is legitimate and not reported.
+ * What counts as a duplicate depends on the scope:
+ * - `layouts`: case-insensitive (`normalize().toLowerCase()`), whatever folder the layout sits in;
+ * - `eventSheets`: the same as `layouts`;
+ * - `objectClasses`: `objectTypes` and `families` together, one namespace, case-insensitive. An object
+ *   type and a family with the same name are a duplicate;
+ * - `timelines`, `flowcharts`, `models3d`: exact comparison, whatever folder the item sits in;
+ * - `rootFileFolders.<cat>` and `images`: exact comparison, two occurrences in the same folder (the same
+ *   path) only. The same file name in different folders is legitimate and not reported.
  *   For `images`, the declared side is derived from object-type animation names
  *   (`deriveExpectedImages`), not listed in the manifest. A repeat there is therefore a derivation
  *   collision, such as type `A-B` / anim `C` vs type `A` / anim `B-C`. It is fixed by renaming an
  *   object type or animation, not by editing the manifest.
- * Comparison is case-sensitive.
+ *
+ * Drift keying (`diffNameMaps`) stays exact: a case-only rename reads as `missing` plus `untracked`.
+ *
+ * `System`: a user object class named `System` is not reported here, because the built-in `System` is not
+ * in the manifest. {@link itemNameIssue} reports that name as reserved.
  *
  * **Advisory**: a duplicate is never drift and never affects {@link ManifestDrift.inSync}.
  *
- * **UNVALIDATED**: the uniqueness scope per section and the case sensitivity were inferred, not
- * confirmed against the C3 editor.
+ * **AUDITED against the C3 editor bundle at r495-2**: the editor's r495-2 name lookup treats these as one
+ * name. The capture is `raw/issue-125-duplicate-name-lookups-bundle-evidence-2026-11-04.md`. It covers the
+ * seven name sections. Residual: r379 and r402 were not traced, no editor was run, the project load path
+ * was not traced, and folding once may differ from the editor's lowercase-then-`hM` order for some
+ * non-ASCII names.
+ *
+ * **UNVALIDATED**: for the `rootFileFolders.*` sections and `images` only, the per-folder scope was
+ * inferred, not confirmed against the C3 editor.
  */
 export interface DuplicateName {
   /** The uniqueness scope: a section key, or `"objectClasses"` for objectTypes and families together. */
@@ -189,10 +203,11 @@ export interface ManifestDrift {
    */
   strays?: StrayFile[];
   /**
-   * Item names repeated within a section (see {@link DuplicateName} for the per-section scope).
+   * Item names repeated within a uniqueness scope (see {@link DuplicateName} for the scopes).
    * **Advisory, never drift**: never counted by {@link ManifestDrift.inSync}. Present only when
    * non-empty — same convention as {@link ManifestDrift.degraded} and {@link ManifestDrift.strays}.
-   * Ordered by the walk order of sections, then by name.
+   * Ordered by scope (the name scopes in walk order, with `objectClasses` at the position of `objectTypes`,
+   * then the file sections, then `images`), then by `key` (code point).
    */
   duplicates?: DuplicateName[];
   /**
@@ -1035,14 +1050,18 @@ const foldItemName = (name: string): string => name.normalize().toLowerCase();
 /**
  * Uniqueness scopes of the seven name sections, in walk order; a shared scope sits at its first section.
  * Every key of C3_SECTION_FOLDERS must be in exactly one scope (test "#125 D8").
+ *
+ * Paired invariant: this table and the bullets of the {@link DuplicateName} JSDoc change together.
+ * The scopes follow the r495-2 editor lookups: `Jpt`/`HU` (layouts), `Qpt`/`JU` (event sheets),
+ * `lU` on `QCn` (object types and families, one map), `q4s`/`O$` (timelines), `Ypt`/`Y$` (flowcharts)
+ * and `xVt`/`vG` (models 3D).
  */
 const NAME_DUPLICATE_SCOPES: ReadonlyArray<{ scope: string; sections: readonly C3NameSection[]; fold: boolean }> = [
-  { scope: "layouts", sections: ["layouts"], fold: false },
-  { scope: "eventSheets", sections: ["eventSheets"], fold: false },
-  { scope: "objectTypes", sections: ["objectTypes"], fold: false },
+  { scope: "layouts", sections: ["layouts"], fold: true },
+  { scope: "eventSheets", sections: ["eventSheets"], fold: true },
+  { scope: "objectClasses", sections: ["objectTypes", "families"], fold: true },
   { scope: "timelines", sections: ["timelines"], fold: false },
   { scope: "flowcharts", sections: ["flowcharts"], fold: false },
-  { scope: "families", sections: ["families"], fold: false },
   { scope: "models3d", sections: ["models3d"], fold: false },
 ];
 
@@ -1193,7 +1212,7 @@ function diffFolderPaths(
  * flips {@link ManifestDrift.inSync}, which stays `sections.length === 0` (#68).
  *
  * The result also carries the advisory {@link ManifestDrift.duplicates}: item names occurring more
- * than once in a section. They never count as drift and never affect `inSync`.
+ * than once in a uniqueness scope (see {@link DuplicateName}). They never count as drift and never affect `inSync`.
  *
  * A symbolic link or junction below a section root is not followed: it is not an item, not a
  * folder and not a stray. Each one is listed in the advisory {@link ManifestDrift.links}, which is
@@ -1896,7 +1915,8 @@ function normalizeObjectClassItemName(name: string): string {
  * used (observed).
  *
  * Uniqueness (`already used`, case-insensitive, shared by `objectTypes` and `families`) needs project
- * state and is not checked; see issue #125. {@link validateProjectManifest} does not call
+ * state and is not checked here. {@link detectManifestDrift} reports it in the advisory
+ * {@link ManifestDrift.duplicates}. {@link validateProjectManifest} does not call
  * `itemNameIssue`; its empty check tests the raw string.
  *
  * Blast radius: a false accept in a strip section can make the project fail to open (the setter runs

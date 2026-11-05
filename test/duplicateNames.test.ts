@@ -105,7 +105,7 @@ describe("same item name at more than one path (#101)", () => {
     expect(drift.duplicates).to.deep.equal([
       {
         scope: "layouts",
-        key: "X",
+        key: "x",
         manifest: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["b"])],
         disk: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["b"])],
       },
@@ -119,7 +119,7 @@ describe("same item name at more than one path (#101)", () => {
     expect(drift.duplicates).to.deep.equal([
       {
         scope: "layouts",
-        key: "X",
+        key: "x",
         manifest: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["a"])],
         disk: [occ("layouts", "X", ["a"])],
       },
@@ -185,7 +185,7 @@ describe("same item name at more than one path (#101)", () => {
     expect(drift.duplicates).to.deep.equal([
       {
         scope: "layouts",
-        key: "X",
+        key: "x",
         manifest: [occ("layouts", "X", ["a"])],
         disk: [occ("layouts", "X", ["a"]), occ("layouts", "X", ["b"])],
       },
