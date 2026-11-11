@@ -15,6 +15,10 @@ before. If a past entry itself needs correcting, add a new entry that says
 so; never edit or remove the old one in place. See [`schema.md`](schema.md) for
 the full maintenance schema.
 
+## 2026-11-11
+
+* **Update**: issue-triage.md (a Close recipe for completed or not planned; the Comment and split-issue recipes pass the text through `--body-file`; a rule under Dependencies for related issues that do not block each other); driven by `raw/wiki-issue-triage-2026-11-11.md` (the triage of issues #132 and #133).
+
 ## 2026-11-05
 
 * **Update**: design-patterns.md (test a bundle port call site by call site: an assertion per kept `normalize()` and `toLowerCase()` call, in every branch that reaches it); driven by the code review of issue #130.
