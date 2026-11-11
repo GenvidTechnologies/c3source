@@ -11,6 +11,10 @@ sources:
     resource: ../raw/docs-issue-triage-2026-10-01.md
     title: "docs/issue-triage.md (c3source issue-triage conventions, 2026-10-01 capture)"
     last_modified: 2026-10-01
+  - id: triage-2026-11-11
+    resource: ../raw/wiki-issue-triage-2026-11-11.md
+    title: "wiki/issue-triage.md (c3source issue-triage conventions, 2026-11-11 capture, after the triage of #132 and #133)"
+    last_modified: 2026-11-11
 ---
 
 # Issue Triage
@@ -119,11 +123,18 @@ Express a dependency with a comment on the blocked issue: `Blocked by #<id>`
 (optionally `Blocks #<id>` on the other). For umbrellas, list dependencies as a
 GitHub task-list under a `Depends on` heading.
 
+Two issues that are related but where neither blocks the other (for example, a
+split-out issue and the issue it came from) get no `Blocked by` comment. Link
+each issue from the other's body in prose instead. `/gvt-dev:triage-issues`
+takes blockers from an issue's comments as well as its body, so a relation
+recorded as `Blocked by` reads as a blocker on the next triage
+run[^triage-2026-11-11].
+
 ## Mutation recipes
 
 The exact commands the triage skill runs to apply **approved** changes. `{id}`,
-`{type}`, `{otherTypes}`, `{text}`, `{canonical}`, `{other}`, `{title}`, `{body}`, `{tmpfile}`,
-`{triagedLabel}`, and `{needsInfoLabel}` are substituted by the skill. (There are
+`{type}`, `{otherTypes}`, `{text}`, `{canonical}`, `{other}`, `{title}`, `{tmpfile}`,
+`{closeReason}`, `{triagedLabel}`, and `{needsInfoLabel}` are substituted by the skill. (There are
 no `{p}`/`{a}` substitutions — this repo has no priority or area labels.)
 
 `{otherTypes}` is the set of category labels (`bug`, `enhancement`, `documentation`,
@@ -132,12 +143,13 @@ is never in its own remove list, because the add and the remove would cancel on 
 
 - Set category: `gh issue edit {id} --add-label "{type}" --remove-label "{otherTypes}"`
 - Edit body (language fix / fill missing info): `gh issue edit {id} --body-file {tmpfile}` — the skill writes the approved new body to `{tmpfile}` first
-- Comment: `gh issue comment {id} --body "{text}"`
+- Comment: `gh issue comment {id} --body-file {tmpfile}` — the skill writes the approved text to `{tmpfile}` first, so backticks and quotes in it are not changed by the shell
 - Flag missing info: `gh issue edit {id} --add-label {needsInfoLabel}` (i.e. `question`; pair with a Comment saying what's missing)
 - Clear missing-info flag: `gh issue edit {id} --remove-label {needsInfoLabel}`
 - Mark duplicate: `gh issue edit {id} --add-label duplicate` then `gh issue comment {id} --body "Duplicate of #{canonical}"`
 - Close duplicate (only with approval): `gh issue close {id} --reason "not planned" --comment "Duplicate of #{canonical}"`
-- Create split issue: `gh issue create --title "{title}" --body "{body}" --label "{type}"`
+- Close as completed or not planned (only with approval): post the reason and its evidence with the Comment recipe, then `gh issue close {id} --reason "{closeReason}"`, where `{closeReason}` is `completed` or `not planned`
+- Create split issue: `gh issue create --title "{title}" --body-file {tmpfile} --label "{type}"` — the skill writes the approved body to `{tmpfile}` first
 - Link dependency: `gh issue comment {id} --body "Blocked by #{other}"`
 - Stamp triaged: `gh issue edit {id} --add-label {triagedLabel}`
 
@@ -146,3 +158,4 @@ is never in its own remove list, because the add and the remove would cancel on 
 - [Development Workflow](/development-workflow.md) — the broader working conventions, including the issue/PR-as-durable-record rule that triage feeds.
 
 [^issue-triage]: docs/issue-triage.md (c3source issue-triage conventions, 2026-10-01 capture)
+[^triage-2026-11-11]: wiki/issue-triage.md (c3source issue-triage conventions, 2026-11-11 capture, after the triage of #132 and #133)
